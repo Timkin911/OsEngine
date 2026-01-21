@@ -3,23 +3,25 @@
  *Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
 
-using OsEngine.Entity;
-using OsEngine.Logging;
-using OsEngine.Market.Servers;
-using OsEngine.Market.Servers.Tester;
-using System;
-using System.Collections.Generic;
-using System.Windows;
-using System.Windows.Input;
-using OsEngine.Language;
-using MessageBox = System.Windows.MessageBox;
-using System.Windows.Forms;
 using OsEngine.Candles;
 using OsEngine.Candles.Factory;
 using OsEngine.Candles.Series;
+using OsEngine.Entity;
+using OsEngine.Language;
+using OsEngine.Logging;
+using OsEngine.Market.Servers;
 using OsEngine.Market.Servers.Optimizer;
-using System.Threading;
+using OsEngine.Market.Servers.Tester;
+using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Forms;
+using System.Windows.Input;
+using MessageBox = System.Windows.MessageBox;
 
 namespace OsEngine.Market.Connectors
 {
@@ -119,9 +121,11 @@ namespace OsEngine.Market.Connectors
 
                 LoadClassOnBox();
 
-                LoadSecurityOnBox();
+                LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
 
                 ComboBoxClass.SelectionChanged += ComboBoxClass_SelectionChanged;
+                ComboBoxExpiration.SelectionChanged += ComboBoxExpirationAndStrike_SelectionChanged;
+                ComboBoxStrike.SelectionChanged += ComboBoxExpirationAndStrike_SelectionChanged;
 
                 CheckBoxIsEmulator.IsChecked = _connectorBot.EmulatorIsOn;
 
@@ -172,6 +176,8 @@ namespace OsEngine.Market.Connectors
                 CheckBoxSaveTradeArrayInCandle.Content = OsLocalization.Market.Label59;
                 TextBoxSearchSecurity.Text = OsLocalization.Market.Label64;
                 LabelCandleType.Content = OsLocalization.Market.Label65;
+                Label18.Content = OsLocalization.Market.Label316;
+                Label19.Content = OsLocalization.Market.Label317;
 
                 ButtonRightInSearchResults.Click += ButtonRightInSearchResults_Click;
                 ButtonLeftInSearchResults.Click += ButtonLeftInSearchResults_Click;
@@ -218,6 +224,8 @@ namespace OsEngine.Market.Connectors
             try
             {
                 ComboBoxClass.SelectionChanged -= ComboBoxClass_SelectionChanged;
+                ComboBoxExpiration.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
+                ComboBoxStrike.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
                 ComboBoxTypeServer.SelectionChanged -= ComboBoxTypeServer_SelectionChanged;
                 ComboBoxCandleCreateMethodType.SelectionChanged -= ComboBoxCandleCreateMethodType_SelectionChanged;
                 CheckBoxSaveTradeArrayInCandle.Click -= CheckBoxSaveTradeArrayInCandle_Click;
@@ -520,7 +528,7 @@ namespace OsEngine.Market.Connectors
 
                 LoadPortfolioOnBox(true);
                 LoadClassOnBox();
-                LoadSecurityOnBox();
+                LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
                 UpdateSearchResults();
                 UpdateSearchPanel();
                 RepaintCandleRealizationGrid(_selectedSeries);
@@ -571,9 +579,14 @@ namespace OsEngine.Market.Connectors
             }
         }
 
+        private void ComboBoxExpirationAndStrike_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            LoadSecurityOnBox(loadExpirationStrikeComboBox: false);
+        }
+
         private void ComboBoxClass_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            LoadSecurityOnBox();
+            LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
         }
 
         private void LoadPortfolioOnBox(bool hard)
@@ -596,13 +609,13 @@ namespace OsEngine.Market.Connectors
 
                 if (!ComboBoxClass.CheckAccess())
                 {
-                    ComboBoxClass.Dispatcher.Invoke(new Action<bool>(LoadPortfolioOnBox),hard);
+                    ComboBoxClass.Dispatcher.Invoke(new Action<bool>(LoadPortfolioOnBox), hard);
                     return;
                 }
 
                 // 1 проверяем, что список портфелей обновился. Если нет - выходим из метода
 
-                if(hard == false)
+                if (hard == false)
                 {
                     List<string> portfoliosInComboBox = new List<string>();
 
@@ -744,10 +757,12 @@ namespace OsEngine.Market.Connectors
                     {
                         continue;
                     }
+
                     string clas = securities[i1].NameClass;
                     if (ComboBoxClass.Items.IndexOf(clas) == -1)
                         ComboBoxClass.Items.Add(clas);
                 }
+
                 if (_connectorBot.Security != null)
                 {
                     ComboBoxClass.SelectedItem = _connectorBot.Security.NameClass;
@@ -758,7 +773,6 @@ namespace OsEngine.Market.Connectors
                 {
                     ComboBoxClass.SelectedItem = ComboBoxClass.Items[0];
                 }
-
             }
             catch (Exception error)
             {
@@ -766,11 +780,70 @@ namespace OsEngine.Market.Connectors
             }
         }
 
-        private void CheckPortfolioWhithThisServer()
+        private void LoadExpirationStrikeComboBox(List<Security> securities, string classSec)
         {
+            try
+            {
+                if (securities == null)
+                {
+                    return;
+                }
 
+                SortedSet<DateTime> sortedExpirations = new SortedSet<DateTime>();
+                SortedSet<decimal> sortedStrikes = new SortedSet<decimal>();
 
+                for (int i1 = 0; i1 < securities.Count; i1++)
+                {
+                    if (securities[i1] == null)
+                    {
+                        continue;
+                    }
 
+                    if (securities[i1].SecurityType == SecurityType.Futures && securities[i1].NameClass == classSec)
+                    {
+                        DateTime expDate = securities[i1].Expiration.Date;
+                        sortedExpirations.Add(expDate);
+                    }
+                    else if (securities[i1].SecurityType == SecurityType.Option && securities[i1].NameClass == classSec)
+                    {
+                        DateTime expDate = securities[i1].Expiration.Date;
+                        sortedExpirations.Add(expDate);
+
+                        decimal strike = securities[i1].Strike;
+                        sortedStrikes.Add(strike);
+                    }
+                }
+
+                ComboBoxExpiration.Items.Clear();
+                if (ComboBoxExpiration.SelectedItem == null
+                    && ComboBoxExpiration.Items.Count == 0)
+                {
+                    ComboBoxExpiration.Items.Add("All");
+                    ComboBoxExpiration.SelectedItem = ComboBoxExpiration.Items[0];
+                }
+
+                ComboBoxStrike.Items.Clear();
+                if (ComboBoxStrike.SelectedItem == null
+                && ComboBoxStrike.Items.Count == 0)
+                {
+                    ComboBoxStrike.Items.Add("All");
+                    ComboBoxStrike.SelectedItem = ComboBoxStrike.Items[0];
+                }
+
+                foreach (DateTime date in sortedExpirations)
+                {
+                    ComboBoxExpiration.Items.Add(date.ToString("dd/MM/yyyy"));
+                }
+
+                foreach (decimal strike in sortedStrikes)
+                {
+                    ComboBoxStrike.Items.Add(strike.ToString());
+                }
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
         }
 
         #endregion
@@ -844,7 +917,7 @@ namespace OsEngine.Market.Connectors
             ServerMaster.SendNewLogMessage(e.ToString(), Logging.LogMessageType.Error);
         }
 
-        private void LoadSecurityOnBox()
+        private void LoadSecurityOnBox(bool loadExpirationStrikeComboBox)
         {
             try
             {
@@ -878,9 +951,15 @@ namespace OsEngine.Market.Connectors
                     return;
                 }
 
+                SecurityType securityType = SecurityType.None;
                 if (ComboBoxClass.SelectedItem != null)
                 {
                     string classSec = ComboBoxClass.SelectedItem.ToString();
+
+                    if (loadExpirationStrikeComboBox)
+                    {
+                        LoadExpirationStrikeComboBox(securities, classSec);
+                    }
 
                     List<Security> securitiesOfMyClass = new List<Security>();
 
@@ -888,14 +967,67 @@ namespace OsEngine.Market.Connectors
                     {
                         if (securities[i].NameClass == classSec)
                         {
-                            securitiesOfMyClass.Add(securities[i]);
+                            securityType = securities[i].SecurityType;
+
+                            if (securityType != SecurityType.Futures && securityType != SecurityType.Option)
+                            {
+                                securitiesOfMyClass.Add(securities[i]);
+                                continue;
+                            }
+
+                            if (ComboBoxExpiration.SelectedItem == null)
+                            {
+                                securitiesOfMyClass.Add(securities[i]);
+                                continue;
+                            }
+
+                            string expirationString = ComboBoxExpiration.SelectedItem.ToString();
+
+                            if (expirationString == "All")
+                            {
+                                if (securityType == SecurityType.Option)
+                                {
+                                    if (CheckStrikeFilter(securities[i]))
+                                    {
+                                        securitiesOfMyClass.Add(securities[i]);
+                                    }
+                                }
+                                else
+                                {
+                                    securitiesOfMyClass.Add(securities[i]);
+                                }
+                            }
+                            else
+                            {
+                                DateTime expirationDateTime = DateTime.ParseExact(
+                                    expirationString,
+                                    "dd.MM.yyyy",
+                                    CultureInfo.InvariantCulture,
+                                    DateTimeStyles.None
+                                );
+
+                                if (expirationDateTime.Date == securities[i].Expiration.Date)
+                                {
+                                    if (securityType == SecurityType.Option)
+                                    {
+                                        if (CheckStrikeFilter(securities[i]))
+                                        {
+                                            securitiesOfMyClass.Add(securities[i]);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        securitiesOfMyClass.Add(securities[i]);
+                                    }
+                                }
+                            }
                         }
                     }
 
                     securities = securitiesOfMyClass;
                 }
 
-                UpdateGridSec(securities);
+                UpdateGridSec(securities, securityType);
 
                 UpdateSearchResults();
                 UpdateSearchPanel();
@@ -905,6 +1037,19 @@ namespace OsEngine.Market.Connectors
             {
                 SendNewLogMessage(error.ToString(), LogMessageType.Error);
             }
+        }
+
+        private bool CheckStrikeFilter(Security security)
+        {
+            if (ComboBoxStrike.SelectedItem == null)
+                return true;
+
+            string strike = ComboBoxStrike.SelectedItem.ToString();
+
+            if (strike == "All")
+                return true;
+
+            return strike.ToDecimal() == security.Strike;
         }
 
         private void DeleteGridSecurities()
@@ -990,10 +1135,26 @@ namespace OsEngine.Market.Connectors
             }
         }
 
-        private void UpdateGridSec(List<Security> securities)
+        private void UpdateGridSec(List<Security> securities, SecurityType securityType)
         {
             try
             {
+                if (securityType == SecurityType.Futures)
+                {
+                    SecurityTable.Margin = new Thickness(12, 289, 0, 0);
+                    SecurityTable.Height = 226;
+                }
+                else if (securityType == SecurityType.Option)
+                {
+                    SecurityTable.Margin = new Thickness(12, 319, 0, 0);
+                    SecurityTable.Height = 196;
+                }
+                else
+                {
+                    SecurityTable.Margin = new Thickness(12, 259, 0, 0);
+                    SecurityTable.Height = 256;
+                }
+
                 if (securities == null
                     || securities.Count == 0)
                 {

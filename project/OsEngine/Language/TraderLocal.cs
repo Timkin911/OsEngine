@@ -2482,5 +2482,26 @@ namespace OsEngine.Language
         public string Label665 => OsLocalization.ConvertToLocString(
          "Eng:There are open positions on the grid. They will be lost. Do you want to continue?_" +
          "Ru:По сетке есть открытые позиции. Они будут утеряны. Вы хотите продолжить?");
+
+        public string Label666 => OsLocalization.ConvertToLocString(
+         "Eng:Error in the settings of non-trading periods_" +
+         "Ru:Ошибка в настройках неторговых периодов");
+
+        public string Label667 => OsLocalization.ConvertToLocString(
+         "Eng:is off_" +
+         "Ru:выключен");
+
+        public string Label668 => OsLocalization.ConvertToLocString(
+         "Eng:Time error_" +
+         "Ru:Ошибка времени");
+
+        public string Label669 => OsLocalization.ConvertToLocString(
+         "Eng:The settings for non-trading periods for the Spot market on the Moscow Exchange will be set. The old settings will be lost! Are you sure?_" +
+         "Ru:Будут установлены настройки неторговых периодов для рынка Спот на Московской бирже. Старые настройки будут утеряны! Вы уверены?");
+
+        public string Label670 => OsLocalization.ConvertToLocString(
+         "Eng:The settings for non-trading periods for the Futures and Options market on the Moscow Exchange will be set. The old settings will be lost! Are you sure?_" +
+         "Ru:Будут установлены настройки неторговых периодов для Срочного(фьючерсы и опционы) рынка на Московской бирже. Старые настройки будут утеряны! Вы уверены?");
+
     }
 }
