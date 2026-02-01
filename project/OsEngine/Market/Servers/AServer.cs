@@ -1192,11 +1192,17 @@ namespace OsEngine.Market.Servers
                     }
 
                     if ((ServerRealization.ServerStatus != ServerConnectStatus.Connect
-                        || ServerStatus != ServerConnectStatus.Connect)
-
-                        && _serverStatusNeed == ServerConnectStatus.Connect &&
+                        || ServerStatus != ServerConnectStatus.Connect) && 
+                        _serverStatusNeed == ServerConnectStatus.Connect &&
                        LastStartServerTime.AddSeconds(100) < DateTime.Now)
                     {
+                        if (_nonTradePeriods.CanTradeThisTime(DateTime.Now) == false)
+                        {
+                            LastStartServerTime = DateTime.Now;
+                            SendLogMessage(OsLocalization.Market.Message104, LogMessageType.System);
+                            continue;
+                        }
+
                         SendLogMessage(OsLocalization.Market.Message8, LogMessageType.System);
                         ServerRealization.Dispose();
                         _subscribeSecurities.Clear();
@@ -3909,7 +3915,7 @@ namespace OsEngine.Market.Servers
                 if (_portfolios == null ||
                     _portfolios.Count == 0)
                 {
-                    SendLogMessage("AServer Error. You can't Execute order when Portfolious is null "
+                    SendLogMessage("AServer Error. You can't Execute order when Portfolio is null "
                        + order.NumberUser, LogMessageType.Error);
                     order.State = OrderStateType.Fail;
                     _ordersToSend.Enqueue(order);

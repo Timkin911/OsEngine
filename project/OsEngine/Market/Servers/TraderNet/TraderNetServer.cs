@@ -487,18 +487,18 @@ namespace OsEngine.Market.Servers.TraderNet
                         valueCurrent += balance * currval;
                     }
 
-                    //List<PosRest> posRest = response.result.ps.pos;
+                    List<PosRest> posRest = response.result.ps.pos;
 
-                    //if (posRest.Count > 0)
-                    //{
-                    //    for (int i = 0; i < posRest.Count; i++)
-                    //    {
-                    //        decimal.TryParse(posRest[i].market_value, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal market_value);
-                    //        decimal.TryParse(posRest[i].currval, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal currval);
+                    if (posRest.Count > 0)
+                    {
+                        for (int i = 0; i < posRest.Count; i++)
+                        {
+                            decimal.TryParse(posRest[i].market_value, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal market_value);
+                            decimal.TryParse(posRest[i].currval, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal currval);
 
-                    //        //valueCurrent += market_value * currval;
-                    //    }
-                    //}
+                            valueCurrent += market_value * currval;
+                        }
+                    }
 
                     if (_portfolioCurrency == "USD" && kurs != 0)
                     {
@@ -1202,6 +1202,8 @@ namespace OsEngine.Market.Servers.TraderNet
                     return;
                 }
 
+                Thread.Sleep(5000);
+
                 _webSocket.SendAsync("[\"portfolio\"]");
                 _webSocket.SendAsync("[\"orders\"]");
             }
@@ -1833,6 +1835,11 @@ namespace OsEngine.Market.Servers.TraderNet
 
         public OrderStateType GetOrderStatus(Order order)
         {
+            if (order.NumberUser == 0)
+            {
+                return OrderStateType.None;
+            }
+
             try
             {
                 Dictionary<string, dynamic> data = new Dictionary<string, dynamic>();
@@ -1872,7 +1879,7 @@ namespace OsEngine.Market.Servers.TraderNet
 
                     if (strNumber.Length < 2)
                     {
-                        SendLogMessage($"GetOrderStatus: Incorrect UserOrderID {item.userOrderId}", LogMessageType.Error);
+                        //SendLogMessage($"GetOrderStatus: Incorrect UserOrderID {item.userOrderId}", LogMessageType.Error);
                         continue;
                     }
 
