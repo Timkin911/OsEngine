@@ -1291,6 +1291,21 @@ namespace OsEngine.Language
         public string Label315 => OsLocalization.ConvertToLocString(
           "Eng:Reconnects the connector with No order. If the Transit server sends an order with the inactive status (the status is not known due to problems with communication with the exchange), then such an order is marked with the None status and is considered lost. Transaq Connector does not have a method for requesting orders, so the only way to request this order is to reconnect the connector._" +
           "Ru:Переподключает коннектор при None ордере. Если сервер Транзак присылает ордер со статусом inactive (Статус не известен из-за проблем со связью с биржей), то такой ордер помечается статусом None и считается потерянным. У Transaq Connector нет метода для запроса ордеров, поэтому единственный способ запросить данный ордер это переподключение коннектора_");
+       
+        public string Label316 => OsLocalization.ConvertToLocString(
+          "Eng:Expiration_" +
+          "Ru:Экспирация_");
+
+        public string Label317 => OsLocalization.ConvertToLocString(
+          "Eng:Strike_" +
+          "Ru:Страйк_");
+
+        public string Label318 => OsLocalization.ConvertToLocString(
+          "Eng:There are no portfolio numbers in the GetAccountesReques. request. There is an internet error, a sandbox token has been issued, or a new portfolio has been created and you need to wait a few hours._" +
+          "Ru:Нет номеров портфелей в запросе GetAccountesReques. Ошибка интернета, выписан токен песочницы или создан новый портфель и нужно подождать несколько часов._");
+
+
+
 
         public string LabelCommissionType => OsLocalization.ConvertToLocString(
             "Eng:Commission type_" +
@@ -1735,6 +1750,10 @@ namespace OsEngine.Language
         public string Message103 => OsLocalization.ConvertToLocString(
             "Eng:One of the sources does not have data connected. Do you want to continue? _" +
             "Ru:В одном из источников не подключены данные. Вы хотите продолжить? _");
+
+        public string Message104 => OsLocalization.ConvertToLocString(
+            "Eng:Connection during the non-trading period of the connector is interrupted_" +
+            "Ru:Подключение в неторговый период коннектора прервано_");
 
         public string TitleTester => OsLocalization.ConvertToLocString(
             "Eng:Exchange emulator_" +

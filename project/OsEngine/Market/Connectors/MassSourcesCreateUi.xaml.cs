@@ -3,23 +3,25 @@
  *Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
 
-using OsEngine.Entity;
-using OsEngine.Logging;
-using OsEngine.Market.Servers;
-using OsEngine.Market.Servers.Tester;
-using System;
-using System.Collections.Generic;
-using System.Windows;
-using OsEngine.Language;
-using MessageBox = System.Windows.MessageBox;
-using System.Windows.Forms;
-using System.Windows.Input;
-using System.IO;
 using OsEngine.Candles;
 using OsEngine.Candles.Factory;
 using OsEngine.Candles.Series;
+using OsEngine.Entity;
+using OsEngine.Language;
+using OsEngine.Logging;
+using OsEngine.Market.Servers;
 using OsEngine.Market.Servers.Optimizer;
+using OsEngine.Market.Servers.Tester;
+using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Forms;
+using System.Windows.Input;
+using MessageBox = System.Windows.MessageBox;
 
 namespace OsEngine.Market.Connectors
 {
@@ -78,6 +80,8 @@ namespace OsEngine.Market.Connectors
                 LabelSecurities.Content = OsLocalization.Market.Label66;
                 ButtonLoadSet.Content = OsLocalization.Market.Label98;
                 ButtonSaveSet.Content = OsLocalization.Market.Label99;
+                LabelExpiration.Content = OsLocalization.Market.Label316;
+                LabelStrike.Content = OsLocalization.Market.Label317;
 
                 CheckBoxSelectAllCheckBox.Click += CheckBoxSelectAllCheckBox_Click;
                 ButtonRightInSearchResults.Click += ButtonRightInSearchResults_Click;
@@ -117,6 +121,13 @@ namespace OsEngine.Market.Connectors
                 ComboBoxTypeServer.Items.Add(servers[i].ServerNameAndPrefix);
             }
 
+            ComboBoxCommissionType.Items.Add(CommissionType.None.ToString());
+            ComboBoxCommissionType.Items.Add(CommissionType.OneLotFix.ToString());
+            ComboBoxCommissionType.Items.Add(CommissionType.Percent.ToString());
+            ComboBoxCommissionType.SelectedItem = SourcesCreator.CommissionType.ToString();
+
+            TextBoxCommissionValue.Text = SourcesCreator.CommissionValue.ToString();
+
             if (servers.Count > 0
                 && servers[0].ServerType == ServerType.Tester)
             {
@@ -138,6 +149,9 @@ namespace OsEngine.Market.Connectors
                 SourcesCreator.ServerName = ServerType.Optimizer.ToString();
                 _selectedServerType = ServerType.Optimizer;
                 _selectedServerName = ServerType.Optimizer.ToString();
+
+                ComboBoxCommissionType.IsEnabled = false;
+                TextBoxCommissionValue.IsEnabled = false;
             }
 
             if (SourcesCreator.ServerType != ServerType.None)
@@ -157,11 +171,13 @@ namespace OsEngine.Market.Connectors
 
             LoadClassOnBox();
 
-            LoadSecurityOnBox();
+            LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
 
             LoadPortfolioOnBox();
 
             ComboBoxClass.SelectionChanged += ComboBoxClass_SelectionChanged;
+            ComboBoxExpiration.SelectionChanged += ComboBoxExpirationAndStrike_SelectionChanged;
+            ComboBoxStrike.SelectionChanged += ComboBoxExpirationAndStrike_SelectionChanged;
 
             CheckBoxIsEmulator.IsChecked = SourcesCreator.EmulatorIsOn;
 
@@ -189,17 +205,7 @@ namespace OsEngine.Market.Connectors
                 ButtonMarketDepthBuildMaxSpread.Visibility = Visibility.Collapsed;
             }
 
-            ComboBoxCommissionType.Items.Add(CommissionType.None.ToString());
-            ComboBoxCommissionType.Items.Add(CommissionType.OneLotFix.ToString());
-            ComboBoxCommissionType.Items.Add(CommissionType.Percent.ToString());
-            ComboBoxCommissionType.SelectedItem = SourcesCreator.CommissionType.ToString();
-
-            TextBoxCommissionValue.Text = SourcesCreator.CommissionValue.ToString();
-
-
-
             _saveTradesInCandles = SourcesCreator.SaveTradesInCandles;
-
         }
 
         private void MassSourcesCreateUi_Closed(object sender, EventArgs e)
@@ -230,6 +236,8 @@ namespace OsEngine.Market.Connectors
                 TextBoxSearchSecurity.MouseLeave -= TextBoxSearchSecurity_MouseLeave;
                 TextBoxSearchSecurity.LostKeyboardFocus -= TextBoxSearchSecurity_LostKeyboardFocus;
                 ComboBoxClass.SelectionChanged -= ComboBoxClass_SelectionChanged;
+                ComboBoxExpiration.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
+                ComboBoxStrike.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
                 ComboBoxTypeServer.SelectionChanged -= ComboBoxTypeServer_SelectionChanged;
                 ComboBoxCandleCreateMethodType.SelectionChanged -= ComboBoxCandleCreateMethodType_SelectionChanged;
                 CheckBoxSelectAllCheckBox.Click -= CheckBoxSelectAllCheckBox_Click;
@@ -420,7 +428,7 @@ namespace OsEngine.Market.Connectors
                     else
                     {
                         CheckBoxSaveTradeArrayInCandle.IsEnabled = true;
-                        CheckBoxSaveTradeArrayInCandle.IsChecked = SourcesCreator.SaveTradesInCandles; 
+                        CheckBoxSaveTradeArrayInCandle.IsChecked = SourcesCreator.SaveTradesInCandles;
                         ButtonMarketDepthBuildMaxSpread.Visibility = Visibility.Collapsed;
                     }
                 }
@@ -493,7 +501,7 @@ namespace OsEngine.Market.Connectors
 
                 LoadPortfolioOnBox();
                 LoadClassOnBox();
-                LoadSecurityOnBox();
+                LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
 
                 UpdateSearchResults();
                 UpdateSearchPanel();
@@ -546,9 +554,15 @@ namespace OsEngine.Market.Connectors
             LoadPortfolioOnBox();
         }
 
+        private void ComboBoxExpirationAndStrike_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            LoadSecurityOnBox(loadExpirationStrikeComboBox: false);
+            TryUpdateTimeFramePermissions();
+        }
+
         private void ComboBoxClass_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            LoadSecurityOnBox();
+            LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
             TryUpdateTimeFramePermissions();
         }
 
@@ -648,6 +662,7 @@ namespace OsEngine.Market.Connectors
                     ComboBoxClass.Dispatcher.Invoke(LoadClassOnBox);
                     return;
                 }
+
                 List<IServer> serversAll = ServerMaster.GetServers();
 
                 IServer server =
@@ -684,10 +699,12 @@ namespace OsEngine.Market.Connectors
                     {
                         continue;
                     }
+
                     string clas = securities[i1].NameClass;
                     if (ComboBoxClass.Items.IndexOf(clas) == -1)
                         ComboBoxClass.Items.Add(clas);
                 }
+
                 if (string.IsNullOrEmpty(SourcesCreator.SecuritiesClass) == false)
                 {
                     ComboBoxClass.SelectedItem = SourcesCreator.SecuritiesClass;
@@ -698,7 +715,72 @@ namespace OsEngine.Market.Connectors
                 {
                     ComboBoxClass.SelectedItem = ComboBoxClass.Items[0];
                 }
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
 
+        private void LoadExpirationStrikeComboBox(List<Security> securities, string classSec)
+        {
+            try
+            {
+                if (securities == null)
+                {
+                    return;
+                }
+
+                SortedSet<DateTime> sortedExpirations = new SortedSet<DateTime>();
+                SortedSet<decimal> sortedStrikes = new SortedSet<decimal>();
+
+                for (int i1 = 0; i1 < securities.Count; i1++)
+                {
+                    if (securities[i1] == null)
+                    {
+                        continue;
+                    }
+
+                    if (securities[i1].SecurityType == SecurityType.Futures && securities[i1].NameClass == classSec)
+                    {
+                        DateTime expDate = securities[i1].Expiration.Date;
+                        sortedExpirations.Add(expDate);
+                    }
+                    else if (securities[i1].SecurityType == SecurityType.Option && securities[i1].NameClass == classSec)
+                    {
+                        DateTime expDate = securities[i1].Expiration.Date;
+                        sortedExpirations.Add(expDate);
+
+                        decimal strike = securities[i1].Strike;
+                        sortedStrikes.Add(strike);
+                    }
+                }
+
+                ComboBoxExpiration.Items.Clear();
+                if (ComboBoxExpiration.SelectedItem == null
+                    && ComboBoxExpiration.Items.Count == 0)
+                {
+                    ComboBoxExpiration.Items.Add("All");
+                    ComboBoxExpiration.SelectedItem = ComboBoxExpiration.Items[0];
+                }
+
+                ComboBoxStrike.Items.Clear();
+                if (ComboBoxStrike.SelectedItem == null
+                && ComboBoxStrike.Items.Count == 0)
+                {
+                    ComboBoxStrike.Items.Add("All");
+                    ComboBoxStrike.SelectedItem = ComboBoxStrike.Items[0];
+                }
+
+                foreach (DateTime date in sortedExpirations)
+                {
+                    ComboBoxExpiration.Items.Add(date.ToString("dd/MM/yyyy"));
+                }
+
+                foreach (decimal strike in sortedStrikes)
+                {
+                    ComboBoxStrike.Items.Add(strike.ToString());
+                }
             }
             catch (Exception error)
             {
@@ -793,11 +875,11 @@ namespace OsEngine.Market.Connectors
             DataGridFactory.ClearLinks(_gridSecurities);
             _gridSecurities.CellClick -= _gridSecurities_CellClick;
             _gridSecurities.DataError -= _gridSecurities_DataError;
-            _gridSecurities = null; 
+            _gridSecurities = null;
             SecuritiesHost.Child = null;
         }
 
-        private void LoadSecurityOnBox()
+        private void LoadSecurityOnBox(bool loadExpirationStrikeComboBox)
         {
             try
             {
@@ -828,18 +910,85 @@ namespace OsEngine.Market.Connectors
 
                 List<Security> securitiesToLoad = new List<Security>();
 
-                if (securities != null)
+                SecurityType securityType = SecurityType.None;
+
+                if (securities != null && ComboBoxClass.SelectedItem != null)
                 {
+                    string classSec = ComboBoxClass.SelectedItem.ToString();
+
+                    if (loadExpirationStrikeComboBox)
+                    {
+                        LoadExpirationStrikeComboBox(securities, classSec);
+                    }
+
                     for (int i = 0; i < securities.Count; i++)
                     {
                         if (securities[i] == null)
                         {
                             continue;
                         }
-                        string classSec = securities[i].NameClass;
-                        if (ComboBoxClass.SelectedItem != null && ComboBoxClass.SelectedItem.Equals(classSec))
+
+                        if (classSec == securities[i].NameClass)
                         {
-                            securitiesToLoad.Add(securities[i]);
+                            if (securities[i].SecurityType != SecurityType.Futures && securities[i].SecurityType != SecurityType.Option)
+                            {
+                                securityType = securities[i].SecurityType;
+                                securitiesToLoad.Add(securities[i]);
+                                continue;
+                            }
+
+                            if (ComboBoxExpiration.SelectedItem == null)
+                            {
+                                securityType = securities[i].SecurityType;
+                                securitiesToLoad.Add(securities[i]);
+                                continue;
+                            }
+
+                            string expirationString = ComboBoxExpiration.SelectedItem.ToString();
+
+                            if (expirationString == "All")
+                            {
+                                if (securities[i].SecurityType == SecurityType.Option)
+                                {
+                                    if (CheckStrikeFilter(securities[i]))
+                                    {
+                                        securityType = securities[i].SecurityType;
+                                        securitiesToLoad.Add(securities[i]);
+                                    }
+                                }
+                                else
+                                {
+                                    securityType = securities[i].SecurityType;
+                                    securitiesToLoad.Add(securities[i]);
+                                }
+                            }
+                            else
+                            {
+                                DateTime expirationDateTime = DateTime.ParseExact(
+                                    expirationString,
+                                    "dd.MM.yyyy",
+                                    CultureInfo.InvariantCulture,
+                                    DateTimeStyles.None
+                                );
+
+                                if (expirationDateTime.Date == securities[i].Expiration.Date)
+                                {
+                                    if (securities[i].SecurityType == SecurityType.Option)
+                                    {
+                                        if (CheckStrikeFilter(securities[i]))
+                                        {
+                                            securityType = securities[i].SecurityType;
+                                            securitiesToLoad.Add(securities[i]);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        securityType = securities[i].SecurityType;
+                                        securitiesToLoad.Add(securities[i]);
+                                    }
+                                }
+                            }
+
                         }
                     }
                 }
@@ -847,7 +996,7 @@ namespace OsEngine.Market.Connectors
                 // download already running instruments
                 // грузим уже запущенные инструменты
 
-                UpdateGrid(securitiesToLoad);
+                UpdateGrid(securitiesToLoad, securityType);
                 UpdateSearchResults();
                 UpdateSearchPanel();
                 CheckBoxSelectAllCheckBox.IsChecked = false;
@@ -858,8 +1007,34 @@ namespace OsEngine.Market.Connectors
             }
         }
 
-        private void UpdateGrid(List<Security> securities)
+        private bool CheckStrikeFilter(Security security)
         {
+            if (ComboBoxStrike.SelectedItem == null)
+                return true;
+
+            string strike = ComboBoxStrike.SelectedItem.ToString();
+
+            if (strike == "All")
+                return true;
+
+            return strike.ToDecimal() == security.Strike;
+        }
+
+        private void UpdateGrid(List<Security> securities, SecurityType securityType)
+        {
+            if (securityType == SecurityType.Futures)
+            {
+                SecuritiesHost.Margin = new Thickness(419, 112, 15.2, 40);
+            }
+            else if (securityType == SecurityType.Option)
+            {
+                SecuritiesHost.Margin = new Thickness(419, 142, 15.2, 40);
+            }
+            else
+            {
+                SecuritiesHost.Margin = new Thickness(419, 82, 15.2, 40);
+            }
+
             SecuritiesHost.Child = null;
 
             _gridSecurities.Rows.Clear();
