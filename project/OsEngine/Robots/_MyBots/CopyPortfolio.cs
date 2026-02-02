@@ -1,5 +1,5 @@
 ﻿/* 
- Версия 1.1
+ Версия 1.2
  */
 
 
@@ -34,6 +34,9 @@ namespace OsEngine.Robots
         StrategyParameterTimeOfDay _endToWork;
         StrategyParameterInt _workInterval;
         StrategyParameterString _lastTimeCheckFinance;
+        StrategyParameterString _repMoneyFund;
+        StrategyParameterString _repMoneyFundNew;
+        StrategyParameterDecimal _repMoneyFundKoeff;
 
         public class MirrorPosition
         {
@@ -45,6 +48,10 @@ namespace OsEngine.Robots
             public decimal Percent { get; set; }
             public Position Pose { get; set; }
             public BotTabSimple Tab { get; set; }
+            public string OriginalMoneyFundNameCode { get; set; }
+            public decimal RepMoneyFundKoeff { get; set; }
+            public decimal OriginalMoneyFundValue { get; set; }
+
 
             public MirrorPosition()
             {
@@ -56,9 +63,12 @@ namespace OsEngine.Robots
                 Percent = 0m;
                 Pose = null;
                 Tab = null;
+                OriginalMoneyFundNameCode = string.Empty;
+                RepMoneyFundKoeff = 1m;
+                OriginalMoneyFundValue = 0m;
             }
 
-            public MirrorPosition(string securityNameCode, decimal securityPrice, decimal securityValue, decimal poseCurrentValue = 0, decimal poseTargetValue = 0, decimal percent = 0, BotTabSimple tab = null, Position pose = null)
+            public MirrorPosition(string securityNameCode, decimal securityPrice, decimal securityValue, decimal poseCurrentValue = 0, decimal poseTargetValue = 0, decimal percent = 0, BotTabSimple tab = null, Position pose = null, string originalMoneyFundNameCode = "", decimal repMoneyFundKoeff = 1m, decimal originalMoneyFundValue = 0m)
             {
                 SecurityNameCode = securityNameCode;
                 SecurityPrice = securityPrice;
@@ -68,6 +78,9 @@ namespace OsEngine.Robots
                 Percent = percent;
                 Tab = tab;
                 Pose = pose;
+                OriginalMoneyFundNameCode = originalMoneyFundNameCode;
+                RepMoneyFundKoeff = repMoneyFundKoeff;
+                OriginalMoneyFundValue = originalMoneyFundValue;
             }
 
         }
@@ -95,7 +108,7 @@ namespace OsEngine.Robots
                 PercentCalculation();
             }
 
-            public void myMoneyFundEdit(string securityNameCode, decimal securityPrice, decimal securityValue, decimal poseCurrentValue = 0, decimal poseTargetValue = 0, BotTabSimple tab = null, Position pose = null)
+            public void myMoneyFundEdit(string securityNameCode, decimal securityPrice, decimal securityValue, decimal poseCurrentValue = 0, decimal poseTargetValue = 0, BotTabSimple tab = null, Position pose = null, string originalMoneyFundNameCode = "", decimal repMoneyFundKoeff = 1m, decimal originalMoneyFundValue = 0m)
             {
                 myMoneyFund.SecurityNameCode = securityNameCode;
                 myMoneyFund.SecurityPrice = securityPrice;
@@ -104,6 +117,9 @@ namespace OsEngine.Robots
                 myMoneyFund.PoseTargetValue = poseTargetValue;
                 myMoneyFund.Tab = tab;
                 myMoneyFund.Pose = pose;
+                myMoneyFund.OriginalMoneyFundNameCode = originalMoneyFundNameCode;
+                myMoneyFund.RepMoneyFundKoeff = repMoneyFundKoeff;
+                myMoneyFund.OriginalMoneyFundValue = originalMoneyFundValue;
                 PercentCalculation();
             }
 
@@ -148,7 +164,7 @@ namespace OsEngine.Robots
             }
 
 
-            public string CorrectPortfolio(Boolean onlyInfo = true, Boolean changeMoneyFund = true)
+            public string CorrectPortfolio(Boolean onlyInfo = true, Boolean changeMoneyFund = true, Boolean repMoneyFund = false)
             {
                 string sInfo = "Сравнение " + DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss") + "\r\n";
                 var sortedList = MirrorPositionsList.OrderBy(x => x.SecurityNameCode).ToList();
@@ -226,7 +242,14 @@ namespace OsEngine.Robots
 
                 if (changeMoneyFund == true)
                 {
-                    sInfo += myMoneyFund.SecurityNameCode + " (" + myMoneyFund.Percent * 100 + "%) " + myMoneyFund.PoseCurrentValue + " => " + myMoneyFund.PoseTargetValue + "\r\n";
+                    if (repMoneyFund == false)
+                    {
+                        sInfo += myMoneyFund.SecurityNameCode + " (" + myMoneyFund.Percent * 100 + "%) " + myMoneyFund.PoseCurrentValue + " => " + myMoneyFund.PoseTargetValue + "\r\n";
+                    }
+                    else
+                    {
+                        sInfo += myMoneyFund.SecurityNameCode + " (" + myMoneyFund.Percent * 100 + "%) " + myMoneyFund.PoseCurrentValue + " => " + myMoneyFund.PoseTargetValue + " (" + myMoneyFund.OriginalMoneyFundNameCode + " " + myMoneyFund.OriginalMoneyFundValue + " x " + myMoneyFund.RepMoneyFundKoeff + ")" + "\r\n";
+                    }
                 }
                 else
                 {
@@ -292,6 +315,10 @@ namespace OsEngine.Robots
             _endToWork = CreateParameterTimeOfDay("End to work", 18, 40, 00, 00, "Main Regime");
             _workInterval = CreateParameter("Work interval (min)", 5, 1, 20, 1, "Main Regime"); ;
             _lastTimeCheckFinance = CreateParameter("Last time work ", "", "Main Regime"); ;
+            _repMoneyFund = CreateParameter("Replace Money Fund", "Off", new[] { "Off", "On" }, "Replace Money Fund");
+            _repMoneyFundNew = CreateParameter("New Money Fund", "LQDT", "Replace Money Fund");
+            _repMoneyFundKoeff = CreateParameter("New Money Fund Koeff", 1.001m, 1.001m, 20.001m, 0.001m, "Replace Money Fund");
+
 
             StrategyParameterButton button = CreateParameterButton("Copy manual", "Main Regime");
             button.UserClickOnButtonEvent += Button_UserClickOnButtonEvent;
@@ -381,10 +408,13 @@ namespace OsEngine.Robots
                 }
                 else if (positionOnBoard[i].SecurityNameCode == _moneyFundInPortfolio.ValueString)
                 {
-                    int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == positionOnBoard[i].SecurityNameCode);
+                    string boardSecName = positionOnBoard[i].SecurityNameCode;
+                    if (_repMoneyFund == "On") { boardSecName = _repMoneyFundNew; }
+
+                    int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == boardSecName);
                     if (tIndex == -1)
                     {
-                        SendNewLogMessage("Отсутствует настройка для " + positionOnBoard[i].SecurityNameCode + " панель 1", Logging.LogMessageType.Error);
+                        SendNewLogMessage("Отсутствует настройка для " + boardSecName + " панель сделок", Logging.LogMessageType.Error);
                         return;
                     }
                     tTab = _tabToTrade1.Tabs[tIndex];
@@ -399,7 +429,7 @@ namespace OsEngine.Robots
                         secPrice = tTab.CandlesAll[tTab.CandlesAll.Count - 1].Close;
                     }
 
-                    tIndex = posesAll.FindIndex(pos => pos.SecurityName == positionOnBoard[i].SecurityNameCode);
+                    tIndex = posesAll.FindIndex(pos => pos.SecurityName == boardSecName);
                     decimal tPoseCurrent = 0;
                     Position tPos = null;
                     if (tIndex != -1)
@@ -408,9 +438,15 @@ namespace OsEngine.Robots
                         flag[tIndex] = 2;
                         tPos = posesAll[tIndex];
                     }
-                    mirrorPortfolio.myMoneyFundEdit(positionOnBoard[i].SecurityNameCode, secPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
 
-
+                    if (_repMoneyFund == "On")
+                    {
+                        mirrorPortfolio.myMoneyFundEdit(boardSecName, secPrice, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff), tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff * _koeff.ValueDecimal), tTab, tPos, positionOnBoard[i].SecurityNameCode, _repMoneyFundKoeff, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked);
+                    }
+                    else
+                    {
+                        mirrorPortfolio.myMoneyFundEdit(positionOnBoard[i].SecurityNameCode, secPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
+                    }
                 }
                 else
                 {
@@ -483,20 +519,25 @@ namespace OsEngine.Robots
             }
 
             string tInfo = "";
+
+            Boolean repMoneyFund = false;
+            if (_repMoneyFund == "On") { repMoneyFund = true; }
+
+
             if (_onlyInfo == "On")
             {
-                tInfo = mirrorPortfolio.CorrectPortfolio();
+                tInfo = mirrorPortfolio.CorrectPortfolio(true, true, repMoneyFund);
 
             }
             else if (_onlyInfo == "Off" && _changeMoneyFund == "On")
             {
-                tInfo = mirrorPortfolio.CorrectPortfolio(false);
+                tInfo = mirrorPortfolio.CorrectPortfolio(false, true, repMoneyFund);
 
             }
 
             else if (_onlyInfo == "Off" && _changeMoneyFund == "Off")
             {
-                tInfo = mirrorPortfolio.CorrectPortfolio(false, false);
+                tInfo = mirrorPortfolio.CorrectPortfolio(false, false, repMoneyFund);
 
             }
 
