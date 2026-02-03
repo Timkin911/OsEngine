@@ -194,40 +194,40 @@ namespace OsEngine.Robots
                         }
                         else
                         {
-                            if (tar > cur)
+                            if (cur < tar)
                             {
-                                if (tar > 0 && cur > 0)
+                                if (cur > 0 && tar > 0)
                                 {
                                     sortedList[i].Tab.BuyAtMarketToPosition(sortedList[i].Pose, tar - cur);
                                 }
-                                else if (tar == 0 && cur < 0)
+                                else if (cur < 0 && tar == 0)
                                 {
                                     sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, Math.Abs(cur));
                                 }
-                                else if (tar > 0 && cur < 0)
+                                else if (cur < 0 && tar > 0)
                                 {
                                     sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, Math.Abs(cur));
                                     sortedList[i].Tab.BuyAtMarket(tar);
                                 }
-                                else if (tar < 0 && cur < 0)
+                                else if (cur < 0 && tar < 0)
                                 {
                                     sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, tar - cur);
                                 }
                             }
-                            else if (tar < cur)
+                            else if (cur > tar)
                             {
-                                if (tar > 0 && cur > 0)
+                                if (cur > 0 && tar > 0)
                                 {
                                     sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, cur - tar);
                                 }
-                                else if (tar == 0 && cur > 0)
+                                else if (cur > 0 && tar == 0)
                                 {
                                     sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, cur);
                                 }
                                 else if (cur > 0 && tar < 0)
                                 {
                                     sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, cur);
-                                    sortedList[i].Tab.BuyAtMarket(Math.Abs(tar));
+                                    sortedList[i].Tab.SellAtMarket(Math.Abs(tar));
                                 }
                                 else if (cur < 0 && tar < 0)
                                 {
@@ -454,6 +454,11 @@ namespace OsEngine.Robots
                     if (tIndex == -1)
                     {
                         SendNewLogMessage("Отсутствует настройка для " + positionOnBoard[i].SecurityNameCode, Logging.LogMessageType.Error);
+                        //Entity.Security newSec = new Entity.Security();
+                        //newSec.Name = "Sber";
+                        //newSec.NameId = "SBER";
+                        //BotTabSimple newTab = _tabToTrade1.Tabs.Add(newTab);
+
                         return;
                     }
                     tTab = _tabToTrade1.Tabs[tIndex];
