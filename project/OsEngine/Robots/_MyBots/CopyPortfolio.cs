@@ -1,11 +1,15 @@
 ﻿/* 
- Версия 1.2
+ Версия 1.3
  */
 
 
 using OsEngine.Entity;
 using OsEngine.Logging;
+using OsEngine.Market;
+using OsEngine.Market.Connectors;
+using OsEngine.Market.Servers;
 using OsEngine.Market.Servers.GateIo.GateIoFutures.Entities.Response;
+using OsEngine.Market.Servers.MFD;
 using OsEngine.Market.Servers.MoexFixFastSpot.FIX;
 using OsEngine.Market.Servers.Transaq.TransaqEntity;
 using OsEngine.OsTrader.Panels;
@@ -15,6 +19,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Documents;
+using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 
 namespace OsEngine.Robots
@@ -38,6 +44,7 @@ namespace OsEngine.Robots
         StrategyParameterString _repMoneyFundNew;
         StrategyParameterDecimal _repMoneyFundKoeff;
 
+        #region Классы MirrorPosition и MirrorPortfolio
         public class MirrorPosition
         {
             public string SecurityNameCode { get; set; }
@@ -293,6 +300,7 @@ namespace OsEngine.Robots
             }
         }
 
+        #endregion
 
 
         public CopyPortfolio(string name, StartProgram startProgram) : base(name, startProgram)
@@ -361,6 +369,7 @@ namespace OsEngine.Robots
             CopyPortfolioLogic();
         }
 
+
         private void CopyPortfolioLogic()
         {
             if (_tabToTrade1.Tabs[0].IsReadyToTrade == false)
@@ -369,14 +378,12 @@ namespace OsEngine.Robots
                 return;
             }
 
-
             bool isTradingActive = IsTradingActive(_tabToTrade1.Tabs[0]);
             if (isTradingActive == false)
             {
                 //_tabToTrade1.Tabs[0].SetNewLogMessage("There are currently no trades going on", Logging.LogMessageType.System);
                 return;
             }
-
 
             if (_tabToTrade1.Tabs.Count == 0)
             {
@@ -454,12 +461,57 @@ namespace OsEngine.Robots
                     if (tIndex == -1)
                     {
                         SendNewLogMessage("Отсутствует настройка для " + positionOnBoard[i].SecurityNameCode, Logging.LogMessageType.Error);
-                        //Entity.Security newSec = new Entity.Security();
-                        //newSec.Name = "Sber";
-                        //newSec.NameId = "SBER";
-                        //BotTabSimple newTab = _tabToTrade1.Tabs.Add(newTab);
 
-                        return;
+                        //Здесь пробуем добавить новый tab для отсутствующей бумаги
+                        try
+                        {
+                            // Проверка 1: сервер брокера должен быть включен
+                            List<AServer> servers = ServerMaster.GetAServers();
+                            if (servers == null
+                                || servers.Count == 0)
+                            {
+                                SendNewLogMessage("Сначала подключите коннектор к Брокеру", Logging.LogMessageType.Error);
+                                return;
+                            }
+
+                            int sIndex = servers.FindIndex(s => s.ServerType == _tabToTrade1.ServerType);
+                            if (sIndex == -1)
+                            {
+                                SendNewLogMessage("Проблема с коннектором скринера", Logging.LogMessageType.Error);
+                                return;
+                            }
+
+                            // Проверка 2: фьючерсная площадка и спот, должны быть подключены к коннектору
+                            AServer myServer = servers[sIndex];
+                            List<Entity.Security> securitiesAll = myServer.Securities;
+                                
+                            if (securitiesAll == null || securitiesAll.Count == 0)
+                            {
+                                SendNewLogMessage("В коннекторе не найдены бумаги. Возможно он не подключен", Logging.LogMessageType.Error);
+                                return;
+                            }
+
+                            // Добавляем бумагу
+                            Entity.Security newSec = securitiesAll.Find(s => s.Name == positionOnBoard[i].SecurityNameCode);
+                            if (newSec == null) { return; }
+
+                            ActivatedSecurity sec = new ActivatedSecurity();
+                            sec.SecurityClass = newSec.NameClass;
+                            sec.SecurityName = newSec.Name;
+                            sec.IsOn = true;
+
+                            _tabToTrade1.SecuritiesNames.Add(sec);
+                            _tabToTrade1.NeedToReloadTabs = true;
+                            SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
+                            continue;
+                        }
+                        catch (Exception error)
+                        {
+                            SendNewLogMessage("Ошибка при добавлении " + positionOnBoard[i].SecurityNameCode + " " + error.ToString(), LogMessageType.Error);
+                            return;
+                        }
+                        //
+                        
                     }
                     tTab = _tabToTrade1.Tabs[tIndex];
 
@@ -552,6 +604,8 @@ namespace OsEngine.Robots
             // Определяем необхдимые изменения по портфелю
         }
 
+
+        #region Checks
         public bool IsTradingActive(BotTabSimple tab)
         {
             // Проверяем, что таб существует и подключен
@@ -584,6 +638,7 @@ namespace OsEngine.Robots
             // Если все проверки пройдены - торги идут
             return true;
         }
+        #endregion
 
         public override string GetNameStrategyType()
         {
