@@ -6,7 +6,9 @@
 using System;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Threading;
 using OsEngine.Language;
+using OsEngine.Market;
 
 namespace OsEngine.OsTrader.RiskManager
 {
@@ -44,6 +46,64 @@ namespace OsEngine.OsTrader.RiskManager
 
             this.Activate();
             this.Focus();
+
+            if (InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass == null
+            || InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonRiskManager.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
+        }
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                DispatcherTimer timer = new DispatcherTimer();
+                int blinkCount = 0;
+                bool isGreenVisible = true;
+
+                timer.Interval = TimeSpan.FromMilliseconds(300);
+                timer.Tick += (s, e) =>
+                {
+                    try
+                    {
+                        if (blinkCount >= 20)
+                        {
+                            timer.Stop();
+                            PostGreenRiskManager.Opacity = 1;
+                            PostWhiteRiskManager.Opacity = 0;
+                            return;
+                        }
+
+                        if (isGreenVisible)
+                        {
+                            PostGreenRiskManager.Opacity = 0;
+                            PostWhiteRiskManager.Opacity = 1;
+                        }
+                        else
+                        {
+                            PostGreenRiskManager.Opacity = 1;
+                            PostWhiteRiskManager.Opacity = 0;
+                        }
+
+                        isGreenVisible = !isGreenVisible;
+                        blinkCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                        timer.Stop();
+                    }
+                };
+
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         /// <summary>
@@ -52,7 +112,7 @@ namespace OsEngine.OsTrader.RiskManager
         /// </summary>
         private void LoadDateOnForm()
         {
-            CheckBoxIsOn.IsChecked = _riskManager.IsActiv;
+            CheckBoxIsOn.IsChecked = _riskManager.IsActive;
             TextBoxOpenMaxDd.Text = _riskManager.MaxDrowDownToDayPersent.ToString(new CultureInfo("ru-RU"));
 
             ComboBoxReaction.Items.Add(RiskManagerReactionType.CloseAndOff);
@@ -80,12 +140,30 @@ namespace OsEngine.OsTrader.RiskManager
             }
 
 
-           _riskManager.IsActiv =  CheckBoxIsOn.IsChecked.Value;
+           _riskManager.IsActive =  CheckBoxIsOn.IsChecked.Value;
            _riskManager.MaxDrowDownToDayPersent = Convert.ToDecimal(TextBoxOpenMaxDd.Text);
 
            Enum.TryParse(ComboBoxReaction.Text,false,out _riskManager.ReactionType);
            _riskManager.Save();
             Close();
         }
+
+        #region Posts collection
+
+        private void ButtonRiskManager_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.BotStationLightPosts.Link2.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
+
+
     }
 }

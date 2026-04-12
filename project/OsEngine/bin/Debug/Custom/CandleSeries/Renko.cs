@@ -96,7 +96,7 @@ namespace OsEngine.Candles.Series
                && CandlesAll.Count > 0
                && _rencoStartPrice == 0)
             {
-                _rencoStartPrice = CandlesAll[CandlesAll.Count - 1].Close;
+                _rencoStartPrice = CandlesAll[CandlesAll.Count - 1].Open;
 
                 if (CandlesAll[CandlesAll.Count - 1].Close > CandlesAll[CandlesAll.Count - 1].Open)
                 {
@@ -143,39 +143,41 @@ namespace OsEngine.Candles.Series
             }
             else if (ValueType.ValueString == "Percent")
             {
-                decimal distance = CandlesAll[CandlesAll.Count - 1].Close - CandlesAll[CandlesAll.Count - 1].Open;
+                decimal distance = price - CandlesAll[CandlesAll.Count - 1].Open;
 
-                decimal movePercent = distance / (price / 100);
+                decimal movePercent = distance / (CandlesAll[CandlesAll.Count - 1].Open / 100);
 
                 if (_rencoLastSide == Side.None && Math.Abs(movePercent) >= renDist)
                 {
                     newCandleType = RenkoNewCandleType.None;
-                    renDist = Math.Abs(distance);
                     isNewCandle = true;
                 }
                 else if (_rencoLastSide == Side.Buy && movePercent >= renDist)
                 {
                     newCandleType = RenkoNewCandleType.NewUpCandle;
-                    renDist = Math.Abs(distance);
                     isNewCandle = true;
                 }
                 else if (_rencoLastSide == Side.Buy && movePercent <= -(renDist * 2))
                 {
                     newCandleType = RenkoNewCandleType.Revers;
-                    renDist = Math.Abs(distance);
                     isNewCandle = true;
                 }
                 else if (_rencoLastSide == Side.Sell && movePercent <= -renDist)
                 {
                     newCandleType = RenkoNewCandleType.NewDownCandle;
-                    renDist = Math.Abs(distance);
                     isNewCandle = true;
                 }
                 else if (_rencoLastSide == Side.Sell && movePercent >= renDist * 2)
                 {
                     newCandleType = RenkoNewCandleType.Revers;
-                    renDist = Math.Abs(distance);
                     isNewCandle = true;
+                }
+
+                if (isNewCandle)
+                {
+                    decimal res = (renDist / 100) * (CandlesAll[CandlesAll.Count - 1].Close);
+
+                    renDist = Math.Round(res, 7);
                 }
             }
 
@@ -185,35 +187,48 @@ namespace OsEngine.Candles.Series
 
                 Candle lastCandle = CandlesAll[^1];
 
-                if (
-                    (_rencoLastSide == Side.None && price - _rencoStartPrice >= 0)
-                    ||
-                    (_rencoLastSide == Side.Buy && newCandleType == RenkoNewCandleType.NewUpCandle)
-                    )
+                if (_rencoLastSide == Side.None)
+                {
+                    decimal distance = CandlesAll[CandlesAll.Count - 1].Close - CandlesAll[CandlesAll.Count - 1].Open;
+
+                    if (distance > 0)
+                    {
+                        _rencoLastSide = Side.Buy;
+                        _rencoStartPrice = _rencoStartPrice + renDist;
+                        lastCandle.High = _rencoStartPrice;
+                    }
+                    else
+                    {
+                        _rencoLastSide = Side.Sell;
+                        _rencoStartPrice = _rencoStartPrice - renDist;
+                        lastCandle.Low = _rencoStartPrice;
+                    }
+                }
+
+                else if (_rencoLastSide == Side.Buy && newCandleType == RenkoNewCandleType.NewUpCandle)
                 {
                     _rencoLastSide = Side.Buy;
                     _rencoStartPrice = _rencoStartPrice + renDist;
                     lastCandle.High = _rencoStartPrice;
                 }
-                else if (
-                (_rencoLastSide == Side.None && price - _rencoStartPrice < 0)
-                ||
-                (_rencoLastSide == Side.Sell && newCandleType == RenkoNewCandleType.NewDownCandle)
-                )
+
+                else if (_rencoLastSide == Side.Sell && newCandleType == RenkoNewCandleType.NewDownCandle)
+
                 {
                     _rencoLastSide = Side.Sell;
                     _rencoStartPrice = _rencoStartPrice - renDist;
                     lastCandle.Low = _rencoStartPrice;
                 }
-                else if (
-                    _rencoLastSide == Side.Buy && newCandleType == RenkoNewCandleType.Revers)
+
+                else if (_rencoLastSide == Side.Buy && newCandleType == RenkoNewCandleType.Revers)
                 {
                     _rencoLastSide = Side.Sell;
+
                     if (CandlesAll.Count > 2
                         && ValueType.ValueString == "Percent")
                     {
                         lastCandle.Open = CandlesAll[^2].Open;
-                        _rencoStartPrice = price;
+                        _rencoStartPrice = lastCandle.Open - renDist;
                         lastCandle.Low = _rencoStartPrice;
                     }
                     else
@@ -223,15 +238,15 @@ namespace OsEngine.Candles.Series
                         lastCandle.Low = _rencoStartPrice;
                     }
                 }
-                else if (
-                    _rencoLastSide == Side.Sell && newCandleType == RenkoNewCandleType.Revers)
+
+                else if (_rencoLastSide == Side.Sell && newCandleType == RenkoNewCandleType.Revers)
                 {
                     if (CandlesAll.Count > 2
                         && ValueType.ValueString == "Percent")
                     {
                         _rencoLastSide = Side.Buy;
                         lastCandle.Open = CandlesAll[^2].Open;
-                        _rencoStartPrice = price;
+                        _rencoStartPrice = lastCandle.Open + renDist;
                         lastCandle.High = _rencoStartPrice;
                     }
                     else
@@ -301,7 +316,8 @@ namespace OsEngine.Candles.Series
                     UpdateChangeCandle();
                 }
 
-                if (newCandle.TimeStart.Day == CandlesAll[CandlesAll.Count - 1].TimeStart.Day)
+                if (CandlesAll.Count > 1
+                    && newCandle.TimeStart.Day == CandlesAll[CandlesAll.Count - 2].TimeStart.Day)
                 {
                     // recursion. When intraday gaps happen
                     UpDateCandle(time, price, volume, canPushUp, side);
@@ -310,7 +326,7 @@ namespace OsEngine.Candles.Series
                 return;
             }
 
-            if (CandlesAll != null)
+            else if (CandlesAll != null)
             {
                 // если пришли данные внутри свечи
 

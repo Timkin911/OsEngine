@@ -3,19 +3,22 @@
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
 
-using System;
-using System.Collections.Generic;
-using System.Threading;
 using OsEngine.Entity;
+using OsEngine.Entity.SyntheticBondEntity;
 using OsEngine.Language;
 using OsEngine.Logging;
 using OsEngine.Market;
+using OsEngine.Market.Connectors;
 using OsEngine.Market.Servers.Optimizer;
 using OsEngine.Market.Servers.Tester;
-using OsEngine.OsTrader.Panels;
 using OsEngine.OsOptimizer.OptimizerEntity;
+using OsEngine.OsTrader.Panels;
 using OsEngine.OsTrader.Panels.Tab;
-using OsEngine.Market.Connectors;
+using OsEngine.OsTrader.Panels.Tab.SynteticBondTab;
+using OsEngine.OsTrader.Panels.Tab.SyntheticBondTab;
+using System;
+using System.Collections.Generic;
+using System.Threading;
 
 namespace OsEngine.OsOptimizer
 {
@@ -777,9 +780,96 @@ namespace OsEngine.OsOptimizer
                             report.Faze.TimeEnd);
                     }
                 }
+                else if (sources[i].TabType == BotTabType.SyntheticBond)
+                {// BotTabSyntheticBond
+                    BotTabSyntheticBond synthBond = (BotTabSyntheticBond)sources[i];
+
+                    for (int i2 = 0; i2 < synthBond.SyntheticBondSeries.Count; i2++)
+                    {
+                        SyntheticBondSeries series = synthBond.SyntheticBondSeries[i2];
+
+                        if (series.BaseTab != null
+                            && series.BaseTab.Connector != null
+                            && series.BaseTab.Connector.SecurityName != null)
+                        {
+                            Security baseSec = FindSecurityByName(series.BaseTab.Connector.SecurityName);
+
+                            if (baseSec != null)
+                            {
+                                server.GetDataToSecurity(baseSec, series.BaseTab.Connector.TimeFrame,
+                                    report.Faze.TimeStart, report.Faze.TimeEnd);
+                            }
+                        }
+
+                        if (series.SyntheticBonds == null)
+                        {
+                            continue;
+                        }
+
+                        for (int i3 = 0; i3 < series.SyntheticBonds.Count; i3++)
+                        {
+                            SyntheticBond settings = series.SyntheticBonds[i3];
+
+                            if (settings.FuturesIcebergParameters != null
+                                && settings.FuturesIcebergParameters.BotTab != null
+                                && settings.FuturesIcebergParameters.BotTab.Connector != null
+                                && settings.FuturesIcebergParameters.BotTab.Connector.SecurityName != null)
+                            {
+                                Security futSec = FindSecurityByName(settings.FuturesIcebergParameters.BotTab.Connector.SecurityName);
+
+                                if (futSec != null)
+                                {
+                                    server.GetDataToSecurity(futSec, settings.FuturesIcebergParameters.BotTab.Connector.TimeFrame,
+                                        report.Faze.TimeStart, report.Faze.TimeEnd);
+                                }
+                            }
+
+                            if (settings.BaseRationingSecurity != null
+                                && settings.BaseRationingSecurity.Connector != null
+                                && settings.BaseRationingSecurity.Connector.SecurityName != null)
+                            {
+                                Security rationingSec = FindSecurityByName(settings.BaseRationingSecurity.Connector.SecurityName);
+
+                                if (rationingSec != null)
+                                {
+                                    server.GetDataToSecurity(rationingSec, settings.BaseRationingSecurity.Connector.TimeFrame,
+                                        report.Faze.TimeStart, report.Faze.TimeEnd);
+                                }
+                            }
+
+                            if (settings.FuturesRationingSecurity != null
+                                && settings.FuturesRationingSecurity.Connector != null
+                                && settings.FuturesRationingSecurity.Connector.SecurityName != null)
+                            {
+                                Security rationingSec = FindSecurityByName(settings.FuturesRationingSecurity.Connector.SecurityName);
+
+                                if (rationingSec != null)
+                                {
+                                    server.GetDataToSecurity(rationingSec, settings.FuturesRationingSecurity.Connector.TimeFrame,
+                                        report.Faze.TimeStart, report.Faze.TimeEnd);
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             return server;
+        }
+
+        private Security FindSecurityByName(string securityName)
+        {
+            List<Security> securities = _master.Storage.Securities;
+
+            for (int i = 0; i < securities.Count; i++)
+            {
+                if (securities[i].Name == securityName)
+                {
+                    return securities[i];
+                }
+            }
+
+            return null;
         }
 
         private BotPanel CreateNewBot(string botName,
@@ -1197,6 +1287,18 @@ namespace OsEngine.OsOptimizer
                         && curBot.TabsScreener != null
                         && curBot.TabsScreener.Count > 0
                         && curBot.TabsScreener[0].ServerUid == serverNum)
+                    {
+                        bot = curBot;
+                        _botsInTest.RemoveAt(i);
+                        break;
+                    }
+                    else if (curBot != null
+                        && curBot.TabsSyntheticBond != null
+                        && curBot.TabsSyntheticBond.Count > 0
+                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries.Count > 0
+                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].BaseTab != null
+                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].BaseTab.Connector != null
+                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].BaseTab.Connector.ServerUid == serverNum)
                     {
                         bot = curBot;
                         _botsInTest.RemoveAt(i);

@@ -7,7 +7,6 @@ using OsEngine.Entity;
 using OsEngine.Language;
 using OsEngine.Logging;
 using OsEngine.Market.Servers.Entity;
-using OsEngine.Market.Servers.Pionex.Entity;
 using OsEngine.Market.Servers.Transaq.TransaqEntity;
 using RestSharp;
 using RestSharp.Deserializers;
@@ -322,7 +321,7 @@ namespace OsEngine.Market.Servers.Transaq
 
                 _securities = new List<Security>();
 
-                _secsSpecification = new List<SecurityInfo>();
+                _secsSpecification = new List<SecurityInfoUpd>();
 
                 _subscribeSecurities = new List<Security>();
 
@@ -351,6 +350,8 @@ namespace OsEngine.Market.Servers.Transaq
                 _historicalTradesQueue = new ConcurrentQueue<string>();
 
                 _activeOrders = new List<InfoActiveOrder>();
+
+                _securitiesUpdateExpiration = new List<Security>();
             }
         }
 
@@ -499,9 +500,11 @@ namespace OsEngine.Market.Servers.Transaq
 
         private List<Security> _securities = new List<Security>();
 
+        private List<Security> _securitiesUpdateExpiration = new List<Security>();
+
         private ConcurrentQueue<string> _transaqSecuritiesInString = new ConcurrentQueue<string>();
 
-        private List<SecurityInfo> _secsSpecification = new List<SecurityInfo>();
+        private List<SecurityInfoUpd> _secsSpecification = new List<SecurityInfoUpd>();
 
         private void ThreadUpdateAndSubscribeSecurity()
         {
@@ -565,6 +568,34 @@ namespace OsEngine.Market.Servers.Transaq
 
                         SendLogMessage("Securities count: " + _securities.Count, LogMessageType.System);
                     }
+                    else if (!_securityInfoQueue.IsEmpty)
+                    {
+                        string data = null;
+
+                        if (_securityInfoQueue.TryDequeue(out data))
+                        {
+                            for (int i = 0; i < _securitiesUpdateExpiration.Count; i++)
+                            {
+                                SecurityInfo transaqSecurities = _deserializer.Deserialize<SecurityInfo>(new RestResponse() { Content = data });
+
+                                if (_securitiesUpdateExpiration[i].NameId == transaqSecurities.SecId)
+                                {
+                                    if (transaqSecurities.MatDate != null)
+                                    {
+                                        _securitiesUpdateExpiration[i].Expiration = Convert.ToDateTime(transaqSecurities.MatDate);
+                                    }
+
+                                    _securitiesUpdateExpiration.RemoveAt(i);
+                                    break;
+                                }
+                            }
+
+                            if (_securitiesUpdateExpiration.Count == 0)
+                            {
+                                SecurityEvent?.Invoke(_securities);
+                            }
+                        }
+                    }
                     else if (_unsignedSecurities.Count != 0)
                     {
                         for (int i = 0; i < _unsignedSecurities.Count; i++)
@@ -589,7 +620,7 @@ namespace OsEngine.Market.Servers.Transaq
             }
         }
 
-        private void UpdateSecurity(SecurityInfo secs)
+        private void UpdateSecurity(SecurityInfoUpd secs)
         {
             _lastUpdateSecurityArrayTime = DateTime.Now;
 
@@ -644,7 +675,7 @@ namespace OsEngine.Market.Servers.Transaq
 
             for (int i = 0; i < _secsSpecification.Count; i++)
             {
-                SecurityInfo secInfo = _secsSpecification[i];
+                SecurityInfoUpd secInfo = _secsSpecification[i];
 
                 for (int j = 0; j < _securities.Count; j++)
                 {
@@ -685,7 +716,7 @@ namespace OsEngine.Market.Servers.Transaq
         {
             lock (_lockerCreateSecurities)
             {
-                List<TransaqEntity.Security> transaqSecurities = _deserializer.Deserialize<List<TransaqEntity.Security>>(new RestResponse() { Content = data }); ;
+                List<TransaqEntity.Security> transaqSecurities = _deserializer.Deserialize<List<TransaqEntity.Security>>(new RestResponse() { Content = data });
 
                 bool isChangedSecurity = false;
 
@@ -707,7 +738,7 @@ namespace OsEngine.Market.Servers.Transaq
                         security.NameClass = securityData.Board;
                         security.NameId = securityData.Secid;
                         security.Decimals = Convert.ToInt32(securityData.Decimals);
-                        security.Exchange = securityData.Board;
+                        security.Exchange = securityData.Market;
                         security.VolumeStep = 1;
 
                         if (securityData.Sectype == "FUT")
@@ -732,6 +763,15 @@ namespace OsEngine.Market.Servers.Transaq
                         {
                             security.SecurityType = SecurityType.Futures;
                             security.UsePriceStepCostToCalculateVolume = true;
+
+                            string cmd = $"<command id=\"get_securities_info\">\r\n<secid>{security.NameId}</secid>\r\n</command>\r\n";
+
+                            string res = ConnectorSendCommand(cmd);
+
+                            if (res.StartsWith("<result success=\"true\""))
+                            {
+                                _securitiesUpdateExpiration.Add(security);
+                            }
                         }
                         else if (securityData.Sectype == "SHARE")
                         {
@@ -741,6 +781,15 @@ namespace OsEngine.Market.Servers.Transaq
                         {
                             security.SecurityType = SecurityType.Option;
                             security.UsePriceStepCostToCalculateVolume = true;
+
+                            string cmd = $"<command id=\"get_securities_info\">\r\n<secid>{security.NameId}</secid>\r\n</command>\r\n";
+
+                            string res = ConnectorSendCommand(cmd);
+
+                            if (res.StartsWith("<result success=\"true\""))
+                            {
+                                _securitiesUpdateExpiration.Add(security);
+                            }
                         }
                         else if (securityData.Sectype == "BOND")
                         {
@@ -817,14 +866,7 @@ namespace OsEngine.Market.Servers.Transaq
                         if (security.SecurityType == SecurityType.Futures
                         || security.SecurityType == SecurityType.Option)
                         {
-                            if (security.PriceStep > 1)
-                            {
-                                security.PriceStepCost = security.PriceStep * pointCost / 100;
-                            }
-                            else
-                            {
-                                security.PriceStepCost = pointCost / 100;
-                            }
+                            security.PriceStepCost = security.PriceStep * pointCost * (decimal)Math.Pow(10, security.Decimals - 2);
                         }
                         else
                         {
@@ -1159,6 +1201,8 @@ namespace OsEngine.Market.Servers.Transaq
                 pos.SecurityNameCode = node.SelectSingleNode("seccode")?.InnerText;
                 pos.PortfolioName = portfolio.Number;
 
+                string marketCode = node.SelectSingleNode("market")?.InnerText;
+
                 XmlNode beginNode = node.SelectSingleNode("open_balance");
                 XmlNode buyNode = node.SelectSingleNode("bought");
                 XmlNode sellNode = node.SelectSingleNode("sold");
@@ -1171,9 +1215,10 @@ namespace OsEngine.Market.Servers.Transaq
 
                 for (int j = 0; j < _securities.Count; j++)
                 {
-                    if (pos.SecurityNameCode == _securities[j].Name)
+                    if (pos.SecurityNameCode == _securities[j].Name && marketCode == _securities[j].Exchange)
                     {
                         lot = _securities[j].Lot;
+                        break;
                     }
                 }
 
@@ -2220,6 +2265,10 @@ namespace OsEngine.Market.Servers.Transaq
                             }
                             else if (data.StartsWith("<sec_info_upd>"))
                             {
+                                _securityInfoUpdQueue.Enqueue(data);
+                            }
+                            else if (data.StartsWith("<sec_info secid="))
+                            {
                                 _securityInfoQueue.Enqueue(data);
                             }
                             else if (data.StartsWith("<securities>"))
@@ -2316,14 +2365,6 @@ namespace OsEngine.Market.Servers.Transaq
                                 {
                                     Dispose();
                                 }
-
-                                Thread.Sleep(1000);
-
-                                if (ServerStatus == ServerConnectStatus.Disconnect)
-                                {
-                                    WebProxy proxy = new WebProxy();
-                                    Connect(proxy);
-                                }
                             }
                             else
                             {
@@ -2365,6 +2406,8 @@ namespace OsEngine.Market.Servers.Transaq
         private ConcurrentQueue<string> _candlesQueue = new ConcurrentQueue<string>();
 
         private ConcurrentQueue<string> _historicalTradesQueue = new ConcurrentQueue<string>();
+
+        private ConcurrentQueue<string> _securityInfoUpdQueue = new ConcurrentQueue<string>();
 
         private ConcurrentQueue<string> _securityInfoQueue = new ConcurrentQueue<string>();
 
@@ -2493,14 +2536,14 @@ namespace OsEngine.Market.Servers.Transaq
                         continue;
                     }
 
-                    if (_securityInfoQueue.IsEmpty == false)
+                    if (_securityInfoUpdQueue.IsEmpty == false)
                     {
                         string data = null;
 
-                        if (_securityInfoQueue.TryDequeue(out data))
+                        if (_securityInfoUpdQueue.TryDequeue(out data))
                         {
-                            SecurityInfo newInfo =
-                                _deserializer.Deserialize<SecurityInfo>(new RestResponse() { Content = data });
+                            SecurityInfoUpd newInfo =
+                                _deserializer.Deserialize<SecurityInfoUpd>(new RestResponse() { Content = data });
 
                             UpdateSecurity(newInfo);
                         }

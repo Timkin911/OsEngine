@@ -11,6 +11,7 @@ using OsEngine.Market.Servers.Entity;
 using OsEngine.OsData.BinaryEntity;
 using OsEngine.OsTrader.Panels;
 using OsEngine.OsTrader.Panels.Tab;
+using OsEngine.OsTrader.Panels.Tab.SyntheticBondTab;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -2500,6 +2501,8 @@ namespace OsEngine.Market.Servers.Tester
                         decimal priceStep = array[i][4].ToDecimal();
                         decimal goSell = 0;
                         DateTime expiration = DateTime.MinValue;
+                        decimal minVolume = 0;
+                        decimal volumeStep = 0;
 
                         int volDecimals = 0;
 
@@ -2516,6 +2519,16 @@ namespace OsEngine.Market.Servers.Tester
                         if (array[i].Length > 7)
                         {
                             secu.Expiration = Convert.ToDateTime(array[i][7]);
+                        }
+
+                        if (array[i].Length > 8)
+                        {
+                            minVolume = array[i][8].ToDecimal();
+                        }
+
+                        if (array[i].Length > 9)
+                        {
+                            volumeStep = array[i][9].ToDecimal();
                         }
 
                         if (lot != 0)
@@ -2543,6 +2556,16 @@ namespace OsEngine.Market.Servers.Tester
                         if (goSell != 0)
                         {
                             secu.MarginSell = goSell;
+                        }
+
+                        if (minVolume != 0)
+                        {
+                            secu.MinTradeAmount = minVolume;
+                        }
+
+                        if (volumeStep != 0)
+                        {
+                            secu.VolumeStep = volumeStep;
                         }
                     }
                 }
@@ -2653,7 +2676,9 @@ namespace OsEngine.Market.Servers.Tester
                     securityToSave.PriceStep.ToString(culture),
                     securityToSave.DecimalsVolume.ToString(culture),
                     securityToSave.MarginSell.ToString(culture),
-                    securityToSave.Expiration.ToString(culture)
+                    securityToSave.Expiration.ToString(culture),
+                    securityToSave.MinTradeAmount.ToString(culture),
+                    securityToSave.VolumeStep.ToString(culture)
                 });
             }
 
@@ -2678,7 +2703,9 @@ namespace OsEngine.Market.Servers.Tester
                     securityToSave.PriceStep.ToString(culture),
                     securityToSave.DecimalsVolume.ToString(culture),
                     securityToSave.MarginSell.ToString(culture),
-                    securityToSave.Expiration.ToString(culture)
+                    securityToSave.Expiration.ToString(culture),
+                    securityToSave.MinTradeAmount.ToString(culture),
+                    securityToSave.VolumeStep.ToString(culture)
                 });
             }
 
@@ -2697,7 +2724,9 @@ namespace OsEngine.Market.Servers.Tester
                             saves[i][4] + "$" +
                             saves[i][5] + "$" +
                             saves[i][6] + "$" +
-                            saves[i][7]
+                            saves[i][7] + "$" +
+                            saves[i][8] + "$" +
+                            saves[i][9]
                             );
                     }
 
@@ -3316,6 +3345,7 @@ namespace OsEngine.Market.Servers.Tester
                 // ticks ver.2 / тики 2 вар: 20151006,040529,3010,5,Buy/Sell/Unknown
 
                 string firstRowInFile = reader.ReadLine();
+                string lastString2 = firstRowInFile;
 
                 if (string.IsNullOrEmpty(firstRowInFile))
                 {
@@ -3341,10 +3371,28 @@ namespace OsEngine.Market.Servers.Tester
 
                     CultureInfo culture = CultureInfo;
 
-                    for (int i2 = 0; i2 < 100; i2++)
+                    int countOfTrades = 0;
+
+                    for (int i2 = 0; i2 < 5000; i2++)
                     {
+                        if(reader.EndOfStream == true)
+                        {
+                            break;
+                        }
+
+                        string curStr = reader.ReadLine();
+
+                        if (string.IsNullOrEmpty(curStr))
+                        {
+                            continue;
+                        }
+
+                        lastString2 = curStr;
+
                         Trade tradeN = new Trade();
-                        tradeN.SetTradeFromString(reader.ReadLine());
+                        tradeN.SetTradeFromString(lastString2);
+
+                        countOfTrades++;
 
                         decimal open = (decimal)Convert.ToDouble(tradeN.Price);
 
@@ -3421,7 +3469,7 @@ namespace OsEngine.Market.Servers.Tester
                     }
 
                     if (minPriceStep == 1 &&
-                        countFive == 20)
+                        countFive == countOfTrades)
                     {
                         minPriceStep = 5;
                     }
@@ -3430,18 +3478,18 @@ namespace OsEngine.Market.Servers.Tester
                     security[security.Count - 1].Security.PriceStepCost = minPriceStep;
 
                     // last data / последняя дата
-                    string lastString2 = firstRowInFile;
+                    
 
                     while (!reader.EndOfStream)
                     {
-                        string curRow = reader.ReadLine();
+                        string lastRowInFile = reader.ReadLine();
 
-                        if (string.IsNullOrEmpty(curRow))
+                        if (string.IsNullOrEmpty(lastRowInFile))
                         {
                             continue;
                         }
 
-                        lastString2 = curRow;
+                        lastString2 = lastRowInFile;
                     }
 
                     Trade trade2 = new Trade();
@@ -4433,6 +4481,17 @@ namespace OsEngine.Market.Servers.Tester
                 for (int i2 = 0; currentTabs != null && i2 < currentTabs.Count; i2++)
                 {
                     namesSecurity.Add(currentTabs[i2].CandleConnector.SecurityName);
+                }
+            }
+
+            for (int i = 0; i < bots.Count; i++)
+            {
+                List<BotTabSyntheticBond> synthTabs = bots[i].TabsSyntheticBond;
+
+                for (int i2 = 0; synthTabs != null && i2 < synthTabs.Count; i2++)
+                {
+                    List<string> secNames = synthTabs[i2].GetAllSecurityNames();
+                    namesSecurity.AddRange(secNames);
                 }
             }
 

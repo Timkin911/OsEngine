@@ -36,7 +36,7 @@ namespace OsEngine.Market.Servers.Bybit
             CreateParameterPassword(OsLocalization.Market.ServerParameterSecretKey, "");
             CreateParameterEnum("Server type", Net_type.MainNet.ToString(), new List<string>() { Net_type.MainNet.ToString(),
                 Net_type.Demo.ToString(), Net_type.Netherlands.ToString(), Net_type.HongKong.ToString(), Net_type.Turkey.ToString(), Net_type.Kazakhstan.ToString() });
-            CreateParameterEnum("Margin Mode", MarginMode.Cross.ToString(), new List<string>() { MarginMode.Cross.ToString(), MarginMode.Isolated.ToString() });
+            CreateParameterEnum("Margin Mode", MarginMode.Cross.ToString(), new List<string>() { MarginMode.Cross.ToString(), MarginMode.Isolated.ToString(), MarginMode.Portfolio.ToString() });
             CreateParameterBoolean("Hedge Mode", true);
             ServerParameters[4].ValueChange += BybitServer_ValueChange;
             CreateParameterBoolean("Extended Data", false);
@@ -318,13 +318,38 @@ namespace OsEngine.Market.Servers.Bybit
         {
             try
             {
+                string mode = "REGULAR_MARGIN";
+
+                if (margineMode == MarginMode.Isolated)
+                {
+                    mode = "ISOLATED_MARGIN";
+                }
+                else if (margineMode == MarginMode.Portfolio)
+                {
+                    mode = "PORTFOLIO_MARGIN";
+                }
+
                 Dictionary<string, object> parametrs = new Dictionary<string, object>();
-                parametrs["setMarginMode"] = margineMode == MarginMode.Cross ? "REGULAR_MARGIN" : "ISOLATED_MARGIN";
-                CreatePrivateQuery(parametrs, Method.POST, "/v5/account/set-margin-mode");
+                parametrs["setMarginMode"] = mode;
+                IRestResponse responseMessage = CreatePrivateQuery(parametrs, Method.POST, "/v5/account/set-margin-mode");
+
+                if (responseMessage.StatusCode == HttpStatusCode.OK)
+                {
+                    ResponseRestMessage<ResultMode> responseMode = JsonConvert.DeserializeObject<ResponseRestMessage<ResultMode>>(responseMessage.Content);
+
+                    if (responseMode.retCode != "0")
+                    {
+                        SendLogMessage($"Margin mode error. {responseMode.retCode} || {responseMode.result.reasons[0].reasonCode} || msg: {responseMode.retMsg} || {responseMode.result.reasons[0].reasonMsg}", LogMessageType.Error);
+                    }
+                }
+                else
+                {
+                    SendLogMessage($"Margin mode error. Code: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                }
             }
             catch (Exception ex)
             {
-                SendLogMessage($"Check Bybit API Keys and Unified AccountBalance Settings! {ex.Message} {ex.StackTrace}", LogMessageType.Error);
+                SendLogMessage($"Margin mode error. {ex.Message} {ex.StackTrace}", LogMessageType.Error);
             }
         }
 
@@ -343,11 +368,25 @@ namespace OsEngine.Market.Servers.Bybit
                 parametrs["coin"] = "USDT";
                 parametrs["mode"] = HedgeMode == true ? "3" : "0"; //Position mode. 0: Merged Single. 3: Both Sides
 
-                CreatePrivateQuery(parametrs, Method.POST, "/v5/position/switch-mode");
+                IRestResponse responseMessage = CreatePrivateQuery(parametrs, Method.POST, "/v5/position/switch-mode");
+
+                if (responseMessage.StatusCode == HttpStatusCode.OK)
+                {
+                    ResponseRestMessage<object> responseMode = JsonConvert.DeserializeObject<ResponseRestMessage<object>>(responseMessage.Content);
+
+                    if (responseMode.retCode != "0" && !responseMode.retMsg.Contains("Pm mode cannot support"))
+                    {
+                        SendLogMessage($"Position mode error. {responseMode.retCode} || msg: {responseMode.retMsg}", LogMessageType.Error);
+                    }
+                }
+                else
+                {
+                    SendLogMessage($"Position mode error. Code: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                }
             }
             catch (Exception ex)
             {
-                SendLogMessage($"SetPositionMode: {ex.Message} {ex.StackTrace}", LogMessageType.Error);
+                SendLogMessage($"Position mode error: {ex.Message} {ex.StackTrace}", LogMessageType.Error);
             }
         }
 
@@ -621,6 +660,11 @@ namespace OsEngine.Market.Servers.Bybit
                     LoadOptionInstruments("SOL");
                 }
 
+                if (_securities.Count > 0)
+                {
+                    _securities = _securities.OrderBy(s => s.Name).ToList();
+                }
+
                 SecurityEvent?.Invoke(_securities);
             }
             catch (Exception ex)
@@ -877,7 +921,11 @@ namespace OsEngine.Market.Servers.Bybit
 
                 if (responseMessage.StatusCode != HttpStatusCode.OK)
                 {
-                    SendLogMessage($"Portfolio error. Code: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                    if (responseMessage.StatusCode != 0)
+                    {
+                        SendLogMessage($"Portfolio error. Code: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                    }
+
                     return;
                 }
 
@@ -1053,7 +1101,11 @@ namespace OsEngine.Market.Servers.Bybit
 
                     if (responseMessage.StatusCode != HttpStatusCode.OK)
                     {
-                        SendLogMessage($"GetPositionsInverse>. Position error: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                        if (responseMessage.StatusCode != 0)
+                        {
+                            SendLogMessage($"GetPositionsInverse>. Position error: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                        }
+
                         return positionOnBoards;
                     }
 
@@ -1177,7 +1229,11 @@ namespace OsEngine.Market.Servers.Bybit
 
                         if (responseMessage.StatusCode != HttpStatusCode.OK)
                         {
-                            SendLogMessage($"GetPositionsLinear>. Position error: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                            if (responseMessage.StatusCode != 0)
+                            {
+                                SendLogMessage($"GetPositionsLinear>. Position error: {responseMessage.StatusCode} || msg: {responseMessage.Content}", LogMessageType.Error);
+                            }
+
                             return positionOnBoards;
                         }
 
@@ -2288,7 +2344,7 @@ namespace OsEngine.Market.Servers.Bybit
                         webSocketPublicSpot.Dispose();
                         webSocketPublicSpot = null;
                     }
-                }    
+                }
             }
             catch (Exception ex)
             {
@@ -2566,7 +2622,7 @@ namespace OsEngine.Market.Servers.Bybit
                         {
                             if (category == Category.linear)
                             {
-                                _concurrentQueueTickersLinear.Enqueue(_message);
+                                _concurrentQueueTickersLinear.Enqueue(message);
                             }
                             else if (category == Category.inverse)
                             {
@@ -3248,14 +3304,9 @@ namespace OsEngine.Market.Servers.Bybit
             {
                 try
                 {
-                    if (_concurrentQueueTradesSpot.IsEmpty)
+                    if (ServerStatus != ServerConnectStatus.Connect)
                     {
-                        if (IsCompletelyDeleted == true)
-                        {
-                            return;
-                        }
-
-                        Thread.Sleep(1);
+                        Thread.Sleep(3000);
                     }
 
                     if (_concurrentQueueTradesSpot != null
@@ -3295,14 +3346,9 @@ namespace OsEngine.Market.Servers.Bybit
             {
                 try
                 {
-                    if (_concurrentQueueTradesLinear.IsEmpty)
+                    if (ServerStatus != ServerConnectStatus.Connect)
                     {
-                        if (IsCompletelyDeleted == true)
-                        {
-                            return;
-                        }
-
-                        Thread.Sleep(1);
+                        Thread.Sleep(3000);
                     }
 
                     if (_concurrentQueueTradesLinear != null
@@ -3342,14 +3388,9 @@ namespace OsEngine.Market.Servers.Bybit
             {
                 try
                 {
-                    if (_concurrentQueueTradesInverse.IsEmpty)
+                    if (ServerStatus != ServerConnectStatus.Connect)
                     {
-                        if (IsCompletelyDeleted == true)
-                        {
-                            return;
-                        }
-
-                        Thread.Sleep(1);
+                        Thread.Sleep(3000);
                     }
 
                     if (_concurrentQueueTradesInverse != null
@@ -3389,14 +3430,9 @@ namespace OsEngine.Market.Servers.Bybit
             {
                 try
                 {
-                    if (_concurrentQueueTradesOption.IsEmpty)
+                    if (ServerStatus != ServerConnectStatus.Connect)
                     {
-                        if (IsCompletelyDeleted == true)
-                        {
-                            return;
-                        }
-
-                        Thread.Sleep(1);
+                        Thread.Sleep(3000);
                     }
 
                     if (_concurrentQueueTradesOption != null
@@ -3676,7 +3712,8 @@ namespace OsEngine.Market.Servers.Bybit
                 bool reduceOnly = false;
 
                 if (HedgeMode
-                    && order.SecurityClassCode == "LinearPerpetual")
+                    && order.SecurityClassCode == "LinearPerpetual"
+                    && margineMode != MarginMode.Portfolio)
                 {
                     if (order.PositionConditionType == OrderPositionConditionType.Close)
                     {
@@ -3710,6 +3747,8 @@ namespace OsEngine.Market.Servers.Bybit
                 }
 
                 string jsonPayload = parameters.Count > 0 ? GenerateQueryString(parameters) : "";
+
+                _rateGateOrders.WaitToProceed();
 
                 DateTime startTime = DateTime.Now;
                 IRestResponse responseMessage = CreatePrivateQuery(parameters, Method.POST, "/v5/order/create");
@@ -3795,6 +3834,8 @@ namespace OsEngine.Market.Servers.Bybit
                 parameters["orderLinkId"] = order.NumberUser.ToString();
                 parameters["price"] = newPrice.ToString().Replace(",", ".");
 
+                _rateGateOrders.WaitToProceed();
+
                 IRestResponse responseMessage = CreatePrivateQuery(parameters, Method.POST, "/v5/order/amend");
 
                 if (responseMessage.StatusCode == HttpStatusCode.OK)
@@ -3865,6 +3906,8 @@ namespace OsEngine.Market.Servers.Bybit
             try
             {
                 //order.TimeCancel = DateTimeOffset.UtcNow.UtcDateTime;
+                _rateGateOrders.WaitToProceed();
+
                 IRestResponse responseMessage = CreatePrivateQuery(parameters, Method.POST, "/v5/order/cancel");
 
                 if (responseMessage.StatusCode == HttpStatusCode.OK)
@@ -3941,6 +3984,9 @@ namespace OsEngine.Market.Servers.Bybit
                 }
 
                 parametrs.Add("symbol", security.Name.Split('.')[0]);
+
+                _rateGateOrders.WaitToProceed();
+
                 CreatePrivateQuery(parametrs, Method.POST, "/v5/order/cancel-all");
             }
             catch (Exception ex)
@@ -4054,7 +4100,11 @@ namespace OsEngine.Market.Servers.Bybit
 
                 if (responseMessage.StatusCode != HttpStatusCode.OK)
                 {
-                    SendLogMessage($"Get all open orders request error: {responseMessage.StatusCode} || {responseMessage.Content}", LogMessageType.Error);
+                    if (responseMessage.StatusCode != 0)
+                    {
+                        SendLogMessage($"Get all open orders request error: {responseMessage.StatusCode} || {responseMessage.Content}", LogMessageType.Error);
+                    }
+
                     return;
                 }
 
@@ -4439,12 +4489,13 @@ namespace OsEngine.Market.Servers.Bybit
 
         private RateGate _rateGate = new RateGate(1, TimeSpan.FromMilliseconds(15));
 
+        private RateGate _rateGateOrders = new RateGate(1, TimeSpan.FromMilliseconds(100));
+
         private string _httpClientLocker = "httpClientLocker";
 
         public bool CheckApiKeyInformation(string ApiKey)
         {
             string apiFromServer = "";
-            _rateGate.WaitToProceed();
 
             try
             {
@@ -4470,7 +4521,10 @@ namespace OsEngine.Market.Servers.Bybit
                 }
                 else
                 {
-                    SendLogMessage($"CheckApiKeyInformation>. Error. {responseMessage.StatusCode} || {responseMessage.Content}", LogMessageType.Error);
+                    if (responseMessage.StatusCode != 0)
+                    {
+                        SendLogMessage($"CheckApiKeyInformation>. Error. {responseMessage.StatusCode} || {responseMessage.Content}", LogMessageType.Error);
+                    }
                 }
 
                 if (apiFromServer.Length < 1 || apiFromServer != ApiKey)
@@ -4814,7 +4868,8 @@ namespace OsEngine.Market.Servers.Bybit
     public enum MarginMode
     {
         Cross,
-        Isolated
+        Isolated,
+        Portfolio
     }
 
     public enum Category

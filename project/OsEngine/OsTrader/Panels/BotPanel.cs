@@ -3,6 +3,18 @@
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
 
+using OsEngine.Alerts;
+using OsEngine.Attributes;
+using OsEngine.Entity;
+using OsEngine.Journal.Internal;
+using OsEngine.Language;
+using OsEngine.Logging;
+using OsEngine.Market;
+using OsEngine.Market.Servers;
+using OsEngine.Market.Servers.Tester;
+using OsEngine.OsTrader.Panels.Tab;
+using OsEngine.OsTrader.Panels.Tab.SyntheticBondTab;
+using OsEngine.OsTrader.RiskManager;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,17 +24,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms.Integration;
 using System.Windows.Shapes;
-using OsEngine.Alerts;
-using OsEngine.Entity;
-using OsEngine.Attributes;
-using OsEngine.Journal.Internal;
-using OsEngine.Language;
-using OsEngine.Logging;
-using OsEngine.Market;
-using OsEngine.Market.Servers;
-using OsEngine.Market.Servers.Tester;
-using OsEngine.OsTrader.Panels.Tab;
-using OsEngine.OsTrader.RiskManager;
 
 namespace OsEngine.OsTrader.Panels
 {
@@ -69,7 +70,12 @@ namespace OsEngine.OsTrader.Panels
         /// <summary>
         /// source for options trading
         /// </summary>
-        Options
+        Options,
+
+        /// <summary>
+        /// source for trading synthetic bonds
+        /// </summary>
+        SyntheticBond
     }
 
     /// <summary>
@@ -97,7 +103,7 @@ namespace OsEngine.OsTrader.Panels
 
             OsTraderMaster.CriticalErrorEvent += OsTraderMaster_CriticalErrorEvent;
 
-	    AttributeInitializer attributeInitializer = new(this);
+            AttributeInitializer attributeInitializer = new(this);
             attributeInitializer.InitAttributes();
         }
 
@@ -177,6 +183,11 @@ namespace OsEngine.OsTrader.Panels
                         _botTabs[i].Clear();
                         _botTabs[i].Delete();
                         _botTabs[i].LogMessageEvent -= SendNewLogMessage;
+
+                        if (_botTabs[i].TabType == BotTabType.Screener)
+                        {
+                            ((BotTabScreener)_botTabs[i]).NewTabCreateEvent -= BotPanel_NewTabCreateEvent;
+                        }
                     }
                     _botTabs.Clear();
                     _botTabs = null;
@@ -332,6 +343,18 @@ namespace OsEngine.OsTrader.Panels
 
                     journals.AddRange(journalsOnTab);
                 }
+                else if (_botTabs[i].TabType == BotTabType.SyntheticBond)
+                {
+                    List<Journal.Journal> journalsOnTab = ((BotTabSyntheticBond)_botTabs[i]).GetJournals();
+
+                    if (journalsOnTab == null ||
+                        journalsOnTab.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    journals.AddRange(journalsOnTab);
+                }
             }
 
             return journals;
@@ -346,7 +369,7 @@ namespace OsEngine.OsTrader.Panels
             {
                 for (int i = 0; TabsSimple != null && i < TabsSimple.Count; i++)
                 {
-                    if(StartProgram == StartProgram.IsOsTrader)
+                    if (StartProgram == StartProgram.IsOsTrader)
                     {
                         if (TabsSimple[i].IsConnected == false)
                         {
@@ -403,7 +426,7 @@ namespace OsEngine.OsTrader.Panels
                     }
                 }
 
-                if (TabsSimple == null 
+                if (TabsSimple == null
                     && TabsIndex == null
                     && TabsScreener == null)
                 {
@@ -432,7 +455,7 @@ namespace OsEngine.OsTrader.Panels
                     {
                         BotTabSimple tab = (BotTabSimple)_botTabs[i];
 
-                        if(tab.Security != null)
+                        if (tab.Security != null)
                         {
                             securities.Add(tab.Security);
                         }
@@ -443,7 +466,7 @@ namespace OsEngine.OsTrader.Panels
 
                         List<BotTabSimple> tabs = tab.Tabs;
 
-                        for (int j = 0;j < tabs.Count; j++)
+                        for (int j = 0; j < tabs.Count; j++)
                         {
                             if (tabs[j].Security != null)
                             {
@@ -469,7 +492,7 @@ namespace OsEngine.OsTrader.Panels
 
             List<Position> openPoses = OpenPositions;
 
-            for(int i = 0;i < openPoses.Count;i++)
+            for (int i = 0; i < openPoses.Count; i++)
             {
                 Position position = openPoses[i];
 
@@ -495,15 +518,15 @@ namespace OsEngine.OsTrader.Panels
         {
             Portfolio portfolio = null;
 
-            for(int i = 0;_botTabs != null && i < _botTabs.Count;i++)
+            for (int i = 0; _botTabs != null && i < _botTabs.Count; i++)
             {
                 IIBotTab tab = _botTabs[i];
 
-                if(tab.TabType == BotTabType.Simple)
+                if (tab.TabType == BotTabType.Simple)
                 {
                     BotTabSimple simple = (BotTabSimple)tab;
 
-                    if(simple.Portfolio != null)
+                    if (simple.Portfolio != null)
                     {
                         portfolio = simple.Portfolio;
                         break;
@@ -513,7 +536,7 @@ namespace OsEngine.OsTrader.Panels
                 {
                     BotTabScreener screener = (BotTabScreener)tab;
 
-                    for(int j = 0;j < screener.Tabs.Count;j++)
+                    for (int j = 0; j < screener.Tabs.Count; j++)
                     {
                         if (screener.Tabs[j].Portfolio != null)
                         {
@@ -522,7 +545,7 @@ namespace OsEngine.OsTrader.Panels
                         }
                     }
 
-                    if(portfolio != null)
+                    if (portfolio != null)
                     {
                         break;
                     }
@@ -1056,7 +1079,7 @@ position => position.State != PositionStateType.OpeningFail
 
                     List<Position> allPositionOpen = new List<Position>();
 
-                    for(int i2 = 0;i2 < journals[i].AllPosition.Count;i2++)
+                    for (int i2 = 0; i2 < journals[i].AllPosition.Count; i2++)
                     {
                         Position position = journals[i].AllPosition[i2];
 
@@ -1256,7 +1279,7 @@ position => position.State != PositionStateType.OpeningFail
         /// <param name="tabName">name of the tab in the parameter window </param>
         public StrategyParameterDecimal CreateParameter(string name, decimal value, decimal start, decimal stop, decimal step, string tabControlName = null)
         {
-            StrategyParameterDecimal newParameter = new StrategyParameterDecimal(name, value, start, stop, step, tabControlName); 
+            StrategyParameterDecimal newParameter = new StrategyParameterDecimal(name, value, start, stop, step, tabControlName);
 
             if (Parameters.Find(p => p.Name == name) != null)
             {
@@ -1342,10 +1365,10 @@ position => position.State != PositionStateType.OpeningFail
 
             StrategyParameterString paramFromFileSys = (StrategyParameterString)LoadParameterValues(newParameter);
 
-            if(paramFromFileSys.ValuesString != null &&
+            if (paramFromFileSys.ValuesString != null &&
                 collection != null)
             {// проверяем, чтобы программист не изменил названия для коллекции
-                if(paramFromFileSys.ValuesString.Count != collection.Length)
+                if (paramFromFileSys.ValuesString.Count != collection.Length)
                 {
                     paramFromFileSys.ValuesString = collection.ToList();
                 }
@@ -1618,9 +1641,9 @@ position => position.State != PositionStateType.OpeningFail
         {
             try
             {
-                if (!_hostChart.CheckAccess())
+                if (!MainWindow.GetDispatcher.CheckAccess())
                 {
-                    _hostChart.Dispatcher.Invoke(new Action<string>(ShowMessageInNewThread), message);
+                    MainWindow.GetDispatcher.Invoke(new Action<string>(ShowMessageInNewThread), message);
                     return;
                 }
 
@@ -1679,6 +1702,29 @@ position => position.State != PositionStateType.OpeningFail
                     {
                         bot.CloseAllAtMarket();
                     }
+                }
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        public void UpdateJournalsInRiskManager()
+        {
+            try
+            {
+                if (_riskManager == null)
+                {
+                    return;
+                }
+                _riskManager.ClearJournals();
+
+                List<Journal.Journal> journals = this.GetJournals();
+
+                for (int i2 = 0; journals != null && i2 < journals.Count; i2++)
+                {
+                    _riskManager.SetNewJournal(journals[i2]);
                 }
             }
             catch (Exception error)
@@ -1832,6 +1878,19 @@ position => position.State != PositionStateType.OpeningFail
             }
         }
 
+        /// <summary>
+        /// synthetic bond tabs
+        /// </summary>
+        public List<BotTabSyntheticBond> TabsSyntheticBond
+        {
+            get
+            {
+                return _botTabs != null
+                    ? _botTabs.OfType<BotTabSyntheticBond>().ToList()
+                    : new List<BotTabSyntheticBond>();
+            }
+        }
+
         public DateTime TimeServer
         {
             get
@@ -1904,19 +1963,19 @@ position => position.State != PositionStateType.OpeningFail
         {
             try
             {
-                if(ActiveTab == null)
+                if (ActiveTab == null)
                 {
                     return;
                 }
 
-                if(_tabControlControl == null)
+                if (_tabControlControl == null)
                 {
                     return;
                 }
 
                 if (ActiveTab.TabType == BotTabType.Simple)
                 {
-                   ((BotTabSimple)ActiveTab).SelectedControlTab = _tabControlControl.SelectedIndex;
+                    ((BotTabSimple)ActiveTab).SelectedControlTab = _tabControlControl.SelectedIndex;
                 }
             }
             catch (Exception error)
@@ -1978,6 +2037,13 @@ position => position.State != PositionStateType.OpeningFail
                 {
                     newTab = new BotTabOptions(nameTab, StartProgram);
                 }
+                else if (tabType == BotTabType.SyntheticBond)
+                {
+                    newTab = new BotTabSyntheticBond(nameTab, StartProgram);
+
+                    ((BotTabSyntheticBond)newTab).UserSelectActionEvent += UserSetPositionAction;
+                    ((BotTabSyntheticBond)newTab).NewTabCreateEvent += (tab) => NewTabCreateEvent?.Invoke();
+                }
                 else
                 {
                     return null;
@@ -2006,12 +2072,12 @@ position => position.State != PositionStateType.OpeningFail
                     throw new InvalidOperationException($"Type {typeof(T)} does not have a public constructor with parameters (string, StartProgram).");
 
                 T newTab = (T)Activator.CreateInstance(typeof(T), nameTab, StartProgram);
-                
-                if(newTab is BotTabPair botTabPair)
+
+                if (newTab is BotTabPair botTabPair)
                 {
                     botTabPair.UserSelectActionEvent += UserSetPositionAction;
                 }
-                else if(newTab is BotTabScreener botTabScreener)
+                else if (newTab is BotTabScreener botTabScreener)
                 {
                     botTabScreener.UserSelectActionEvent += UserSetPositionAction;
                     botTabScreener.NewTabCreateEvent += (tab) => NewTabCreateEvent?.Invoke();
@@ -2038,11 +2104,23 @@ position => position.State != PositionStateType.OpeningFail
             ReloadTab();
 
             NewTabCreateEvent?.Invoke();
+
+            UpdateJournalsInRiskManager();
+
+            if (newTab.TabType == BotTabType.Screener)
+            {
+                ((BotTabScreener)newTab).NewTabCreateEvent += BotPanel_NewTabCreateEvent;
+            }
+        }
+
+        private void BotPanel_NewTabCreateEvent(BotTabSimple newSource)
+        {
+            UpdateJournalsInRiskManager();
         }
 
         private bool ValidateTabCreation(out int number, out string nameTab)
         {
-             number = 0;
+            number = 0;
 
             if (_botTabs != null && _botTabs.Count != 0)
             {
@@ -2214,6 +2292,10 @@ position => position.State != PositionStateType.OpeningFail
                     else if (ActiveTab.TabType == BotTabType.News)
                     {
                         ((BotTabNews)ActiveTab).StartPaint(_hostChart);
+                    }
+                    else if (ActiveTab.TabType == BotTabType.SyntheticBond)
+                    {
+                        ((BotTabSyntheticBond)ActiveTab).StartPaint(_hostChart, _hostOpenDeals, _hostCloseDeals);
                     }
                 }
             }
@@ -2409,6 +2491,10 @@ position => position.State != PositionStateType.OpeningFail
                 {
                     tabWithPosition.ShowClosePositionDialog(position);
                 }
+                else if (signal == SignalType.AddToPosition)
+                {
+                    tabWithPosition.ShowAddPositionDialog(position);
+                }
                 else if (signal == SignalType.ReloadStop)
                 {
                     tabWithPosition.ShowStopSendDialog(position);
@@ -2435,13 +2521,13 @@ position => position.State != PositionStateType.OpeningFail
         {
             get
             {
-                if(_botTabs== null
-                    ||  _botTabs.Count == 0)
+                if (_botTabs == null
+                    || _botTabs.Count == 0)
                 {
                     return false;
                 }
 
-                 return _botTabs[0].EventsIsOn;
+                return _botTabs[0].EventsIsOn;
             }
             set
             {
@@ -2495,7 +2581,7 @@ position => position.State != PositionStateType.OpeningFail
 
         public void SendNewLogMessage(string message, LogMessageType type)
         {
-            if(type  == LogMessageType.Error)
+            if (type == LogMessageType.Error)
             {
                 message = NameStrategyUniq + " " + this.GetNameStrategyType() + "\n" + message;
             }
@@ -2592,7 +2678,7 @@ position => position.State != PositionStateType.OpeningFail
         /// log message event
         /// </summary>
         public event Action<string, LogMessageType> LogMessageEvent;
-		
+
         /// <summary>
         /// set border under of Parameter
         /// </summary>
@@ -2645,7 +2731,7 @@ position => position.State != PositionStateType.OpeningFail
                 SendNewLogMessage(error.ToString(), LogMessageType.Error);
             }
         }
-   
+
         /// <summary>
         /// set selection color of Parameter
         /// </summary>
@@ -2748,7 +2834,7 @@ position => position.State != PositionStateType.OpeningFail
             }
         }
     }
-	
+
     /// <summary>
     /// visual design of Parameter
     /// </summary>
@@ -2776,7 +2862,7 @@ position => position.State != PositionStateType.OpeningFail
 
         public int Thickness { get; }
     }
-	
+
     /// <summary>
     /// robot trade regime
     /// </summary>
@@ -2807,7 +2893,7 @@ position => position.State != PositionStateType.OpeningFail
         /// </summary>
         Off
     }
-	
+
     /// <summary>
     /// type of Parameter visual design
     /// </summary>
@@ -2822,10 +2908,10 @@ position => position.State != PositionStateType.OpeningFail
         /// border under of Parameter 
         /// </summary>
         BorderUnder,
-		
+
         /// <summary>
         /// selection color of Parameter
         /// </summary>
-        SelectionColor		
-    }	
+        SelectionColor
+    }
 }

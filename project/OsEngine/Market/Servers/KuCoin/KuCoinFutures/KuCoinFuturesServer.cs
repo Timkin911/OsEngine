@@ -14,6 +14,7 @@ using RestSharp;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -367,6 +368,11 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
 
                                 securities.Add(newSecurity);
                             }
+                        }
+
+                        if (securities.Count > 0)
+                        {
+                            securities = securities.OrderBy(s => s.Name).ToList();
                         }
 
                         foreach (Security sec in securities)
@@ -2207,8 +2213,21 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
                 data.symbol = order.SecurityNameCode;
                 data.side = order.Side.ToString().ToLower();
                 data.type = order.TypeOrder.ToString().ToLower();
-                data.price = order.TypeOrder == OrderPriceType.Market ? null : order.Price.ToString().Replace(",", ".");
 
+                if (order.TypeOrder == OrderPriceType.Limit)
+                {
+                    data.price = order.Price.ToString().Replace(",", ".");
+
+                    if (order.OrderTypeTime == OrderTypeTime.GTC)
+                    {
+                        data.timeInForce = "GTC";
+                    }
+                    else
+                    {
+                        data.timeInForce = "GTC";
+                    }
+                }
+                
                 decimal volume = order.Volume / GetVolume(order.SecurityNameCode);
                 data.size = volume.ToString().Replace(",", ".");
                 data.leverage = _leverage;

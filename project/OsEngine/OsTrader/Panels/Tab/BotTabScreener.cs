@@ -24,6 +24,8 @@ using OsEngine.Candles.Factory;
 using OsEngine.OsTrader.Panels.Tab.Internal;
 using System.Drawing;
 using OsEngine.Market.Servers.Tester;
+using System.Threading.Tasks;
+using OsEngine.Journal;
 
 namespace OsEngine.OsTrader.Panels.Tab
 {
@@ -126,6 +128,10 @@ namespace OsEngine.OsTrader.Panels.Tab
                                  curScreener.Tabs.Count != 0 &&
                                  i2 < curScreener.Tabs.Count; i2++)
                             {
+                                if(_screeners[i].LastTimeClick.AddSeconds(2) > DateTime.Now)
+                                {
+                                    continue;
+                                }
                                 PaintLastBidAsk(_screeners[i].Tabs[i2], _screeners[i].SecuritiesDataGrid);
                             }
                         }
@@ -185,6 +191,8 @@ namespace OsEngine.OsTrader.Panels.Tab
                     decimal ask = tab.PriceBestAsk;
                     decimal bid = tab.PriceBestBid;
 
+                    bool isOn = tab.EventsIsOn;
+
                     decimal last = 0;
 
                     int posCurr = tab.PositionsOpenAll.Count;
@@ -235,6 +243,27 @@ namespace OsEngine.OsTrader.Panels.Tab
 
                         row.Cells[6].Value = curPoses;
                     }
+
+                    if (row.Cells[7].Value == null
+                        || row.Cells[7].Value.ToString() != isOn.ToString()
+                        || (row.Cells[7].Value.ToString() == false.ToString() &&
+                        row.Cells[7].Style.BackColor != Color.Orange)
+                        || (row.Cells[7].Value.ToString() == true.ToString() &&
+                        row.Cells[7].Style.BackColor != row.Cells[5].Style.BackColor))
+                    {
+                        if (isOn == false)
+                        {
+                            row.Cells[7].Style.BackColor = Color.Orange;
+                            row.Cells[7].Style.SelectionBackColor = Color.Orange;
+                        }
+                        else
+                        {
+                            row.Cells[7].Style.BackColor = row.Cells[5].Style.BackColor;
+                            row.Cells[7].Style.SelectionBackColor = row.Cells[5].Style.SelectionBackColor;
+                        }
+
+                        row.Cells[7].Value = isOn;
+                    }
                 }
             }
             catch (Exception error)
@@ -283,6 +312,7 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     ((TesterServer)servers[0]).TestingStartEvent += BotTabScreener_TestingStartEvent;
                     ((TesterServer)servers[0]).TestingEndEvent += BotTabScreener_TestingEndEvent;
+                    ((TesterServer)servers[0]).EndNextMinuteWithCandlesEvent += BotTabScreener_EndNextMinuteWithCandlesEvent;
                     ServerType = ServerType.Tester;
                     ServerName = ServerType.Tester.ToString();
                 }
@@ -705,6 +735,17 @@ namespace OsEngine.OsTrader.Panels.Tab
                 }
             }
 
+            if(_journalUi.Count > 0)
+            {
+                JournalUi2[] journals = _journalUi.ToArray();
+
+                for (int i = 0;i < journals.Length;i++)
+                {
+                    journals[i].Close();
+                }
+                _journalUi = null;
+            }
+
             if (TabDeletedEvent != null)
             {
                 TabDeletedEvent();
@@ -947,7 +988,8 @@ namespace OsEngine.OsTrader.Panels.Tab
                     return;
                 }
 
-                if (TabsReadyToLoad() == false)
+                if (TabsReadyToLoad() == false
+                    && Tabs.Count == 0)
                 {
                     return;
                 }
@@ -1141,6 +1183,7 @@ namespace OsEngine.OsTrader.Panels.Tab
 
             if (haveNewSettings)
             {
+                tab.Connector.Save();
                 tab.Connector.ReconnectHard();
             }
         }
@@ -1313,14 +1356,14 @@ namespace OsEngine.OsTrader.Panels.Tab
                     && SecuritiesNames[i].SecurityClass == securityClass)
                 {
                     SecuritiesNames.RemoveAt(i);
-                    NeedToReloadTabs = true;
                     securityDeleted = true;
-                    break;
+                    i--;
                 }
             }
 
             if (securityDeleted == true)
             {
+                NeedToReloadTabs = true;
                 SaveSettings();
             }
         }
@@ -1467,6 +1510,96 @@ namespace OsEngine.OsTrader.Panels.Tab
             }
         }
 
+        public void ShowJournal(int tabNum)
+        {
+            try
+            {
+                BotTabSimple tab = Tabs[tabNum];
+
+                string journalName =
+                    "Journal2Ui_" + tab.TabName + tab.StartProgram.ToString();
+
+                for (int i = 0; i < _journalUi.Count; i++)
+                {
+                    if (_journalUi[i].JournalName == journalName)
+                    {
+                        if (_journalUi[i].WindowState == System.Windows.WindowState.Minimized)
+                        {
+                            _journalUi[i].WindowState = System.Windows.WindowState.Normal;
+                        }
+                        _journalUi[i].Activate();
+                        return;
+                    }
+                }
+
+                List<BotPanelJournal> panelsJournal = new List<BotPanelJournal>();
+
+                List<Journal.Journal> journals = new List<Journal.Journal>();
+                journals.Add(tab.GetJournal());
+
+                BotPanelJournal botPanel = new BotPanelJournal();
+                botPanel.BotName = tab.TabName;
+                botPanel.BotClass = this.NameStrategy;
+
+                botPanel._Tabs = new List<BotTabJournal>();
+
+                for (int i2 = 0; journals != null && i2 < journals.Count; i2++)
+                {
+                    BotTabJournal botTabJournal = new BotTabJournal();
+                    botTabJournal.TabNum = i2;
+                    botTabJournal.Journal = journals[i2];
+                    botPanel._Tabs.Add(botTabJournal);
+                }
+
+                panelsJournal.Add(botPanel);
+
+                _journalUi.Add(new JournalUi2(panelsJournal, tab.StartProgram));
+                _journalUi[_journalUi.Count - 1].Closed += _journalUi_Closed;
+                _journalUi[_journalUi.Count - 1].LogMessageEvent += _journalUi_LogMessageEvent;
+                _journalUi[_journalUi.Count - 1].Show();
+            }
+            catch (Exception ex)
+            {
+                SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private List<JournalUi2> _journalUi = new List<JournalUi2>();
+
+        private void _journalUi_LogMessageEvent(string message, LogMessageType type)
+        {
+            SendNewLogMessage(message, type);
+        }
+
+        private void _journalUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_journalUi == null)
+                {
+                    return;
+                }
+
+                JournalUi2 myJournal = (JournalUi2)sender;
+
+                for (int i = 0; i < _journalUi.Count; i++)
+                {
+                    if (_journalUi[i].JournalName == myJournal.JournalName)
+                    {
+                        _journalUi[i].Closed -= _journalUi_Closed;
+                        _journalUi[i].LogMessageEvent -= _journalUi_LogMessageEvent;
+                        _journalUi[i].IsErase = true;
+                        _journalUi.RemoveAt(i);
+                        break;
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
         /// <summary>
         /// start drawing this robot
         /// </summary> 
@@ -1575,7 +1708,7 @@ namespace OsEngine.OsTrader.Panels.Tab
         /// <summary>
         /// Host where the screener grid is stored
         /// </summary>
-        WindowsFormsHost _host;
+        private WindowsFormsHost _host;
 
         /// <summary>
         /// Create table for screener
@@ -1638,21 +1771,39 @@ namespace OsEngine.OsTrader.Panels.Tab
 
             DataGridViewColumn colum7 = new DataGridViewColumn();
             colum7.CellTemplate = cell0;
-            colum7.HeaderText = "Pos. (curr/total)";
+            colum7.HeaderText = OsLocalization.Trader.Label186;
             colum7.ReadOnly = true;
             colum7.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             newGrid.Columns.Add(colum7);
 
-            DataGridViewButtonColumn colum8 = new DataGridViewButtonColumn();
-            //colum6.CellTemplate = cell0;
+            DataGridViewColumn colum8 = new DataGridViewColumn();
+            colum8.CellTemplate = cell0;
+            colum8.HeaderText = OsLocalization.Trader.Label184;
             colum8.ReadOnly = false;
-            colum8.Width = 70;
+            colum8.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            colum8.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             newGrid.Columns.Add(colum8);
+
+            DataGridViewButtonColumn colum9 = new DataGridViewButtonColumn();
+            colum9.ReadOnly = false;
+            colum9.Width = 70;
+            newGrid.Columns.Add(colum9);
+
+            DataGridViewButtonColumn colum10 = new DataGridViewButtonColumn();
+            colum10.ReadOnly = false;
+            colum10.Width = 70;
+            newGrid.Columns.Add(colum10);
+
+            DataGridViewButtonColumn colum11 = new DataGridViewButtonColumn();
+            colum11.ReadOnly = false;
+            colum11.Width = 70;
+            newGrid.Columns.Add(colum11);
 
             SecuritiesDataGrid = newGrid;
 
             newGrid.Click += NewGrid_Click;
             SecuritiesDataGrid.DataError += SecuritiesDataGrid_DataError;
+            SecuritiesDataGrid.CellBeginEdit += _grid_CellBeginEdit;
         }
 
         private void SecuritiesDataGrid_DataError(object sender, DataGridViewDataErrorEventArgs e)
@@ -1689,13 +1840,49 @@ namespace OsEngine.OsTrader.Panels.Tab
                     {
                         return;
                     }
+
                     int tabRow = SecuritiesDataGrid.SelectedCells[0].RowIndex;
                     int tabColumn = SecuritiesDataGrid.SelectedCells[0].ColumnIndex;
 
-                    if (tabColumn == 7)
+                    if(tabRow < 0 || tabRow >= Tabs.Count)
+                    {
+                        return;
+                    }
+
+                    if(tabColumn == 7)
+                    {
+                        return;
+                    }
+
+                    if (tabColumn == 8)
                     {
                         ShowChart(tabRow);
                         SecuritiesDataGrid.Rows[tabRow].Cells[0].Selected = true;
+                    }
+                    else if(tabColumn == 9)
+                    { // журнал
+
+                       ShowJournal(tabRow);
+                    }
+                    else if (tabColumn == 10)
+                    { // удаление
+
+                        string secName = Tabs[tabRow].Connector.SecurityName;
+                        string secClass = Tabs[tabRow].Connector.SecurityClass;
+
+                        AcceptDialogUi ui =
+                            new AcceptDialogUi(
+                                OsLocalization.Market.Label320 + "\n"
+                                + secName + "  " + secClass);
+
+                        ui.ShowDialog();
+
+                        if (ui.UserAcceptAction == false)
+                        {
+                            return;
+                        }
+
+                        RemoveTabBySecurityName(secName, secClass);
                     }
 
                     if (_previousActiveRow < SecuritiesDataGrid.Rows.Count)
@@ -1789,7 +1976,7 @@ namespace OsEngine.OsTrader.Panels.Tab
         /// </summary>
         private DataGridViewRow GetRowFromTab(BotTabSimple tab, int num)
         {
-            // Num, Class, Type, Sec code, Last, Bid, Ask, Positions count, Chart 
+            // Num, Class, Type, Sec code, Last, Bid, Ask, Positions count, On/Off, Chart, Delete 
 
             DataGridViewRow nRow = new DataGridViewRow();
 
@@ -1807,12 +1994,24 @@ namespace OsEngine.OsTrader.Panels.Tab
             nRow.Cells.Add(new DataGridViewTextBoxCell());
 
             nRow.Cells.Add(new DataGridViewTextBoxCell());
-
             nRow.Cells.Add(new DataGridViewTextBoxCell());
+
+            nRow.Cells.Add(new DataGridViewCheckBoxCell());
+            nRow.Cells[^1].Value = tab.EventsIsOn;
+            nRow.Cells[^1].Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            nRow.Cells[^1].ReadOnly = false;
 
             DataGridViewButtonCell button = new DataGridViewButtonCell();
             button.Value = OsLocalization.Trader.Label172;
             nRow.Cells.Add(button);
+
+            DataGridViewButtonCell buttonJournal = new DataGridViewButtonCell();
+            buttonJournal.Value = OsLocalization.Trader.Label40;
+            nRow.Cells.Add(buttonJournal);
+
+            DataGridViewButtonCell buttonDelete = new DataGridViewButtonCell();
+            buttonDelete.Value = OsLocalization.Trader.Label470;
+            nRow.Cells.Add(buttonDelete);
 
             return nRow;
         }
@@ -1871,6 +2070,117 @@ namespace OsEngine.OsTrader.Panels.Tab
             {
                 UserSelectActionEvent(pos, signal);
             }
+        }
+
+        #endregion
+
+        #region On/Off checkBoxes
+
+        private int _lastChangeRow;
+
+        private int _lastChangeColumn;
+
+        private void _grid_CellBeginEdit(object sender, DataGridViewCellCancelEventArgs e)
+        {
+            try
+            {
+                if (e.ColumnIndex < 3)
+                {
+                    return;
+                }
+
+                if (LastTimeClick.AddMilliseconds(500) > DateTime.Now)
+                {
+                    return;
+                }
+                LastTimeClick = DateTime.Now;
+
+                _lastChangeRow = e.RowIndex;
+                _lastChangeColumn = e.ColumnIndex;
+
+                Task.Run(ChangeOnOffAwait);
+            }
+            catch (Exception ex)
+            {
+                SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        public DateTime LastTimeClick = DateTime.MinValue;
+
+        private async void ChangeOnOffAwait()
+        {
+            try
+            {
+                await Task.Delay(200);
+                ChangeFocus();
+                await Task.Delay(200);
+                ChangeOnOff();
+            }
+            catch (Exception error)
+            {
+                System.Windows.MessageBox.Show(error.ToString());
+            }
+        }
+
+        private void ChangeFocus()
+        {
+            try
+            {
+                if (SecuritiesDataGrid.InvokeRequired)
+                {
+                    SecuritiesDataGrid.Invoke(new Action(ChangeFocus));
+                    return;
+                }
+
+                SecuritiesDataGrid.Rows[_lastChangeRow].Cells[0].Selected = true;
+            }
+            catch(Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void ChangeOnOff()
+        {
+            try
+            {
+                if (SecuritiesDataGrid.InvokeRequired)
+                {
+                    SecuritiesDataGrid.Invoke(new Action(ChangeOnOff));
+                    return;
+                }
+
+                int coluIndex = _lastChangeColumn;
+                int rowIndex = _lastChangeRow;
+
+                int botsCount = 0;
+
+                if (this.Tabs.Count != 0)
+                {
+                    botsCount = this.Tabs.Count;
+                }
+
+                if (coluIndex == 7 &&
+                    rowIndex < botsCount &&
+                    SecuritiesDataGrid.Rows[rowIndex].Cells[7].Value != null)
+                {
+                    string textInCell = SecuritiesDataGrid.Rows[rowIndex].Cells[7].Value.ToString();
+                    bool isOn = Convert.ToBoolean(textInCell);
+
+                    OnOffBot(rowIndex, isOn);
+                }
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void OnOffBot(int botNum, bool value)
+        {
+            BotTabSimple bot = this.Tabs[botNum];
+            bot.EventsIsOn = value;
         }
 
         #endregion
@@ -2164,6 +2474,12 @@ namespace OsEngine.OsTrader.Panels.Tab
                 }
 
                 newIndicator = (Aindicator)Tabs[i].CreateCandleIndicator(newIndicator, ind.NameArea);
+
+                if(newIndicator == null)
+                {
+                    continue;
+                }
+
                 newIndicator.CanDelete = ind.CanDelete;
                 newIndicator.Save();
             }
@@ -2873,10 +3189,36 @@ namespace OsEngine.OsTrader.Panels.Tab
 
         #region Synch finish candles Event
 
+        private void BotTabScreener_EndNextMinuteWithCandlesEvent()
+        {
+            try
+            {
+                if (CandlesSyncFinishedEvent == null)
+                {
+                    return;
+                }
+
+                CandlesSyncFinishedEvent(Tabs);
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
         private void SynchFinishCandlesMethod(List<Candle> candles, BotTabSimple tab)
         {
             try
             {
+                // это работает для реала только. В тестере другая схема, через завершение времени в котором были свечи
+                // у скринера завершилась первая свеча в реале
+                // высылаем поток, который через 2 секунды оповестит все внешние системы о том что свечи завершились
+
+                if (StartProgram != StartProgram.IsOsTrader)
+                {
+                    return;
+                }
+
                 if (CandlesSyncFinishedEvent == null)
                 {
                     return;
@@ -2889,35 +3231,36 @@ namespace OsEngine.OsTrader.Panels.Tab
 
                 DateTime candleTime = candles[^1].TimeStart;
 
-                // 1 смотрим чтобы по всем источникам в завершённых свечках было одно время
-
-                for (int i = 0; i < Tabs.Count; i++)
+                if (_lastTimeSendCandleSyncFinishedEvent == candleTime)
                 {
-                    BotTabSimple tabCurrent = Tabs[i];
-
-                    List<Candle> candlesCurrent = tabCurrent.CandlesFinishedOnly;
-
-                    if (candlesCurrent == null
-                        || candlesCurrent.Count == 0)
-                    {
-                        return;
-                    }
-
-                    DateTime candleCurrentTime = candlesCurrent[^1].TimeStart;
-
-                    if (candleCurrentTime != candleTime)
-                    {
-                        return;
-                    }
+                    return;
                 }
 
-                // 2 выбрасываем событие
+                _lastTimeSendCandleSyncFinishedEvent = candleTime;
 
-                CandlesSyncFinishedEvent(Tabs);
+                Thread worker = new Thread(TrySendCandleSyncFinishedEventInReal);
+                worker.Start();
+                return;
             }
             catch (Exception ex)
             {
                 SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private DateTime _lastTimeSendCandleSyncFinishedEvent;
+
+        private void TrySendCandleSyncFinishedEventInReal()
+        {
+            try
+            {
+                Thread.Sleep(2000);
+
+                CandlesSyncFinishedEvent(Tabs);
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
             }
         }
 

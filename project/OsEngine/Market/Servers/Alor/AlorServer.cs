@@ -460,6 +460,8 @@ namespace OsEngine.Market.Servers.Alor
                     else if (item.type.StartsWith("Календарный спред"))
                     {
                         newSecurity.NameClass = "Futures spread";
+                        newSecurity.MarginBuy = item.marginbuy.ToDecimal();
+                        newSecurity.MarginSell = item.marginsell.ToDecimal();
                     }
                     else if (newSecurity.SecurityType == SecurityType.Futures)
                     {
@@ -532,6 +534,11 @@ namespace OsEngine.Market.Servers.Alor
                         {
                             newSecurity.PriceStepCost = newSecurity.PriceStep;
                         }
+                    }
+
+                    if(newSecurity.SecurityType == SecurityType.Bond)
+                    {
+
                     }
 
                     if(string.IsNullOrEmpty(item.priceMax) == false)
@@ -764,6 +771,15 @@ namespace OsEngine.Market.Servers.Alor
 
             List<Candle> candles = GetCandleDataToSecurity(security, timeFrameBuilder, startTime, endTime, startTime);
         
+            for(int i = 1; candles != null && i < candles.Count;i++)
+            {
+                if (candles[i].TimeStart == candles[i-1].TimeStart)
+                {
+                    candles.RemoveAt(i);
+                    i--;
+                }
+            }
+
             while(candles.Count > candleCount)
             {
                 candles.RemoveAt(0);
@@ -2486,7 +2502,8 @@ namespace OsEngine.Market.Servers.Alor
                     if(response.Content != null)
                     {
                         SendLogMessage("Fail reasons: "
-                      + response.Content, LogMessageType.Error);
+                      + response.Content 
+                      + "\n Security: " + order.SecurityNameCode, LogMessageType.Error);
                     }
 
                     order.State = OrderStateType.Fail;
@@ -2524,15 +2541,7 @@ namespace OsEngine.Market.Servers.Alor
             requestObj.instrument.symbol = order.SecurityNameCode;
             requestObj.user = new User();
             requestObj.user.portfolio = order.PortfolioNumber.Split('_')[0];
-
-            if (order.LimitsMakerOnly == true)
-            {
-                requestObj.timeInForce = "bookorcancel";
-            }
-            else
-            {
-                requestObj.timeInForce = "goodtillcancelled";
-            }
+            requestObj.timeInForce = ConvertOrderLifeTime(order.OrderTypeTime, order.LimitsMakerOnly);
 
             return requestObj;
         }
@@ -2558,6 +2567,26 @@ namespace OsEngine.Market.Servers.Alor
             requestObj.user.portfolio = order.PortfolioNumber.Split('_')[0];
 
             return requestObj;
+        }
+
+        private string ConvertOrderLifeTime(OrderTypeTime orderTypeTime, bool limitsMakerOnly)
+        {
+            if (limitsMakerOnly)
+            {
+                return "bookorcancel";
+            }
+
+            if (orderTypeTime == OrderTypeTime.Day)
+            {
+                return "oneday";
+            }
+
+            if (orderTypeTime == OrderTypeTime.GTC)
+            {
+                return "goodtillcancelled";
+            }
+
+            return "goodtillcancelled";
         }
 
         List<AlorChangePriceOrder> _changePriceOrders = new List<AlorChangePriceOrder>();
@@ -3197,6 +3226,12 @@ namespace OsEngine.Market.Servers.Alor
             {
                 hour += 1;
             }
+
+            if(hour >= 24)
+            {
+                hour = 23;
+            }
+
             int minute = Convert.ToInt32(time.Substring(3, 2));
             int second = Convert.ToInt32(time.Substring(6, 2));
             int ms = Convert.ToInt32(time.Substring(10, 3));

@@ -6,6 +6,7 @@
 using Microsoft.Win32;
 using OsEngine.Alerts;
 using OsEngine.Entity;
+using OsEngine.Instructions;
 using OsEngine.Language;
 using OsEngine.Layout;
 using OsEngine.Market;
@@ -28,6 +29,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Text.Json;
+using OsEngine.UpdateModule;
 
 namespace OsEngine
 {
@@ -40,6 +43,10 @@ namespace OsEngine
     {
 
         private static MainWindow _window;
+
+        private UpdateResponse _updServerResp;
+
+        private int _commitsCount;
 
         public static Dispatcher GetDispatcher
         {
@@ -121,6 +128,9 @@ namespace OsEngine
             Task task = new Task(ThreadAreaGreeting);
             task.Start();
 
+            Task updateTask = new Task(GetUpdateInfo);
+            updateTask.Start();
+
             ChangeText();
             OsLocalization.LocalizationTypeChangeEvent += ChangeText;
 
@@ -144,16 +154,80 @@ namespace OsEngine
                 UnblockInterface();
             }
 
+            if (InteractiveInstructions.MainMenu.AllInstructionsInClass == null
+              || InteractiveInstructions.MainMenu.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPostsMenu.Visibility = Visibility.Hidden;
+            }
+            else
+            {
+                ButtonPostsMenu.Click += ButtonPostsMenu_Click;
+            }
+
             ChangeText();
 
             ReloadFlagButton();
 
             this.ContentRendered += MainWindow_ContentRendered;
+
+            StartButtonBlinkAnimation();
         }
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                DispatcherTimer timer = new DispatcherTimer();
+                int blinkCount = 0;
+                bool isGreenVisible = true;
+
+                timer.Interval = TimeSpan.FromMilliseconds(300);
+                timer.Tick += (s, e) =>
+                {
+                    try
+                    {
+                        if (blinkCount >= 20)
+                        {
+                            timer.Stop();
+                            GreenCollectionMenu.Opacity = 1;
+                            WhiteCollectionMenu.Opacity = 0;
+                            return;
+                        }
+
+                        if (isGreenVisible)
+                        {
+                            GreenCollectionMenu.Opacity = 0;
+                            WhiteCollectionMenu.Opacity = 1;
+                        }
+                        else
+                        {
+                            GreenCollectionMenu.Opacity = 1;
+                            WhiteCollectionMenu.Opacity = 0;
+                        }
+
+                        isGreenVisible = !isGreenVisible;
+                        blinkCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                        timer.Stop();
+                    }
+                };
+
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
         private void GifT_MediaEnded(object sender, RoutedEventArgs e)
         {
             GifT.Pause(); // останавливаем на последнем кадре
         }
+
         #region Block and Unblock interface
 
         private void BlockInterface()
@@ -179,17 +253,25 @@ namespace OsEngine
             ButtonRobotLight.IsEnabled = false;
             ButtonLocal_Ru.IsEnabled = false;
             ButtonLocal_Eng.IsEnabled = false;
+            ButtonNewCommits.IsEnabled = false;
         }
 
         private void ImagePadlock_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            RobotsUiLightUnblock ui = new RobotsUiLightUnblock();
-
-            ui.ShowDialog();
-
-            if (ui.IsUnBlocked == true)
+            try
             {
-                UnblockInterface();
+                RobotsUiLightUnblock ui = new RobotsUiLightUnblock();
+
+                ui.ShowDialog();
+
+                if (ui.IsUnBlocked == true)
+                {
+                    UnblockInterface();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -223,6 +305,7 @@ namespace OsEngine
             ButtonRobotLight.IsEnabled = true;
             ButtonLocal_Ru.IsEnabled = true;
             ButtonLocal_Eng.IsEnabled = true;
+            ButtonNewCommits.IsEnabled = true;
         }
 
         #endregion
@@ -241,27 +324,34 @@ namespace OsEngine
 
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            GlobalGUILayout.IsClosed = true;
-
-            if (ProccesIsWorked == true)
+            try
             {
-                ProccesIsWorked = false;
+                GlobalGUILayout.IsClosed = true;
 
-                if (this.IsVisible == false)
+                if (ProccesIsWorked == true)
                 {
-                    _awaitUiBotsInfoLoading = new AwaitObject(OsLocalization.Trader.Label391, 100, 0, true);
-                    AwaitUi ui = new AwaitUi(_awaitUiBotsInfoLoading);
+                    ProccesIsWorked = false;
 
-                    Thread worker = new Thread(Await7Seconds);
-                    worker.Start();
+                    if (this.IsVisible == false)
+                    {
+                        _awaitUiBotsInfoLoading = new AwaitObject(OsLocalization.Trader.Label391, 100, 0, true);
+                        AwaitUi ui = new AwaitUi(_awaitUiBotsInfoLoading);
 
-                    ui.ShowDialog();
+                        Thread worker = new Thread(Await7Seconds);
+                        worker.Start();
+
+                        ui.ShowDialog();
+                    }
                 }
+
+                Thread.Sleep(500);
+
+                Process.GetCurrentProcess().Kill();
             }
-
-            Thread.Sleep(500);
-
-            Process.GetCurrentProcess().Kill();
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         AwaitObject _awaitUiBotsInfoLoading;
@@ -313,6 +403,8 @@ namespace OsEngine
 
             ButtonTesterLight.Content = OsLocalization.MainWindow.OsTesterLiteName;
             ButtonRobotLight.Content = OsLocalization.MainWindow.OsBotStationLiteName;
+
+            ChangeButtonCommits();
 
             if (OsLocalization.CurLocalization == OsLocalization.OsLocalType.Ru)
             {
@@ -388,7 +480,6 @@ namespace OsEngine
         {
             try
             {
-
                 if (!Directory.Exists("Engine"))
                 {
                     Directory.CreateDirectory("Engine");
@@ -511,7 +602,7 @@ namespace OsEngine
         private void TaskScheduler_UnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
         {
             if (e.Exception != null
-                && e.Exception.ToString().Contains("(995):")== true)
+                && e.Exception.ToString().Contains("(995):") == true)
             { // игнорируем прерывания потока за делом по кансел токену
                 return;
             }
@@ -565,6 +656,7 @@ namespace OsEngine
             try
             {
                 _startProgram = StartProgram.IsTester;
+                ServerMaster.TesterStarted();
                 Hide();
                 TesterUi candleOneUi = new TesterUi();
                 candleOneUi.ShowDialog();
@@ -584,6 +676,7 @@ namespace OsEngine
             try
             {
                 _startProgram = StartProgram.IsTester;
+                ServerMaster.TesterStarted();
                 Hide();
                 TesterUiLite candleOneUi = new TesterUiLite();
                 candleOneUi.ShowDialog();
@@ -603,6 +696,7 @@ namespace OsEngine
             try
             {
                 _startProgram = StartProgram.IsOsTrader;
+                ServerMaster.RealStarted();
                 Hide();
                 RobotUi candleOneUi = new RobotUi();
                 candleOneUi.ShowDialog();
@@ -622,6 +716,7 @@ namespace OsEngine
             try
             {
                 _startProgram = StartProgram.IsOsTrader;
+                ServerMaster.RealStarted();
                 Hide();
                 RobotUiLite candleOneUi = new RobotUiLite();
                 candleOneUi.ShowDialog();
@@ -679,6 +774,7 @@ namespace OsEngine
             try
             {
                 _startProgram = StartProgram.IsOsOptimizer;
+                ServerMaster.OptimizerStarted();
                 Hide();
                 OptimizerUi ui = new OptimizerUi();
                 ui.ShowDialog();
@@ -695,26 +791,32 @@ namespace OsEngine
 
         private async void ThreadAreaGreeting()
         {
-            await Task.Delay(1000);
-            double angle = 5;
-
-            for (int i = 0; i < 7; i++)
+            try
             {
-                RotatePic(angle);
-                await Task.Delay(50);
-                angle += 10;
-            }
+                await Task.Delay(1000);
+                double angle = 5;
 
-            for (int i = 0; i < 7; i++)
-            {
-                RotatePic(angle);
+                for (int i = 0; i < 7; i++)
+                {
+                    RotatePic(angle);
+                    await Task.Delay(50);
+                    angle += 10;
+                }
+
+                for (int i = 0; i < 7; i++)
+                {
+                    RotatePic(angle);
+                    await Task.Delay(100);
+                    angle += 10;
+                }
+
                 await Task.Delay(100);
-                angle += 10;
+                RotatePic(angle);
             }
-
-            await Task.Delay(100);
-            RotatePic(angle);
-
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         private void RotatePic(double angle)
@@ -726,20 +828,26 @@ namespace OsEngine
             }
 
             ImageGear.RenderTransform = new RotateTransform(angle, 12, 12);
-
         }
 
         private void ButtonSettings_Click(object sender, RoutedEventArgs e)
         {
-            if (_settingsUi == null)
+            try
             {
-                _settingsUi = new PrimeSettingsMasterUi();
-                _settingsUi.Show();
-                _settingsUi.Closing += delegate { _settingsUi = null; };
+                if (_settingsUi == null)
+                {
+                    _settingsUi = new PrimeSettingsMasterUi();
+                    _settingsUi.Show();
+                    _settingsUi.Closing += delegate { _settingsUi = null; };
+                }
+                else
+                {
+                    _settingsUi.Activate();
+                }
             }
-            else
+            catch (Exception ex)
             {
-                _settingsUi.Activate();
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -765,40 +873,47 @@ namespace OsEngine
 
         private void CommandLineInterfaceProcess()
         {
-            string[] args = Environment.GetCommandLineArgs();
-            if (Array.Exists(args, a => a.Equals("-robots")))
+            try
             {
-                ButtonRobotCandleOne_Click(this, default);
-            }
-            else if (Array.Exists(args, a => a.Equals("-tester")))
-            {
-                ButtonTesterCandleOne_Click(this, default);
-            }
-            else if (Array.Exists(args, a => a.Equals("-robotslight")))
-            {
-                ButtonRobotLight_Click(this, default);
-            }
-            else if (Array.Exists(args, a => a.Equals("-error")) && PrimeSettingsMaster.RebootTradeUiLight)
-            {
+                string[] args = Environment.GetCommandLineArgs();
 
-                CriticalErrorHandler.ErrorInStartUp = true;
-
-                Array.ForEach(args, (a) => { CriticalErrorHandler.ErrorMessage += a; });
-
-                new Task(() =>
+                if (Array.Exists(args, a => a.Equals("-robots")))
                 {
-                    string messageError = String.Empty;
+                    ButtonRobotCandleOne_Click(this, default);
+                }
+                else if (Array.Exists(args, a => a.Equals("-tester")))
+                {
+                    ButtonTesterCandleOne_Click(this, default);
+                }
+                else if (Array.Exists(args, a => a.Equals("-robotslight")))
+                {
+                    ButtonRobotLight_Click(this, default);
+                }
+                else if (Array.Exists(args, a => a.Equals("-error")) && PrimeSettingsMaster.RebootTradeUiLight)
+                {
+                    CriticalErrorHandler.ErrorInStartUp = true;
 
-                    for (int i = 0; i < args.Length; i++)
+                    Array.ForEach(args, (a) => { CriticalErrorHandler.ErrorMessage += a; });
+
+                    new Task(() =>
                     {
-                        messageError += args[i];
-                    }
+                        string messageError = String.Empty;
 
-                    MessageBox.Show(messageError);
+                        for (int i = 0; i < args.Length; i++)
+                        {
+                            messageError += args[i];
+                        }
 
-                }).Start();
+                        MessageBox.Show(messageError);
 
-                ButtonRobotLight_Click(this, default);
+                    }).Start();
+
+                    ButtonRobotLight_Click(this, default);
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -905,6 +1020,252 @@ namespace OsEngine
                 ButtonLocal_Eng.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#ff5500");
             }
         }
+
+        #region Posts collection
+
+        private InstructionsUi _instructionsUi;
+
+        private void ButtonPostsMenu_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_instructionsUi == null)
+                {
+                    _instructionsUi = new InstructionsUi(
+                        InteractiveInstructions.MainMenu.AllInstructionsInClass, InteractiveInstructions.MainMenu.AllInstructionsInClassDescription);
+                    _instructionsUi.Show();
+                    _instructionsUi.Closed += _instructionsUi_Closed;
+                }
+                else
+                {
+                    if (_instructionsUi.WindowState == WindowState.Minimized)
+                    {
+                        _instructionsUi.WindowState = WindowState.Normal;
+                    }
+                    _instructionsUi.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _instructionsUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                _instructionsUi.Closed -= _instructionsUi_Closed;
+                _instructionsUi = null;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
+
+        #region Updater
+        private async void GetUpdateInfo()
+        {
+            try
+            {
+                DateTime insideVersionDate = File.GetLastWriteTimeUtc(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "OsEngine.exe"));
+
+                if (!File.Exists(@"Engine\Updater\LastUpdatesInfo.txt")) // модуль запустили первый раз, значит сборка актуальная
+                {
+                    Directory.CreateDirectory(@"Engine\Updater");
+
+                    Directory.CreateDirectory(@"Engine\Log");
+
+                    //записываем дату сборки, далее ориентир будет по ней
+                    File.WriteAllText(@"Engine\Updater\LastUpdatesInfo.txt", insideVersionDate.ToString("G"));
+                }
+                else
+                {
+                    // взять из файла время последнего обновления
+                    string time = File.ReadAllText(@"Engine\Updater\LastUpdatesInfo.txt");
+
+                    insideVersionDate = DateTime.Parse(time);
+                }
+
+                // передать серверу дату 
+
+                string ip = "185.186.143.9";
+                int port = 49152;
+
+                using (TcpClient client = new TcpClient())
+                {
+                    await client.ConnectAsync(ip, port);
+
+                    if (client.Connected)
+                    {
+                        string request = $"{{\"LastUpdateDate\":\"{insideVersionDate:yyyy-MM-ddTHH:mm:ss}\"}}";
+
+                        byte[] data = Encoding.UTF8.GetBytes(request);
+
+                        using (NetworkStream stream = client.GetStream())
+                        {
+
+                            stream.Write(data, 0, data.Length);
+
+                            using (MemoryStream ms = new MemoryStream())
+                            {
+                                byte[] buffer = new byte[8192];
+                                int bytesRead;
+
+                                while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                                {
+                                    ms.Write(buffer, 0, bytesRead);
+                                }
+
+                                string response = Encoding.UTF8.GetString(ms.ToArray());
+
+                                if (!string.IsNullOrEmpty(response))
+                                {
+                                    UpdateResponse firstResponse = JsonSerializer.Deserialize<UpdateResponse>(response);
+
+                                    if (firstResponse != null)
+                                    {
+                                        if (firstResponse.Success)
+                                        {
+                                            _updServerResp = firstResponse;
+
+                                            if (!File.Exists(@"Engine\Updater\FilesVersionsTime.txt"))
+                                            {
+                                                WriteFilesVersionsTime(insideVersionDate); // при первом запуске проекта с обновлятором записываем время версии файлов в Debug
+                                            }
+
+                                            _commitsCount = firstResponse.MissedCommitsCount;
+
+                                            Application.Current.Dispatcher.Invoke(() =>
+                                            {
+                                                ChangeButtonCommits();
+                                            });
+                                        }
+                                        else
+                                        {
+                                            _updServerResp = firstResponse;
+                                            throw new Exception("Сервер ответил с ошибкой");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        throw new Exception("Нет ответа от сервера");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                _commitsCount = -1;
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    ChangeButtonCommits();
+                });
+            }
+        }
+
+        private void WriteFilesVersionsTime(DateTime fileTime)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+
+                for (int i = 0; i < _updServerResp.Files.Count; i++)
+                {
+                    var fileInfo = _updServerResp.Files[i];
+
+                    DateTime correctTime = fileInfo.LastUpdate > fileTime ? fileTime : fileInfo.LastUpdate;
+
+                    sb.AppendLine(fileInfo.Name + "#" + correctTime + "#" + fileInfo.Size);
+
+                }
+
+                File.WriteAllText(@"Engine\Updater\FilesVersionsTime.txt", sb.ToString());
+
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
+        }
+
+        private void ChangeButtonCommits()
+        {
+            try
+            {
+                string buttCont = OsLocalization.MainWindow.NewCommits;
+                SolidColorBrush foreground = new((Color)ColorConverter.ConvertFromString("#FFEEEFFF"));
+                SolidColorBrush background = new((Color)ColorConverter.ConvertFromString("#FF111217"));
+
+                if (_commitsCount > 0)
+                {
+                    buttCont = OsLocalization.MainWindow.NewCommits.Replace("0", _commitsCount.ToString());
+                    background = new SolidColorBrush(Color.FromRgb(255, 85, 0));
+                    foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFF0F0F0"));
+                }
+                else if (_commitsCount < 0)
+                {
+                    buttCont = OsLocalization.MainWindow.NewCommits.Replace("0", " ?");
+                    foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFE30F26"));
+                }
+
+                ButtonNewCommits.Content = buttCont;
+                ButtonNewCommits.Foreground = foreground;
+                ButtonNewCommits.Background = background;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
+        }
+
+        private void ButtonNewCommits_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Hide();
+                UpdateModuleUi ui = new UpdateModuleUi(_updServerResp);
+                ui.ShowDialog();
+
+                if(ui.IsUpdated == true)
+                {
+                    Close();
+                    ProccesIsWorked = false;
+                    Thread.Sleep(5000);
+                    Process.GetCurrentProcess().Kill();
+                }
+                else
+                {
+                    Show();
+                }
+            }
+            catch (Exception error)
+            {
+                MessageBox.Show(error.ToString());
+            }
+           
+        }
+
+        private void ButtCommits_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (_commitsCount > 0 || _commitsCount < 0)
+                ButtonNewCommits.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF1A1A1A"));
+        }
+
+        private void ButtCommits_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (_commitsCount > 0 || _commitsCount < 0)
+                ButtonNewCommits.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFF0F0F0"));
+        }
+
+        #endregion
     }
 
 

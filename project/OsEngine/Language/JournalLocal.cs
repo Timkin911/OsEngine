@@ -59,6 +59,10 @@ namespace OsEngine.Language
             "Eng:Create position_" +
             "Ru:Создать позицию_");
 
+        public string PositionMenuItem14 => OsLocalization.ConvertToLocString(
+           "Eng:Add to selected_" +
+           "Ru:Докупить в выбранную_");
+
         public string TitleJournalUi => OsLocalization.ConvertToLocString(
             "Eng:Journal_" +
             "Ru:Журнал_");
@@ -162,6 +166,14 @@ namespace OsEngine.Language
         public string Label25 => OsLocalization.ConvertToLocString(
          "Eng:A B S O L U T E_" +
          "Ru:А Б С О Л Ю Т_");
+
+        public string Label26 => OsLocalization.ConvertToLocString(
+         "Eng:First, select a benchmark_" +
+         "Ru:Сначала выберите бенчмарк_");
+
+        public string Label27 => OsLocalization.ConvertToLocString(
+         "Eng:Update benchmark data? Old data will be deleted and reloaded_" +
+         "Ru:Обновить данные бенчмарка? Старые данные будут удалены и загружены заново_");
 
 
 

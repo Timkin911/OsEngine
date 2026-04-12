@@ -7,15 +7,16 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using OsEngine.Entity;
 using OsEngine.Language;
+using OsEngine.Market;
 using OsEngine.Market.Servers;
 
 namespace OsEngine.OsTrader.Panels.Tab.Internal
 {
     public partial class BotManualControlUi
     {
-
         /// <summary>
         /// strategy settings /
         /// настройки стратегии
@@ -23,8 +24,12 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
         private BotManualControl _strategySettings;
 
         /// <summary>
-        /// constructor /
-        /// конструктор
+        /// server permission
+        /// </summary>
+        private IServerPermission _serverPermission;
+
+        /// <summary>
+        /// constructor
         /// </summary>
         public BotManualControlUi(BotManualControl strategySettings, StartProgram startProgram, IServerPermission serverPermission)
         {
@@ -35,6 +40,7 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
             try
             {
                 _strategySettings = strategySettings;
+                _serverPermission = serverPermission;
 
                 CheckBoxLimitsMakerOnly.IsChecked = _strategySettings.LimitsMakerOnly;
 
@@ -44,40 +50,40 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
                     CheckBoxLimitsMakerOnly.IsEnabled = false;
                 }
 
+                // Values type
                 ComboBoxValuesType.Items.Add(ManualControlValuesType.MinPriceStep.ToString());
                 ComboBoxValuesType.Items.Add(ManualControlValuesType.Absolute.ToString());
                 ComboBoxValuesType.Items.Add(ManualControlValuesType.Percent.ToString());
                 ComboBoxValuesType.SelectedItem = _strategySettings.ValuesType.ToString();
 
-                ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Specified.ToString());
-                ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.GTC.ToString());
+                // Order lifetime type - заполняем на основе возможностей коннектора
 
                 if (startProgram == StartProgram.IsTester
                     || startProgram == StartProgram.IsOsOptimizer)
                 {
+                    ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Specified.ToString());
+                    ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.GTC.ToString());
                     ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Day.ToString());
                     CheckBoxLimitsMakerOnly.IsEnabled = false;
+
+                    ComboBoxOrdersTypeTime.SelectedItem = _strategySettings.OrderTypeTime.ToString();
+                }
+                else if (startProgram == StartProgram.IsOsTrader)
+                {
+                    FillOrderLifeTimeComboBox();
                 }
 
-                ComboBoxOrdersTypeTime.SelectedItem = _strategySettings.OrderTypeTime.ToString();
-
                 // stop
-                // стоп
-
                 CheckBoxStopIsOn.IsChecked = _strategySettings.StopIsOn;
                 TextBoxStopPercentLength.Text = _strategySettings.StopDistance.ToStringWithNoEndZero();
                 TextBoxSlippageStop.Text = _strategySettings.StopSlippage.ToStringWithNoEndZero();
 
                 // profit
-                // профит
-
                 CheckBoxProfitIsOn.IsChecked = _strategySettings.ProfitIsOn;
                 TextBoxProfitPercentLength.Text = _strategySettings.ProfitDistance.ToStringWithNoEndZero();
                 TextBoxSlippageProfit.Text = _strategySettings.ProfitSlippage.ToStringWithNoEndZero();
 
                 // closing position
-                // закрытие позиции
-
                 CheckBoxSecondToCloseIsOn.IsChecked = _strategySettings.SecondToCloseIsOn;
                 TextBoxSecondToClose.Text = _strategySettings.SecondToClose.TotalSeconds.ToString(new CultureInfo("ru-RU"));
 
@@ -91,14 +97,13 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
                 TextBoxSlippageDoubleExit.Text = _strategySettings.DoubleExitSlippage.ToString();
 
                 // opening position
-                // открытие позиции
-
                 CheckBoxSecondToOpenIsOn.IsChecked = _strategySettings.SecondToOpenIsOn;
                 TextBoxSecondToOpen.Text = _strategySettings.SecondToOpen.TotalSeconds.ToString(new CultureInfo("ru-RU"));
 
                 CheckBoxSetbackToOpenIsOn.IsChecked = _strategySettings.SetbackToOpenIsOn;
                 TextBoxSetbackToOpen.Text = _strategySettings.SetbackToOpenPosition.ToString();
 
+                // localization
                 Title = OsLocalization.Trader.Label85;
                 LabelStop.Content = OsLocalization.Trader.Label86;
                 LabelProfit.Content = OsLocalization.Trader.Label87;
@@ -132,37 +137,227 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
 
             this.Activate();
             this.Focus();
+
+            if (InteractiveInstructions.TesterLightPosts.AllInstructionsInClass == null
+            || InteractiveInstructions.TesterLightPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonBotManualControl.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
+        }
+
+        /// <summary>
+        /// Fill Order Lifetime ComboBox based on server permissions
+        /// </summary>
+        private void FillOrderLifeTimeComboBox()
+        {
+            try
+            {
+                ComboBoxOrdersTypeTime.Items.Clear();
+
+                if (_serverPermission == null || _serverPermission.OrdersLifeTimeRealization == null)
+                {
+                    // If no permission info, add only Specified 
+                    ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Specified.ToString());
+                    ComboBoxOrdersTypeTime.SelectedIndex = 0;
+                    ComboBoxOrdersTypeTime.IsEnabled = false;
+                    return;
+                }
+
+                OrderLifeTimePermission permission = _serverPermission.OrdersLifeTimeRealization;
+
+                // Add only supported types
+                if (permission.GtcIsReady)
+                {
+                    ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.GTC.ToString());
+                }
+
+                if (permission.SpecifiedIsReady)
+                {
+                    ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Specified.ToString());
+                }
+
+                if (permission.DayIsReady)
+                {
+                    ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Day.ToString());
+                }
+
+                // If nothing was added, add Specified as default
+                if (ComboBoxOrdersTypeTime.Items.Count == 0)
+                {
+                    ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Specified.ToString());
+                    ComboBoxOrdersTypeTime.IsEnabled = false;
+                }
+                else
+                {
+                    ComboBoxOrdersTypeTime.IsEnabled = true;
+                }
+
+                // Load saved value
+                LoadSelectedOrderLifeTime();
+            }
+            catch (Exception ex)
+            {
+                // On error, add Specified and disable
+                ComboBoxOrdersTypeTime.Items.Clear();
+                ComboBoxOrdersTypeTime.Items.Add(OrderTypeTime.Specified.ToString());
+                ComboBoxOrdersTypeTime.IsEnabled = false;
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
+        /// Load selected order lifetime from settings
+        /// </summary>
+        private void LoadSelectedOrderLifeTime()
+        {
+            try
+            {
+                if (_strategySettings == null)
+                {
+                    if (ComboBoxOrdersTypeTime.Items.Count > 0)
+                    {
+                        ComboBoxOrdersTypeTime.SelectedIndex = 0;
+                    }
+                    return;
+                }
+
+                string savedValue = _strategySettings.OrderTypeTime.ToString();
+
+                // Find the saved value in combobox
+                int index = -1;
+                for (int i = 0; i < ComboBoxOrdersTypeTime.Items.Count; i++)
+                {
+                    if (ComboBoxOrdersTypeTime.Items[i].ToString() == savedValue)
+                    {
+                        index = i;
+                        break;
+                    }
+                }
+
+                if (index >= 0)
+                {
+                    ComboBoxOrdersTypeTime.SelectedIndex = index;
+                }
+                else
+                {
+                    // If saved value not supported, select first available
+                    if (ComboBoxOrdersTypeTime.Items.Count > 0)
+                    {
+                        ComboBoxOrdersTypeTime.SelectedIndex = 0;
+
+                        // Update settings to avoid future mismatch
+                        string newValue = ComboBoxOrdersTypeTime.Items[0].ToString();
+                        OrderTypeTime newType;
+                        if (Enum.TryParse(newValue, out newType))
+                        {
+                            _strategySettings.OrderTypeTime = newType;
+                            _strategySettings.Save();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ComboBoxOrdersTypeTime.Items.Count > 0)
+                {
+                    ComboBoxOrdersTypeTime.SelectedIndex = 0;
+                }
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                DispatcherTimer timer = new DispatcherTimer();
+                int blinkCount = 0;
+                bool isGreenVisible = true;
+
+                timer.Interval = TimeSpan.FromMilliseconds(300);
+                timer.Tick += (s, e) =>
+                {
+                    try
+                    {
+                        if (blinkCount >= 20)
+                        {
+                            timer.Stop();
+                            PostGreenBotManualControl.Opacity = 1;
+                            PostWhiteBotManualControl.Opacity = 0;
+                            return;
+                        }
+
+                        if (isGreenVisible)
+                        {
+                            PostGreenBotManualControl.Opacity = 0;
+                            PostWhiteBotManualControl.Opacity = 1;
+                        }
+                        else
+                        {
+                            PostGreenBotManualControl.Opacity = 1;
+                            PostWhiteBotManualControl.Opacity = 0;
+                        }
+
+                        isGreenVisible = !isGreenVisible;
+                        blinkCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                        timer.Stop();
+                    }
+                };
+
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         private void ComboBoxOrdersTypeTime_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            OrderTypeTime typeTime = OrderTypeTime.Specified;
+            try
+            {
+                if (ComboBoxOrdersTypeTime.SelectedItem == null)
+                {
+                    return;
+                }
 
-            if(Enum.TryParse(ComboBoxOrdersTypeTime.SelectedItem.ToString(),out  typeTime) == false)
-            {
-                return;
-            }
+                OrderTypeTime typeTime = OrderTypeTime.Specified;
 
-            if (typeTime == OrderTypeTime.Specified)
-            {
-                CheckBoxSecondToOpenIsOn.IsEnabled = true;
-                CheckBoxSecondToCloseIsOn.IsEnabled = true;
-                TextBoxSecondToOpen.IsEnabled = true;
-                TextBoxSecondToClose.IsEnabled = true;
+                if (Enum.TryParse(ComboBoxOrdersTypeTime.SelectedItem.ToString(), out typeTime) == false)
+                {
+                    return;
+                }
+
+                // Enable/disable time-based settings based on order lifetime type
+                if (typeTime == OrderTypeTime.Specified)
+                {
+                    CheckBoxSecondToOpenIsOn.IsEnabled = true;
+                    CheckBoxSecondToCloseIsOn.IsEnabled = true;
+                    TextBoxSecondToOpen.IsEnabled = true;
+                    TextBoxSecondToClose.IsEnabled = true;
+                }
+                else
+                {
+                    CheckBoxSecondToOpenIsOn.IsEnabled = false;
+                    CheckBoxSecondToCloseIsOn.IsEnabled = false;
+                    TextBoxSecondToOpen.IsEnabled = false;
+                    TextBoxSecondToClose.IsEnabled = false;
+                }
             }
-            else if(typeTime == OrderTypeTime.GTC
-                || typeTime == OrderTypeTime.Day)
+            catch (Exception ex)
             {
-                CheckBoxSecondToOpenIsOn.IsEnabled = false;
-                CheckBoxSecondToCloseIsOn.IsEnabled = false;
-                TextBoxSecondToOpen.IsEnabled = false;
-                TextBoxSecondToClose.IsEnabled = false;
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
         /// <summary>
         /// button accept
-        /// кнопка принять
         /// </summary>
         private void ButtonAccept_Click(object sender, RoutedEventArgs e)
         {
@@ -190,12 +385,11 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
 
             try
             {
-
                 // stop
                 // стоп
                 _strategySettings.StopIsOn = CheckBoxStopIsOn.IsChecked.Value;
                 _strategySettings.StopDistance = TextBoxStopPercentLength.Text.ToDecimal();
-                _strategySettings.StopSlippage =TextBoxSlippageStop.Text.ToDecimal();
+                _strategySettings.StopSlippage = TextBoxSlippageStop.Text.ToDecimal();
 
                 // profit
                 // профит
@@ -229,8 +423,6 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
                 _strategySettings.DoubleExitSlippage = TextBoxSlippageDoubleExit.Text.ToDecimal();
 
                 // opening position
-                // открытие позиции
-
                 if (CheckBoxSecondToOpenIsOn.IsChecked.HasValue)
                 {
                     _strategySettings.SecondToOpenIsOn = CheckBoxSecondToOpenIsOn.IsChecked.Value;
@@ -245,7 +437,15 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
 
                 Enum.TryParse(ComboBoxValuesType.SelectedItem.ToString(), out _strategySettings.ValuesType);
 
-                Enum.TryParse(ComboBoxOrdersTypeTime.SelectedItem.ToString(), out _strategySettings.OrderTypeTime);
+                if (_strategySettings._startProgram == StartProgram.IsOsTrader)
+                {
+                    // Save order lifetime type with validation
+                    SaveOrderLifeTime();
+                }
+                else
+                {
+                    Enum.TryParse(ComboBoxOrdersTypeTime.SelectedItem.ToString(), out _strategySettings.OrderTypeTime);
+                }
 
                 _strategySettings.LimitsMakerOnly = CheckBoxLimitsMakerOnly.IsChecked.Value;
 
@@ -259,9 +459,98 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
             Close();
         }
 
+        /// <summary>
+        /// Save order lifetime type with validation
+        /// </summary>
+        private void SaveOrderLifeTime()
+        {
+            try
+            {
+                if (ComboBoxOrdersTypeTime.SelectedItem == null)
+                {
+                    _strategySettings.OrderTypeTime = OrderTypeTime.Specified;
+                    return;
+                }
+
+                string selectedValue = ComboBoxOrdersTypeTime.SelectedItem.ToString();
+                OrderTypeTime selectedType;
+
+                if (Enum.TryParse(selectedValue, out selectedType))
+                {
+                    // Validate that selected type is supported by connector
+                    if (IsLifeTimeSupported(selectedType))
+                    {
+                        _strategySettings.OrderTypeTime = selectedType;
+                    }
+                    else
+                    {
+                        // If not supported, fallback to GTC
+                        _strategySettings.OrderTypeTime = OrderTypeTime.Specified;
+                    }
+                }
+                else
+                {
+                    _strategySettings.OrderTypeTime = OrderTypeTime.Specified;
+                }
+            }
+            catch (Exception ex)
+            {
+                _strategySettings.OrderTypeTime = OrderTypeTime.Specified;
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
+        /// Check if order lifetime type is supported by connector
+        /// </summary>
+        private bool IsLifeTimeSupported(OrderTypeTime type)
+        {
+            try
+            {
+                if (_serverPermission == null || _serverPermission.OrdersLifeTimeRealization == null)
+                {
+                    return type == OrderTypeTime.Specified;
+                }
+
+                OrderLifeTimePermission permission = _serverPermission.OrdersLifeTimeRealization;
+
+                switch (type)
+                {
+                    case OrderTypeTime.GTC:
+                        return permission.GtcIsReady;
+                    case OrderTypeTime.Specified:
+                        return permission.SpecifiedIsReady;
+                    case OrderTypeTime.Day:
+                        return permission.DayIsReady;
+                    default:
+                        return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void CheckBox_Checked(object sender, RoutedEventArgs e)
         {
 
         }
+
+        #region Posts collection
+
+        private void ButtonBotManualControl_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.TesterLightPosts.Link10.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }
