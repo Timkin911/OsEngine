@@ -7,6 +7,8 @@ using System;
 using System.Globalization;
 using System.Windows;
 using OsEngine.Language;
+using OsEngine.Logging;
+using OsEngine.Market;
 
 namespace OsEngine.Entity
 {
@@ -35,6 +37,9 @@ namespace OsEngine.Entity
             TextBoxVolumeStep.Text = security.VolumeStep.ToString(culture);
             TextBoxExpiration.Text = security.Expiration.ToString(culture);
 
+            ComboBoxSecurityType.ItemsSource = Enum.GetValues(typeof(SecurityType));
+            ComboBoxSecurityType.SelectedItem = security.SecurityType;
+
             Title = OsLocalization.Entity.TitleSecurityUi;
             SecuritiesColumn3.Content = OsLocalization.Entity.SecuritiesColumn3;
             SecuritiesColumn4.Content = OsLocalization.Entity.SecuritiesColumn4;
@@ -58,7 +63,15 @@ namespace OsEngine.Entity
 
         private void SecurityUi_Closed(object sender, EventArgs e)
         {
-            _security = null;
+            try
+            {
+                _security = null;
+                Closed -= SecurityUi_Closed;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
         }
 
         private void ButtonAccept_Click(object sender, RoutedEventArgs e)
@@ -155,6 +168,7 @@ namespace OsEngine.Entity
             _security.MinTradeAmount = minVolume;
             _security.VolumeStep = volumeStep;
             _security.Expiration = expiration;
+            _security.SecurityType = (SecurityType)ComboBoxSecurityType.SelectedItem;
             IsChanged = true;
             Close();
         }

@@ -48,6 +48,7 @@ namespace OsEngine.Market.Servers.Binance.Futures
             ServerParameters[3].ValueChange += BinanceServerFutures_ValueChange;
             CreateParameterBoolean("Demo Account", false);
             CreateParameterBoolean("Extended Data", false);
+            CreateParameterBoolean("Use Shared RateGate", false);
 
             ServerParameters[0].Comment = OsLocalization.Market.Label246;
             ServerParameters[1].Comment = OsLocalization.Market.Label247;
@@ -55,6 +56,7 @@ namespace OsEngine.Market.Servers.Binance.Futures
             ServerParameters[3].Comment = OsLocalization.Market.Label250;
             ServerParameters[4].Comment = OsLocalization.Market.Label268;
             ServerParameters[5].Comment = OsLocalization.Market.Label270;
+            ServerParameters[6].Comment = OsLocalization.Market.Label324;
 
         }
 
@@ -146,7 +148,9 @@ namespace OsEngine.Market.Servers.Binance.Futures
             if (((ServerParameterEnum)ServerParameters[2]).Value == "USDT-M")
             {
                 _baseUrl = "https://fapi.binance.com";
-                wss_point = "wss://fstream.binance.com";
+                wss_point = "wss://fstream.binance.com/public";
+                wss_point_market = "wss://fstream.binance.com/market";
+                wss_point_private = "wss://fstream.binance.com/private";
                 type_str_selector = "fapi";
             }
             else if (((ServerParameterEnum)ServerParameters[2]).Value == "COIN-M")
@@ -231,7 +235,11 @@ namespace OsEngine.Market.Servers.Binance.Futures
 
         public string _baseUrl = "https://fapi.binance.com";
 
-        public string wss_point = "wss://fstream.binance.com";
+        public string wss_point = "wss://fstream.binance.com/public";
+
+        public string wss_point_market = "wss://fstream.binance.com/market";
+
+        public string wss_point_private = "wss://fstream.binance.com/private";
 
         public string type_str_selector = "fapi";
 
@@ -1416,7 +1424,7 @@ namespace OsEngine.Market.Servers.Binance.Futures
             try
             {
                 _listenKey = CreateListenKey();
-                string urlStr = wss_point + "/ws/" + _listenKey;
+                string urlStr = $"{wss_point_private}/ws?listenKey={_listenKey}&events=ORDER_TRADE_UPDATE/ACCOUNT_UPDATE";
 
                 _socketPrivateData = new WebSocket(urlStr);
 
@@ -1684,7 +1692,7 @@ namespace OsEngine.Market.Servers.Binance.Futures
 
                 string urlStrDepth = null;
 
-                if (((ServerParameterBool)ServerParameters[13]).Value == false)
+                if (((ServerParameterBool)ServerParameters[14]).Value == false)
                 {
                     urlStrDepth = wss_point + "/stream?streams="
                                  + security.Name.ToLower() + "@depth5"
@@ -1700,7 +1708,22 @@ namespace OsEngine.Market.Servers.Binance.Futures
 
                 if (_extendedMarketData)
                 {
-                    urlStrDepth += "/" + security.Name.ToLower() + "@markPrice" + "/" + security.Name.ToLower() + "@miniTicker";
+                    string urlStrMarKet = wss_point_market + "/stream?streams=" + security.Name.ToLower() + "@markPrice" + "/" + security.Name.ToLower() + "@miniTicker";
+
+                    WebSocket wsClientMarket = new WebSocket(urlStrMarKet);
+
+                    if (_myProxy != null)
+                    {
+                        wsClientMarket.SetProxy(_myProxy);
+                    }
+
+                    wsClientMarket.EmitOnPing = true;
+                    wsClientMarket.OnMessage += _socket_PublicMessage;
+                    wsClientMarket.OnError += _socketClient_Error;
+                    wsClientMarket.OnClose += _socketClient_Closed;
+                    wsClientMarket.ConnectAsync();
+
+                    _socketsArray.Add(security.Name + "_market", wsClientMarket);
 
                     GetFundingRate(security.Name);
                     GetFundingHistory(security.Name.ToLower());
@@ -3162,13 +3185,20 @@ namespace OsEngine.Market.Servers.Binance.Futures
 
         RateGate _rateGate = new RateGate(1, TimeSpan.FromMilliseconds(100));
 
+        private static readonly RateGate _sharedRateGate = new RateGate(1, TimeSpan.FromMilliseconds(100));
+
+        private RateGate GetRateGate()
+        {
+            return ((ServerParameterBool)ServerParameters[6]).Value ? _sharedRateGate : _rateGate;
+        }
+
         public string CreateQuery(Method method, string endpoint, Dictionary<string, string> param = null, bool auth = false)
         {
             try
             {
                 lock (_queryHttpLocker)
                 {
-                    _rateGate.WaitToProceed();
+                    GetRateGate().WaitToProceed();
                     return PerformHttpRequest(method, endpoint, param, auth);
                 }
             }

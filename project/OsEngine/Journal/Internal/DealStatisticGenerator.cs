@@ -462,7 +462,7 @@ namespace OsEngine.Journal.Internal
             return Math.Round(sd, 5);
         }
 
-        private static int GetProfitDeal(Position[] deals)
+        public static int GetProfitDeal(Position[] deals)
         {
             int profitDeal = 0;
 
@@ -483,7 +483,7 @@ namespace OsEngine.Journal.Internal
             return profitDeal;
         }
 
-        private static decimal GetProfitDialPercent(Position[] deals)
+        public static decimal GetProfitDialPercent(Position[] deals)
         {
             decimal profitDeal = GetProfitDeal(deals);
 
@@ -897,9 +897,9 @@ namespace OsEngine.Journal.Internal
                 allTime = new TimeSpan(seconds);
 
                 result =
-                    "H: " + Convert.ToInt32(allTime.TotalHours)
-                    + " M: " + Convert.ToInt32(allTime.Minutes)
-                    + " S: " + Convert.ToInt32(allTime.Seconds);
+                    "H " + Convert.ToInt32(allTime.TotalHours)
+                    + " M " + Convert.ToInt32(allTime.Minutes)
+                    + " S " + Convert.ToInt32(allTime.Seconds);
             }
 
             return result;

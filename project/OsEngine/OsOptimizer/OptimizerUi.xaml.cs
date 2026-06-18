@@ -27,6 +27,8 @@ using System.Linq;
 using System.Windows.Forms.DataVisualization.Charting;
 using System.Windows.Threading;
 using OsEngine.Instructions;
+using OsEngine.Indicators;
+using System.Reflection;
 
 
 namespace OsEngine.OsOptimizer
@@ -77,6 +79,12 @@ namespace OsEngine.OsOptimizer
             CommissionValueTextBox.Text = _master.CommissionValue.ToString();
             CommissionValueTextBox.TextChanged += CommissionValueTextBoxOnTextChanged;
 
+            CheckBoxCacheIndicatorsIsOn.Content = OsLocalization.Optimizer.Label73;
+            CheckBoxCacheIndicatorsIsOn.IsChecked = _master.CacheIndicatorsIsOn;
+            CheckBoxCacheIndicatorsIsOn.Checked += CheckBoxCacheIndicatorsIsOn_Checked;
+            CheckBoxCacheIndicatorsIsOn.Unchecked += CheckBoxCacheIndicatorsIsOn_Checked;
+
+
             // filters/фильтры
             CheckBoxFilterProfitIsOn.IsChecked = _master.FilterProfitIsOn;
             CheckBoxFilterMaxDrowDownIsOn.IsChecked = _master.FilterMaxDrawDownIsOn;
@@ -120,25 +128,7 @@ namespace OsEngine.OsOptimizer
             TextBoxPercentFiltration.TextChanged += TextBoxPercentFiltration_TextChanged;
 
             TextBoxIterationCount.Text = _master.IterationCount.ToString();
-            TextBoxIterationCount.TextChanged += delegate (object sender, TextChangedEventArgs args)
-            {
-                try
-                {
-                    if (Convert.ToInt32(TextBoxIterationCount.Text) == 0)
-                    {
-                        TextBoxIterationCount.Text = _master.IterationCount.ToString();
-                        return;
-                    }
-                    _master.IterationCount = Convert.ToInt32(TextBoxIterationCount.Text);
-
-                    Task.Run(PaintCountBotsInOptimization);
-                }
-                catch
-                {
-                    TextBoxIterationCount.Text = _master.IterationCount.ToString();
-                }
-
-            };
+            TextBoxIterationCount.TextChanged += TextBoxIterationCount_TextChanged;
 
             _master.NeedToMoveUiToEvent += _master_NeedToMoveUiToEvent;
             TextBoxStrategyName.Text = _master.StrategyName;
@@ -218,56 +208,6 @@ namespace OsEngine.OsOptimizer
             Task.Run(new Action(StrategyLoader));
         }
 
-        private void StartButtonBlinkAnimation()
-        {
-            try
-            {
-                DispatcherTimer timer = new DispatcherTimer();
-                int blinkCount = 0;
-                bool isGreenVisible = true;
-
-                timer.Interval = TimeSpan.FromMilliseconds(300);
-                timer.Tick += (s, e) =>
-                {
-                    try
-                    {
-                        if (blinkCount >= 20)
-                        {
-                            timer.Stop();
-                            GreenCollectionOptimizer.Opacity = 1;
-                            WhiteCollectionOptimizer.Opacity = 0;
-                            return;
-                        }
-
-                        if (isGreenVisible)
-                        {
-                            GreenCollectionOptimizer.Opacity = 0;
-                            WhiteCollectionOptimizer.Opacity = 1;
-                        }
-                        else
-                        {
-                            GreenCollectionOptimizer.Opacity = 1;
-                            WhiteCollectionOptimizer.Opacity = 0;
-                        }
-
-                        isGreenVisible = !isGreenVisible;
-                        blinkCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        _master?.SendLogMessage(ex.ToString(), LogMessageType.Error);
-                        timer.Stop();
-                    }
-                };
-
-                timer.Start();
-            }
-            catch (Exception ex)
-            {
-                _master?.SendLogMessage(ex.ToString(), LogMessageType.Error);
-            }
-        }
-
         private void Ui_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
             try
@@ -309,10 +249,41 @@ namespace OsEngine.OsOptimizer
                 DatePickerEnd.SelectedDateChanged -= DatePickerEnd_SelectedDateChanged;
                 TextBoxPercentFiltration.TextChanged -= TextBoxPercentFiltration_TextChanged;
 
+                CheckBoxCacheIndicatorsIsOn.Checked -= CheckBoxCacheIndicatorsIsOn_Checked;
+                CheckBoxCacheIndicatorsIsOn.Unchecked -= CheckBoxCacheIndicatorsIsOn_Checked;
+
+                TextBoxIterationCount.TextChanged -= TextBoxIterationCount_TextChanged;
+
+                ButtonPostsOptimizer.Click -= ButtonPostsOptimizer_Click;
+
                 _master.NewSecurityEvent -= _master_NewSecurityEvent;
                 _master.DateTimeStartEndChange -= _master_DateTimeStartEndChange;
                 _master.TestReadyEvent -= _master_TestReadyEvent;
                 _master.TimeToEndChangeEvent -= _master_TimeToEndChangeEvent;
+                _master.NeedToMoveUiToEvent -= _master_NeedToMoveUiToEvent;
+
+                if (_resultsCharting != null)
+                {
+                    _resultsCharting.Delete();
+                    _resultsCharting.LogMessageEvent -= _master.SendLogMessage;
+                    _resultsCharting = null;
+                }
+
+                if (_chartSeriesResult != null)
+                {
+                    try
+                    {
+                        _chartSeriesResult.Click -= _chartSeriesResult_Click;
+                        _chartSeriesResult.Series.Clear();
+                        _chartSeriesResult.ChartAreas.Clear();
+                        _chartSeriesResult.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        _master?.SendLogMessage(ex.ToString(), LogMessageType.Error);
+                    }
+                    _chartSeriesResult = null;
+                }
 
                 _master = null;
 
@@ -320,25 +291,45 @@ namespace OsEngine.OsOptimizer
                 {
                     HostTabsSimple.Child = null;
                 }
-
                 if (HostStepsOptimize != null)
                 {
                     HostStepsOptimize.Child = null;
                 }
-
                 if (HostParam != null)
                 {
                     HostParam.Child = null;
                 }
-
+                if (HostLog != null)
+                {
+                    HostLog.Child = null;
+                }
+                if (HostWalkForwardPeriods != null)
+                {
+                    WalkForwardPeriodsPainter.Clear(HostWalkForwardPeriods);
+                }
                 if (WindowsFormsHostFazeNumOnTubResult != null)
                 {
                     WindowsFormsHostFazeNumOnTubResult.Child = null;
                 }
-
                 if (WindowsFormsHostResults != null)
                 {
                     WindowsFormsHostResults.Child = null;
+                }
+                if (WindowsFormsHostResultsChart != null)
+                {
+                    WindowsFormsHostResultsChart.Child = null;
+                }
+                if (HostStepsOfOptimizationTable != null)
+                {
+                    HostStepsOfOptimizationTable.Child = null;
+                }
+                if (HostRobustness != null)
+                {
+                    HostRobustness.Child = null;
+                }
+                if (WindowsFormsHostTotalProfit != null)
+                {
+                    WindowsFormsHostTotalProfit.Child = null;
                 }
 
                 if (_gridSources != null)
@@ -347,6 +338,10 @@ namespace OsEngine.OsOptimizer
                     _gridSources.CellClick -= _gridSources_CellClick;
                     _gridSources.DataError -= _gridSources_DataError;
                     DataGridFactory.ClearLinks(_gridSources);
+                    _gridSources.Rows.Clear();
+                    _gridSources.Columns.Clear();
+                    _gridSources.DataSource = null;
+                    _gridSources.Dispose();
                     _gridSources = null;
                 }
 
@@ -355,6 +350,10 @@ namespace OsEngine.OsOptimizer
                     _gridFazes.CellValueChanged -= _gridFazes_CellValueChanged;
                     _gridFazes.DataError -= _gridSources_DataError;
                     DataGridFactory.ClearLinks(_gridFazes);
+                    _gridFazes.Rows.Clear();
+                    _gridFazes.Columns.Clear();
+                    _gridFazes.DataSource = null;
+                    _gridFazes.Dispose();
                     _gridFazes = null;
                 }
 
@@ -362,6 +361,10 @@ namespace OsEngine.OsOptimizer
                 {
                     _gridParameters.DataError -= _gridSources_DataError;
                     DataGridFactory.ClearLinks(_gridParameters);
+                    _gridParameters.Rows.Clear();
+                    _gridParameters.Columns.Clear();
+                    _gridParameters.DataSource = null;
+                    _gridParameters.Dispose();
                     _gridParameters = null;
                 }
 
@@ -370,6 +373,10 @@ namespace OsEngine.OsOptimizer
                     _gridFazesEnd.CellClick -= _gridFazesEnd_CellClick;
                     _gridFazesEnd.DataError -= _gridSources_DataError;
                     DataGridFactory.ClearLinks(_gridFazesEnd);
+                    _gridFazesEnd.Rows.Clear();
+                    _gridFazesEnd.Columns.Clear();
+                    _gridFazesEnd.DataSource = null;
+                    _gridFazesEnd.Dispose();
                     _gridFazesEnd = null;
                 }
 
@@ -377,12 +384,82 @@ namespace OsEngine.OsOptimizer
                 {
                     _gridResults.DataError -= _gridSources_DataError;
                     DataGridFactory.ClearLinks(_gridResults);
+                    _gridResults.Rows.Clear();
+                    _gridResults.Columns.Clear();
+                    _gridResults.DataSource = null;
+                    _gridResults.Dispose();
                     _gridResults = null;
                 }
-            }
-            catch
-            {
 
+                Closing -= Ui_Closing;
+            }
+            catch (Exception ex)
+            {
+                _master?.SendLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                _master?.SendLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    GreenCollectionOptimizer.Opacity = 1;
+                    WhiteCollectionOptimizer.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    GreenCollectionOptimizer.Opacity = 0;
+                    WhiteCollectionOptimizer.Opacity = 1;
+                }
+                else
+                {
+                    GreenCollectionOptimizer.Opacity = 1;
+                    WhiteCollectionOptimizer.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                _master?.SendLogMessage(ex.ToString(), LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -413,6 +490,7 @@ namespace OsEngine.OsOptimizer
             CommissionValueTextBox.IsEnabled = false;
             TextBoxStrategyName.IsEnabled = false;
             ButtonStrategyReload.IsEnabled = false;
+            CheckBoxCacheIndicatorsIsOn.IsEnabled = false;
         }
 
         private void StartUserActivity()
@@ -442,6 +520,7 @@ namespace OsEngine.OsOptimizer
             CommissionValueTextBox.IsEnabled = true;
             TextBoxStrategyName.IsEnabled = true;
             ButtonStrategyReload.IsEnabled = true;
+            CheckBoxCacheIndicatorsIsOn.IsEnabled = true;
         }
 
         private DateTime _lastTestEndEventTime = DateTime.MinValue;
@@ -769,6 +848,8 @@ namespace OsEngine.OsOptimizer
 
         private void ButtonGo_Click(object sender, RoutedEventArgs e)
         {
+            AindicatorCacheServer.Clear();
+
             SaveParametersFromTable();
 
             if (ButtonGo.Content.ToString() == OsLocalization.Optimizer.Label9 &&
@@ -859,6 +940,25 @@ namespace OsEngine.OsOptimizer
             catch
             {
                 TextBoxPercentFiltration.Text = _master.PercentOnFiltration.ToString();
+            }
+        }
+
+        private void TextBoxIterationCount_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            try
+            {
+                if (Convert.ToInt32(TextBoxIterationCount.Text) == 0)
+                {
+                    TextBoxIterationCount.Text = _master.IterationCount.ToString();
+                    return;
+                }
+                _master.IterationCount = Convert.ToInt32(TextBoxIterationCount.Text);
+
+                Task.Run(PaintCountBotsInOptimization);
+            }
+            catch
+            {
+                TextBoxIterationCount.Text = _master.IterationCount.ToString();
             }
         }
 
@@ -1028,6 +1128,18 @@ namespace OsEngine.OsOptimizer
         private void ButtonResults_Click(object sender, RoutedEventArgs e)
         {
             ShowResultDialog();
+        }
+
+        private void CheckBoxCacheIndicatorsIsOn_Checked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _master.CacheIndicatorsIsOn = CheckBoxCacheIndicatorsIsOn.IsChecked.Value;
+            }
+            catch (Exception ex)
+            {
+                _master?.SendLogMessage(ex.ToString(), LogMessageType.Error);
+            }
         }
 
         public void ShowResultDialog()
@@ -1742,7 +1854,7 @@ namespace OsEngine.OsOptimizer
 
             DataGridViewCheckBoxColumn column0 = new DataGridViewCheckBoxColumn();
             column0.CellTemplate = new DataGridViewCheckBoxCell();
-            column0.HeaderText = OsLocalization.Optimizer.Message28;
+            column0.HeaderText = OsLocalization.Optimizer.Message28; // 0 OnOff
             column0.ReadOnly = false;
             column0.Width = 100;
 
@@ -1750,7 +1862,7 @@ namespace OsEngine.OsOptimizer
 
             DataGridViewColumn column1 = new DataGridViewColumn();
             column1.CellTemplate = cell0;
-            column1.HeaderText = OsLocalization.Optimizer.Message29;
+            column1.HeaderText = OsLocalization.Optimizer.Message29; // 1 Name
             column1.ReadOnly = true;
             column1.Width = 600;
 
@@ -1758,44 +1870,52 @@ namespace OsEngine.OsOptimizer
 
             DataGridViewColumn column = new DataGridViewColumn();
             column.CellTemplate = cell0;
-            column.HeaderText = OsLocalization.Optimizer.Message24;
+            column.HeaderText = OsLocalization.Optimizer.Message24; // 2 Type
             column.ReadOnly = true;
             column.Width = 100;
             _gridParameters.Columns.Add(column);
 
             DataGridViewComboBoxColumn column2 = new DataGridViewComboBoxColumn();
             column2.CellTemplate = new DataGridViewComboBoxCell();
-            column2.HeaderText = OsLocalization.Optimizer.Message30;
+            column2.HeaderText = OsLocalization.Optimizer.Message30; // 3 Default
             column2.ReadOnly = false;
             column2.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             _gridParameters.Columns.Add(column2);
 
             DataGridViewColumn column22 = new DataGridViewColumn();
             column22.CellTemplate = cell0;
-            column22.HeaderText = OsLocalization.Optimizer.Message31;
+            column22.HeaderText = OsLocalization.Optimizer.Message31; // 4 Start value
             column22.ReadOnly = false;
             column22.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             _gridParameters.Columns.Add(column22);
 
             DataGridViewColumn column3 = new DataGridViewColumn();
             column3.CellTemplate = cell0;
-            column3.HeaderText = OsLocalization.Optimizer.Message32;
+            column3.HeaderText = OsLocalization.Optimizer.Message32; // 5 Increment
             column3.ReadOnly = false;
             column3.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             _gridParameters.Columns.Add(column3);
 
             DataGridViewColumn column4 = new DataGridViewColumn();
             column4.CellTemplate = cell0;
-            column4.HeaderText = OsLocalization.Optimizer.Message33;
+            column4.HeaderText = OsLocalization.Optimizer.Message33; // 6 End value
             column4.ReadOnly = false;
             column4.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             _gridParameters.Columns.Add(column4);
 
             DataGridViewColumn column5 = new DataGridViewColumn();
             column5.CellTemplate = cell0;
+            column5.HeaderText = OsLocalization.Optimizer.Message45; // 7 Increment type
             column5.ReadOnly = false;
-            column5.Width = 20;
+            column5.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             _gridParameters.Columns.Add(column5);
+
+
+            DataGridViewColumn column6 = new DataGridViewColumn();
+            column6.CellTemplate = cell0;
+            column6.ReadOnly = false;
+            column6.Width = 20;
+            _gridParameters.Columns.Add(column6);
 
             _gridParameters.Rows.Add(null, null);
             _gridParameters.DataError += _gridParameters_DataError;
@@ -1815,14 +1935,23 @@ namespace OsEngine.OsOptimizer
 
         private void PaintTableParameters()
         {
-            if (_gridParameters.InvokeRequired)
-            {
-                _gridParameters.Invoke(new Action(PaintTableParameters));
-                return;
-            }
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
 
             try
             {
+                if (_gridParameters.InvokeRequired)
+                {
+                    _gridParameters.Invoke(new Action(PaintTableParameters));
+                    return;
+                }
+
                 _gridParameters.CellValueChanged -= _gridParameters_CellValueChanged;
                 _gridParameters.CellClick -= _gridParameters_CellClick;
 
@@ -1930,21 +2059,30 @@ namespace OsEngine.OsOptimizer
 
         private DataGridViewRow GetRowBool(IIStrategyParameter parameter)
         {
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
+
             DataGridViewRow row = new DataGridViewRow();
 
             // 0 on / off
             row.Cells.Add(new DataGridViewCheckBoxCell());
-            row.Cells[0].ReadOnly = true;
-            row.Cells[0].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[0].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
             // 1 Param Name by User
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[1].Value = parameter.Name;
+            row.Cells[^1].Value = parameter.Name;
 
             // 2 Param Type
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[2].Value = parameter.Type;
+            row.Cells[^1].Value = parameter.Type;
 
             // 3 Param Defoult Value
 
@@ -1954,47 +2092,63 @@ namespace OsEngine.OsOptimizer
             cell.Value = ((StrategyParameterBool)parameter).ValueBool.ToString();
             row.Cells.Add(cell);
 
-            // 4 Start optimize value
+            // 4 Start value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[4].ReadOnly = true;
-            row.Cells[4].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[4].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
-            // 5 Step optimize
-
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].ReadOnly = true;
-            row.Cells[5].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[5].Style.SelectionBackColor = System.Drawing.Color.DimGray;
-
-            // 6 Step optimize
+            // 5 Increment
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[6].ReadOnly = true;
-            row.Cells[6].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            // 6 End value
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            // 7 Increment type
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
             return row;
         }
 
         private DataGridViewRow GetRowCheckBox(IIStrategyParameter parameter)
         {
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
+
             DataGridViewRow row = new DataGridViewRow();
 
             // 0 on / off
             row.Cells.Add(new DataGridViewCheckBoxCell());
-            row.Cells[0].ReadOnly = true;
-            row.Cells[0].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[0].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
             // 1 Param Name by User
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[1].Value = parameter.Name;
+            row.Cells[^1].Value = parameter.Name;
 
             // 2 Param Type
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[2].Value = parameter.Type;
+            row.Cells[^1].Value = parameter.Type;
 
             // 3 Param Defoult Value
 
@@ -2014,47 +2168,63 @@ namespace OsEngine.OsOptimizer
 
             row.Cells.Add(cell);
 
-            // 4 Start optimize value
+            // 4 Start value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[4].ReadOnly = true;
-            row.Cells[4].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[4].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
-            // 5 Step optimize
-
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].ReadOnly = true;
-            row.Cells[5].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[5].Style.SelectionBackColor = System.Drawing.Color.DimGray;
-
-            // 6 Step optimize
+            // 5 Increment
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[6].ReadOnly = true;
-            row.Cells[6].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            // 6 End value
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            // 7 Increment type
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
             return row;
         }
 
         private DataGridViewRow GetRowTimeOfDay(IIStrategyParameter parameter)
         {
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
+
             DataGridViewRow row = new DataGridViewRow();
 
             // 0 on / off
             row.Cells.Add(new DataGridViewCheckBoxCell());
-            row.Cells[0].ReadOnly = true;
-            row.Cells[0].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[0].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
             // 1 Param Name by User
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[1].Value = parameter.Name;
+            row.Cells[^1].Value = parameter.Name;
 
             // 2 Param Type
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[2].Value = parameter.Type;
+            row.Cells[^1].Value = parameter.Type;
 
             // 3 Param Defoult Value
 
@@ -2063,94 +2233,127 @@ namespace OsEngine.OsOptimizer
             cell.Value = param.Value.ToString();
             row.Cells.Add(cell);
 
-            // 4 Start optimize value
+            // 4 Start value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[4].ReadOnly = true;
-            row.Cells[4].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[4].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
-            // 5 Step optimize
-
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].ReadOnly = true;
-            row.Cells[5].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[5].Style.SelectionBackColor = System.Drawing.Color.DimGray;
-
-            // 6 Step optimize
+            // 5 Increment
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[6].ReadOnly = true;
-            row.Cells[6].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            // 6 End value
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            // 7 Increment type
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
             return row;
         }
 
         private DataGridViewRow GetRowInt(IIStrategyParameter parameter, bool isOptimize)
         {
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
+
+            StrategyParameterInt parameterInt = ((StrategyParameterInt)parameter);
+
             DataGridViewRow row = new DataGridViewRow();
 
             // 0 on / off
             row.Cells.Add(new DataGridViewCheckBoxCell());
-            row.Cells[0].ReadOnly = false;
-            row.Cells[0].Value = isOptimize;
+            row.Cells[^1].ReadOnly = false;
+            row.Cells[^1].Value = isOptimize;
 
             // 1 Param Name by User
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[1].Value = parameter.Name;
+            row.Cells[^1].Value = parameterInt.Name;
 
             // 2 Param Type
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[2].Value = parameter.Type;
+            row.Cells[^1].Value = parameterInt.Type;
 
             // 3 Param Defoult Value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[3].Value = ((StrategyParameterInt)parameter).ValueIntDefolt.ToString();
+            row.Cells[^1].Value = parameterInt.ValueIntDefolt.ToString();
 
             if (isOptimize == true)
             {
-                row.Cells[3].ReadOnly = false;
-                row.Cells[3].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[3].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = false;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 4 Start optimize value
+            // 4 Start value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[4].Value = ((StrategyParameterInt)parameter).ValueIntStart.ToString();
+            row.Cells[^1].Value = parameterInt.ValueIntStart.ToString();
 
             if (isOptimize == false)
             {
-                row.Cells[4].ReadOnly = true;
-                row.Cells[4].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[4].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 5 Step optimize
+            // 5 Increment
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].Value = ((StrategyParameterInt)parameter).ValueIntStep.ToString();
+            row.Cells[^1].Value = parameterInt.ValueIntStep.ToString();
 
 
             if (isOptimize == false)
             {
-                row.Cells[5].ReadOnly = true;
-                row.Cells[5].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[5].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 6 Step optimize
+            // 6 End value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[6].Value = ((StrategyParameterInt)parameter).ValueIntStop.ToString();
+            row.Cells[^1].Value = parameterInt.ValueIntStop.ToString();
 
             if (isOptimize == false)
             {
-                row.Cells[6].ReadOnly = true;
-                row.Cells[6].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            }
+
+            // 7 Increment type
+
+            DataGridViewComboBoxCell cell = new DataGridViewComboBoxCell();
+            cell.Items.Add("Absolute");
+            cell.Items.Add("Percent");
+            cell.Value = parameterInt.StepType.ToString();
+            row.Cells.Add(cell);
+
+            if (isOptimize == false)
+            {
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
             return row;
@@ -2158,67 +2361,93 @@ namespace OsEngine.OsOptimizer
 
         private DataGridViewRow GetRowDecimal(IIStrategyParameter parameter, bool isOptimize)
         {
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
+
+            StrategyParameterDecimal parameterDecimal = ((StrategyParameterDecimal)parameter);
+
             DataGridViewRow row = new DataGridViewRow();
             // 0 on / off
             row.Cells.Add(new DataGridViewCheckBoxCell());
-            row.Cells[0].ReadOnly = false;
-            row.Cells[0].Value = isOptimize;
+            row.Cells[^1].ReadOnly = false;
+            row.Cells[^1].Value = isOptimize;
 
             // 1 Param Name by User
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[1].Value = parameter.Name;
+            row.Cells[^1].Value = parameterDecimal.Name;
 
             // 2 Param Type
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[2].Value = parameter.Type;
+            row.Cells[^1].Value = parameterDecimal.Type;
 
             // 3 Param Defoult Value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[3].Value = ((StrategyParameterDecimal)parameter).ValueDecimalDefolt.ToString();
+            row.Cells[^1].Value = parameterDecimal.ValueDecimalDefolt.ToString();
 
             if (isOptimize == true)
             {
-                row.Cells[3].ReadOnly = false;
-                row.Cells[3].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[3].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = false;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 4 Start optimize value
+            // 4 Start value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[4].Value = ((StrategyParameterDecimal)parameter).ValueDecimalStart.ToString();
+            row.Cells[^1].Value = parameterDecimal.ValueDecimalStart.ToString();
 
             if (isOptimize == false)
             {
-                row.Cells[4].ReadOnly = true;
-                row.Cells[4].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[4].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 5 Step optimize
+            // 5 Increment
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].Value = ((StrategyParameterDecimal)parameter).ValueDecimalStep.ToString();
+            row.Cells[^1].Value = parameterDecimal.ValueDecimalStep.ToString();
 
 
             if (isOptimize == false)
             {
-                row.Cells[5].ReadOnly = true;
-                row.Cells[5].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[5].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 6 Step optimize
+            // 6 End value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[6].Value = ((StrategyParameterDecimal)parameter).ValueDecimalStop.ToString();
+            row.Cells[^1].Value = parameterDecimal.ValueDecimalStop.ToString();
 
             if (isOptimize == false)
             {
-                row.Cells[6].ReadOnly = true;
-                row.Cells[6].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            }
+
+            // 7 Increment type
+
+            DataGridViewComboBoxCell cell = new DataGridViewComboBoxCell();
+            cell.Items.Add("Absolute");
+            cell.Items.Add("Percent");
+            cell.Value = parameterDecimal.StepType.ToString();
+            row.Cells.Add(cell);
+
+            if (isOptimize == false)
+            {
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
             return row;
@@ -2226,74 +2455,95 @@ namespace OsEngine.OsOptimizer
 
         private DataGridViewRow GetRowDecimalCheckBox(IIStrategyParameter parameter, bool isOptimize)
         {
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
+
+            StrategyParameterDecimalCheckBox parameterDecimalCheckBox = ((StrategyParameterDecimalCheckBox)parameter);
+
             DataGridViewRow row = new DataGridViewRow();
             // 0 on / off
             row.Cells.Add(new DataGridViewCheckBoxCell());
-            row.Cells[0].ReadOnly = false;
-            row.Cells[0].Value = isOptimize;
+            row.Cells[^1].ReadOnly = false;
+            row.Cells[^1].Value = isOptimize;
 
             // 1 Param Name by User
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[1].Value = parameter.Name;
+            row.Cells[^1].Value = parameterDecimalCheckBox.Name;
 
             // 2 Param Type
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[2].Value = parameter.Type;
+            row.Cells[^1].Value = parameterDecimalCheckBox.Type;
 
             // 3 Param Defoult Value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[3].Value = ((StrategyParameterDecimalCheckBox)parameter).ValueDecimalDefolt.ToString();
+            row.Cells[^1].Value = parameterDecimalCheckBox.ValueDecimalDefolt.ToString();
 
             if (isOptimize == true)
             {
-                row.Cells[3].ReadOnly = false;
-                row.Cells[3].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[3].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = false;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 4 Start optimize value
+            // 4 Start value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[4].Value = ((StrategyParameterDecimalCheckBox)parameter).ValueDecimalStart.ToString();
+            row.Cells[^1].Value = parameterDecimalCheckBox.ValueDecimalStart.ToString();
 
             if (isOptimize == false)
             {
-                row.Cells[4].ReadOnly = true;
-                row.Cells[4].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[4].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 5 Step optimize
+            // 5 Increment
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].Value = ((StrategyParameterDecimalCheckBox)parameter).ValueDecimalStep.ToString();
+            row.Cells[^1].Value = parameterDecimalCheckBox.ValueDecimalStep.ToString();
 
             if (isOptimize == false)
             {
-                row.Cells[5].ReadOnly = true;
-                row.Cells[5].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[5].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
 
-            // 6 Step optimize
+            // 6 End value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[6].Value = ((StrategyParameterDecimalCheckBox)parameter).ValueDecimalStop.ToString();
+            row.Cells[^1].Value = parameterDecimalCheckBox.ValueDecimalStop.ToString();
 
             if (isOptimize == false)
             {
-                row.Cells[6].ReadOnly = true;
-                row.Cells[6].Style.BackColor = System.Drawing.Color.DimGray;
-                row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
             }
+
+            // 7 Increment type
+
+            DataGridViewComboBoxCell cellIncType = new DataGridViewComboBoxCell();
+            cellIncType.Items.Add("Absolute");
+            cellIncType.Items.Add("Percent");
+            cellIncType.Value = parameterDecimalCheckBox.StepType.ToString();
+            row.Cells.Add(cellIncType);
+
+            // 8 CheckBox Checked
 
             DataGridViewCheckBoxCell cell = new DataGridViewCheckBoxCell();
 
             cell.FlatStyle = FlatStyle.Standard;
             cell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
-            if (((StrategyParameterDecimalCheckBox)parameter).CheckState == CheckState.Checked)
+            if (parameterDecimalCheckBox.CheckState == CheckState.Checked)
             {
                 cell.Value = true;
             }
@@ -2304,30 +2554,46 @@ namespace OsEngine.OsOptimizer
 
             row.Cells.Add(cell);
 
-            row.Cells[7].ReadOnly = false;
-            row.Cells[7].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[7].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = false;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            if (isOptimize == false)
+            {
+                row.Cells[^1].ReadOnly = true;
+                row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            }
 
             return row;
         }
 
         private DataGridViewRow GetRowString(IIStrategyParameter parameter)
         {
+            // 0 OnOff
+            // 1 Name
+            // 2 Type
+            // 3 Default
+            // 4 Start value
+            // 5 Increment
+            // 6 End value
+            // 7 Increment type
+
             DataGridViewRow row = new DataGridViewRow();
 
             // 0 on / off
             row.Cells.Add(new DataGridViewCheckBoxCell());
-            row.Cells[0].ReadOnly = true;
-            row.Cells[0].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[0].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
             // 1 Param Name by User
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[1].Value = parameter.Name;
+            row.Cells[^1].Value = parameter.Name;
 
             // 2 Param Type
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[2].Value = parameter.Type;
+            row.Cells[^1].Value = parameter.Type;
 
             // 3 Param Defoult Value
 
@@ -2372,21 +2638,21 @@ namespace OsEngine.OsOptimizer
                 row.Cells.Add(cell);
             }
 
-            // 4 Start optimize value
+            // 4 Start value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[4].ReadOnly = true;
-            row.Cells[4].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[4].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
-            // 5 Step optimize
+            // 5 Increment
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].ReadOnly = true;
-            row.Cells[5].Style.BackColor = System.Drawing.Color.DimGray;
-            row.Cells[5].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].ReadOnly = true;
+            row.Cells[^1].Style.BackColor = System.Drawing.Color.DimGray;
+            row.Cells[^1].Style.SelectionBackColor = System.Drawing.Color.DimGray;
 
-            // 6 Step optimize
+            // 6 End value
 
             row.Cells.Add(new DataGridViewTextBoxCell());
             row.Cells[6].ReadOnly = true;
@@ -2415,8 +2681,16 @@ namespace OsEngine.OsOptimizer
 
                     if (parameter.Type == StrategyParameterType.String)
                     {
-                        ((StrategyParameterString)parameter).ValueString = row.Cells[3].Value.ToString();
-                        _parametersActive[i_param] = false;
+                        if (row.Cells[3].Value != null)
+                        {
+                            ((StrategyParameterString)parameter).ValueString = row.Cells[3].Value.ToString();
+                            _parametersActive[i_param] = false;
+                        }
+                        else
+                        {
+                            ((StrategyParameterString)parameter).ValueString = "";
+                            _parametersActive[i_param] = false;
+                        }
                     }
                     else if (parameter.Type == StrategyParameterType.Bool)
                     {
@@ -2454,6 +2728,9 @@ namespace OsEngine.OsOptimizer
                         int valueStart = Convert.ToInt32(row.Cells[4].Value);
                         int valueStep = Convert.ToInt32(row.Cells[5].Value);
                         int valueStop = Convert.ToInt32(row.Cells[6].Value);
+                        StrategyParameterStepType stepType;
+
+                        Enum.TryParse(row.Cells[7].Value.ToString(), out stepType);
 
                         if (valueStart > valueStop)
                         {
@@ -2467,11 +2744,13 @@ namespace OsEngine.OsOptimizer
                         if (valueStart != param.ValueIntStart ||
                             valueStep != param.ValueIntStep ||
                             valueStop != param.ValueIntStop ||
-                            valueDefoult != param.ValueIntDefolt)
+                            valueDefoult != param.ValueIntDefolt ||
+                            stepType != param.StepType)
                         {
                             _parameters.Insert(i_param, new StrategyParameterInt(parameter.Name, valueDefoult,
                                 valueStart, valueStop, valueStep));
                             _parameters.RemoveAt(i_param + 1);
+                            ((StrategyParameterInt)_parameters[i_param]).StepType = stepType;
                         }
 
                         DataGridViewCheckBoxCell box = (DataGridViewCheckBoxCell)row.Cells[0];
@@ -2493,6 +2772,9 @@ namespace OsEngine.OsOptimizer
                         decimal valueStart = row.Cells[4].Value.ToString().ToDecimal();
                         decimal valueStep = row.Cells[5].Value.ToString().ToDecimal();
                         decimal valueStop = row.Cells[6].Value.ToString().ToDecimal();
+                        StrategyParameterStepType stepType;
+
+                        Enum.TryParse(row.Cells[7].Value.ToString(), out stepType);
 
                         if (valueStart > valueStop)
                         {
@@ -2506,11 +2788,13 @@ namespace OsEngine.OsOptimizer
                         if (valueStart != param.ValueDecimalStart ||
                             valueStep != param.ValueDecimalStep ||
                             valueStop != param.ValueDecimalStop ||
-                            valueDefoult != param.ValueDecimalDefolt)
+                            valueDefoult != param.ValueDecimalDefolt ||
+                            stepType != param.StepType)
                         {
                             _parameters.Insert(i_param, new StrategyParameterDecimal(parameter.Name, valueDefoult,
                                valueStart, valueStop, valueStep));
                             _parameters.RemoveAt(i_param + 1);
+                            ((StrategyParameterDecimal)_parameters[i_param]).StepType = stepType;
                         }
                         if (row.Cells[0].Value == null ||
                             (bool)row.Cells[0].Value == false)
@@ -2530,7 +2814,9 @@ namespace OsEngine.OsOptimizer
                         decimal valueStart = row.Cells[4].Value.ToString().ToDecimal();
                         decimal valueStep = row.Cells[5].Value.ToString().ToDecimal();
                         decimal valueStop = row.Cells[6].Value.ToString().ToDecimal();
-                        bool isChecked = Convert.ToBoolean(row.Cells[7].Value.ToString());
+                        StrategyParameterStepType stepType;
+                        Enum.TryParse(row.Cells[7].Value.ToString(), out stepType);
+                        bool isChecked = Convert.ToBoolean(row.Cells[8].Value.ToString());
 
                         if (isChecked)
                         {
@@ -2553,11 +2839,13 @@ namespace OsEngine.OsOptimizer
                         if (valueStart != param.ValueDecimalStart ||
                             valueStep != param.ValueDecimalStep ||
                             valueStop != param.ValueDecimalStop ||
-                            valueDefoult != param.ValueDecimalDefolt)
+                            valueDefoult != param.ValueDecimalDefolt ||
+                            stepType != param.StepType)
                         {
                             _parameters.Insert(i_param, new StrategyParameterDecimalCheckBox(parameter.Name, valueDefoult,
                                valueStart, valueStop, valueStep, true));
                             _parameters.RemoveAt(i_param + 1);
+                            ((StrategyParameterDecimalCheckBox)_parameters[i_param]).StepType = stepType;
                         }
                         if (row.Cells[0].Value == null ||
                             (bool)row.Cells[0].Value == false)
@@ -2603,6 +2891,14 @@ namespace OsEngine.OsOptimizer
             row.Cells[6].ReadOnly = false;
             row.Cells[6].Style.BackColor = System.Drawing.Color.FromArgb(21, 26, 30);
             row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.FromArgb(17, 18, 23);
+
+            if(row.Cells.Count > 6
+                && row.Cells[7] != null)
+            {
+                row.Cells[7].ReadOnly = false;
+                row.Cells[7].Style.BackColor = System.Drawing.Color.FromArgb(21, 26, 30);
+                row.Cells[7].Style.SelectionBackColor = System.Drawing.Color.FromArgb(17, 18, 23);
+            }
         }
 
         private void UnActivateRowOptimizing(DataGridViewRow row)
@@ -2622,6 +2918,14 @@ namespace OsEngine.OsOptimizer
             row.Cells[6].ReadOnly = true;
             row.Cells[6].Style.BackColor = System.Drawing.Color.DimGray;
             row.Cells[6].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+
+            if (row.Cells.Count > 6
+             && row.Cells[7] != null)
+            {
+                row.Cells[7].ReadOnly = true;
+                row.Cells[7].Style.BackColor = System.Drawing.Color.DimGray;
+                row.Cells[7].Style.SelectionBackColor = System.Drawing.Color.DimGray;
+            }
         }
 
         private void _gridParameters_CellValueChanged(object sender, DataGridViewCellEventArgs e)
@@ -2786,7 +3090,7 @@ namespace OsEngine.OsOptimizer
         private void CreateTableResults()
         {
             _gridResults = DataGridFactory.GetDataGridView(DataGridViewSelectionMode.ColumnHeaderSelect,
-                DataGridViewAutoSizeRowsMode.None);
+                DataGridViewAutoSizeRowsMode.None, true);
 
             _gridResults.ScrollBars = ScrollBars.Vertical;
 
@@ -2814,6 +3118,20 @@ namespace OsEngine.OsOptimizer
             column21.ReadOnly = false;
             column21.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             _gridResults.Columns.Add(column21);
+
+            DataGridViewColumn column22 = new DataGridViewColumn();
+            column22.CellTemplate = cell0;
+            column22.HeaderText = "Profit Pos %";
+            column22.ReadOnly = false;
+            column22.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            _gridResults.Columns.Add(column22);
+
+            DataGridViewColumn column23 = new DataGridViewColumn();
+            column23.CellTemplate = cell0;
+            column23.HeaderText = "Average Time";
+            column23.ReadOnly = false;
+            column23.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            _gridResults.Columns.Add(column23);
 
             DataGridViewColumn column2 = new DataGridViewColumn();
             column2.CellTemplate = cell0;
@@ -2880,7 +3198,7 @@ namespace OsEngine.OsOptimizer
 
             DataGridViewButtonColumn column12 = new DataGridViewButtonColumn();
             column12.CellTemplate = new DataGridViewButtonCell();
-            //column12.HeaderText = OsLocalization.Optimizer.Message42;
+            // column12.HeaderText = OsLocalization.Optimizer.Message42;
             column12.ReadOnly = true;
             column12.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
             _gridResults.Columns.Add(column12);
@@ -2915,61 +3233,77 @@ namespace OsEngine.OsOptimizer
                 _gridResults.Columns[2].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[3].HeaderText = "Total Profit";
+            _gridResults.Columns[3].HeaderText = "Profit Pos %";
 
-            if (_sortBotsType == SortBotsType.TotalProfit)
+            if (_sortBotsType == SortBotsType.ProfitPositionPercent)
             {
                 _gridResults.Columns[3].HeaderText += " vvv";
                 _gridResults.Columns[3].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[4].HeaderText = "Max Drow Dawn %";
-            if (_sortBotsType == SortBotsType.MaxDrawDawn)
+            _gridResults.Columns[4].HeaderText = "Average Time";
+
+            if (_sortBotsType == SortBotsType.AverageTime)
             {
                 _gridResults.Columns[4].HeaderText += " vvv";
                 _gridResults.Columns[4].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[5].HeaderText = "Average Profit";
-            if (_sortBotsType == SortBotsType.AverageProfit)
+            _gridResults.Columns[5].HeaderText = "Total Profit";
+
+            if (_sortBotsType == SortBotsType.TotalProfit)
             {
                 _gridResults.Columns[5].HeaderText += " vvv";
                 _gridResults.Columns[5].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[6].HeaderText = "Average Profit %";
-            if (_sortBotsType == SortBotsType.AverageProfitPercent)
+            _gridResults.Columns[6].HeaderText = "Max Drow Dawn %";
+            if (_sortBotsType == SortBotsType.MaxDrawDawn)
             {
                 _gridResults.Columns[6].HeaderText += " vvv";
                 _gridResults.Columns[6].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[7].HeaderText = "Profit Factor";
-            if (_sortBotsType == SortBotsType.ProfitFactor)
+            _gridResults.Columns[7].HeaderText = "Average Profit";
+            if (_sortBotsType == SortBotsType.AverageProfit)
             {
                 _gridResults.Columns[7].HeaderText += " vvv";
                 _gridResults.Columns[7].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[8].HeaderText = "Pay Off Ratio";
-            if (_sortBotsType == SortBotsType.PayOffRatio)
+            _gridResults.Columns[8].HeaderText = "Average Profit %";
+            if (_sortBotsType == SortBotsType.AverageProfitPercent)
             {
                 _gridResults.Columns[8].HeaderText += " vvv";
                 _gridResults.Columns[8].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[9].HeaderText = "Recovery";
-            if (_sortBotsType == SortBotsType.Recovery)
+            _gridResults.Columns[9].HeaderText = "Profit Factor";
+            if (_sortBotsType == SortBotsType.ProfitFactor)
             {
                 _gridResults.Columns[9].HeaderText += " vvv";
                 _gridResults.Columns[9].HeaderCell.Style.BackColor = cellColor;
             }
 
-            _gridResults.Columns[10].HeaderText = "Sharpe Ratio";
-            if (_sortBotsType == SortBotsType.SharpRatio)
+            _gridResults.Columns[10].HeaderText = "Pay Off Ratio";
+            if (_sortBotsType == SortBotsType.PayOffRatio)
             {
                 _gridResults.Columns[10].HeaderText += " vvv";
                 _gridResults.Columns[10].HeaderCell.Style.BackColor = cellColor;
+            }
+
+            _gridResults.Columns[11].HeaderText = "Recovery";
+            if (_sortBotsType == SortBotsType.Recovery)
+            {
+                _gridResults.Columns[11].HeaderText += " vvv";
+                _gridResults.Columns[11].HeaderCell.Style.BackColor = cellColor;
+            }
+
+            _gridResults.Columns[12].HeaderText = "Sharpe Ratio";
+            if (_sortBotsType == SortBotsType.SharpRatio)
+            {
+                _gridResults.Columns[12].HeaderText += " vvv";
+                _gridResults.Columns[12].HeaderCell.Style.BackColor = cellColor;
             }
 
         }
@@ -3026,8 +3360,7 @@ namespace OsEngine.OsOptimizer
                 {
                     OptimizerReport report = fazeReport.Reports[i];
                     if (report == null ||
-                        report.TabsReports.Count == 0 ||
-                        !_master.IsAcceptedByFilter(report))
+                        report.TabsReports.Count == 0)
                     {
                         continue;
                     }
@@ -3036,12 +3369,12 @@ namespace OsEngine.OsOptimizer
                     row.Height = 30;
                     row.Cells.Add(new DataGridViewTextBoxCell());
 
-                    //  if (report.TabsReports.Count == 1)
-                    //  {
+                    //if (report.TabsReports.Count == 1)
+                    //{
                     row.Cells[0].Value = report.BotName;
-                    // }
-                    // else
-                    // {
+                    //}
+                    //else
+                    //{
                     //    row.Cells[0].Value = "Сводные";
                     //}
 
@@ -3052,6 +3385,23 @@ namespace OsEngine.OsOptimizer
                     DataGridViewTextBoxCell cell3 = new DataGridViewTextBoxCell();
                     cell3.Value = report.PositionsCount;
                     row.Cells.Add(cell3);
+
+                    DataGridViewTextBoxCell cell33 = new DataGridViewTextBoxCell();
+                    cell33.Value = Math.Round(report.ProfitPositionPercent, 2);
+                    row.Cells.Add(cell33);
+
+                    DataGridViewTextBoxCell cell34 = new DataGridViewTextBoxCell();
+
+                    if(report.AverageTimeInPositionTimeSpan.TotalHours > 1)
+                    {
+                        cell34.Value = "h:" + Math.Truncate(report.AverageTimeInPositionTimeSpan.TotalHours) + "m:" + report.AverageTimeInPositionTimeSpan.Minutes;
+                    }
+                    else
+                    {
+                        cell34.Value = "m:" + report.AverageTimeInPositionTimeSpan.Minutes + "s:" + report.AverageTimeInPositionTimeSpan.Seconds;
+                    }
+
+                    row.Cells.Add(cell34);
 
                     DataGridViewTextBoxCell cell4 = new DataGridViewTextBoxCell();
                     cell4.Value = Math.Round(report.TotalProfit, 5).ToStringWithNoEndZero() + " (" + report.TotalProfitPercent.ToStringWithNoEndZero() + "%)";
@@ -3121,12 +3471,12 @@ namespace OsEngine.OsOptimizer
                 return;
             }
 
-            if (e.ColumnIndex == 11)
+            if (e.ColumnIndex == 13)
             {
                 ShowBotChartDialog(e);
             }
 
-            if (e.ColumnIndex == 12)
+            if (e.ColumnIndex == 14)
             {
                 ShowParametersDialog(e);
             }
@@ -3228,33 +3578,41 @@ namespace OsEngine.OsOptimizer
             }
             else if (columnSelect == 3)
             {
-                currentSelection = SortBotsType.TotalProfit;
+                currentSelection = SortBotsType.ProfitPositionPercent;
             }
             else if (columnSelect == 4)
             {
-                currentSelection = SortBotsType.MaxDrawDawn;
+                currentSelection = SortBotsType.AverageTime;
             }
             else if (columnSelect == 5)
             {
-                currentSelection = SortBotsType.AverageProfit;
+                currentSelection = SortBotsType.TotalProfit;
             }
             else if (columnSelect == 6)
             {
-                currentSelection = SortBotsType.AverageProfitPercent;
+                currentSelection = SortBotsType.MaxDrawDawn;
             }
             else if (columnSelect == 7)
             {
-                currentSelection = SortBotsType.ProfitFactor;
+                currentSelection = SortBotsType.AverageProfit;
             }
             else if (columnSelect == 8)
             {
-                currentSelection = SortBotsType.PayOffRatio;
+                currentSelection = SortBotsType.AverageProfitPercent;
             }
             else if (columnSelect == 9)
             {
-                currentSelection = SortBotsType.Recovery;
+                currentSelection = SortBotsType.ProfitFactor;
             }
             else if (columnSelect == 10)
+            {
+                currentSelection = SortBotsType.PayOffRatio;
+            }
+            else if (columnSelect == 11)
+            {
+                currentSelection = SortBotsType.Recovery;
+            }
+            else if (columnSelect == 12)
             {
                 currentSelection = SortBotsType.SharpRatio;
             }
@@ -3291,6 +3649,8 @@ namespace OsEngine.OsOptimizer
 
         private void PaintBotInTable(string botName)
         {
+            System.Drawing.Color selectBotColor = System.Drawing.Color.FromArgb(255, 83, 0);
+
             for (int i2 = 0; i2 < _gridResults.Rows.Count; i2++)
             {
                 DataGridViewRow row = _gridResults.Rows[i2];
@@ -3299,14 +3659,17 @@ namespace OsEngine.OsOptimizer
                 {
                     for (int i = 0; i < row.Cells.Count; i++)
                     {
-                        row.Cells[i].Style.ForeColor = System.Drawing.Color.FromArgb(255, 83, 0);
+                        row.Cells[i].Style.ForeColor = selectBotColor;
                     }
                 }
                 else
                 {
                     for (int i = 0; i < row.Cells.Count; i++)
                     {
-                        row.Cells[i].Style = _gridResults.DefaultCellStyle;
+                        if (row.Cells[i].Style.ForeColor == selectBotColor)
+                        {
+                            row.Cells[i].Style = _gridResults.DefaultCellStyle;
+                        }
                     }
                 }
             }
@@ -3483,6 +3846,14 @@ namespace OsEngine.OsOptimizer
                     if (_sortBotsType == SortBotsType.PositionCount)
                     {
                         curReport.Value = report.PositionsCount;
+                    }
+                    else if (_sortBotsType == SortBotsType.ProfitPositionPercent)
+                    {
+                        curReport.Value = Math.Round(report.ProfitPositionPercent, 2);
+                    }
+                    else if (_sortBotsType == SortBotsType.AverageTime)
+                    {
+                        curReport.Value = report.AverageTimeInPositionTimeSpan.TotalSeconds.ToDecimal();
                     }
                     else if (_sortBotsType == SortBotsType.TotalProfit)
                     {
@@ -3733,6 +4104,10 @@ namespace OsEngine.OsOptimizer
         BotName,
 
         PositionCount,
+
+        ProfitPositionPercent,
+
+        AverageTime,
 
         MaxDrawDawn,
 

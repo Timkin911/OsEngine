@@ -2531,6 +2531,12 @@ namespace OsEngine.Market.Servers.Tester
                             volumeStep = array[i][9].ToDecimal();
                         }
 
+                        if (array[i].Length > 10)
+                        {
+                            Enum.TryParse(array[i][10], out SecurityType securityType);
+                            secu.SecurityType = securityType;
+                        }
+
                         if (lot != 0)
                         {
                             secu.Lot = lot;
@@ -2678,7 +2684,8 @@ namespace OsEngine.Market.Servers.Tester
                     securityToSave.MarginSell.ToString(culture),
                     securityToSave.Expiration.ToString(culture),
                     securityToSave.MinTradeAmount.ToString(culture),
-                    securityToSave.VolumeStep.ToString(culture)
+                    securityToSave.VolumeStep.ToString(culture),
+                    securityToSave.SecurityType.ToString()
                 });
             }
 
@@ -2705,7 +2712,8 @@ namespace OsEngine.Market.Servers.Tester
                     securityToSave.MarginSell.ToString(culture),
                     securityToSave.Expiration.ToString(culture),
                     securityToSave.MinTradeAmount.ToString(culture),
-                    securityToSave.VolumeStep.ToString(culture)
+                    securityToSave.VolumeStep.ToString(culture),
+                    securityToSave.SecurityType.ToString()
                 });
             }
 
@@ -2726,7 +2734,8 @@ namespace OsEngine.Market.Servers.Tester
                             saves[i][6] + "$" +
                             saves[i][7] + "$" +
                             saves[i][8] + "$" +
-                            saves[i][9]
+                            saves[i][9] + "$" +
+                            saves[i][10]
                             );
                     }
 
@@ -2736,11 +2745,6 @@ namespace OsEngine.Market.Servers.Tester
             catch (Exception)
             {
                 // send to the log / отправить в лог
-            }
-
-            if (NeedToReconnectEvent != null)
-            {
-                NeedToReconnectEvent();
             }
         }
 
@@ -3375,7 +3379,7 @@ namespace OsEngine.Market.Servers.Tester
 
                     for (int i2 = 0; i2 < 5000; i2++)
                     {
-                        if(reader.EndOfStream == true)
+                        if (reader.EndOfStream == true)
                         {
                             break;
                         }
@@ -3478,7 +3482,7 @@ namespace OsEngine.Market.Servers.Tester
                     security[security.Count - 1].Security.PriceStepCost = minPriceStep;
 
                     // last data / последняя дата
-                    
+
 
                     while (!reader.EndOfStream)
                     {
@@ -4110,7 +4114,7 @@ namespace OsEngine.Market.Servers.Tester
                     {
                         SecurityTester securityTester = _candleSeriesTesterActivate[i];
 
-                        if (securityTester.Security.Name == securityName && 
+                        if (securityTester.Security.Name == securityName &&
                             securityTester.DataType == SecurityTesterDataType.MarketDepth &&
                             securityTester.TimeFrameSpan == time)
                         {
@@ -4168,7 +4172,7 @@ namespace OsEngine.Market.Servers.Tester
                     LoadSecurityEvent();
                 }
 
-                if(_candleSeriesTesterActivate.Count > 1)
+                if (_candleSeriesTesterActivate.Count > 1)
                 {
                     _candleSeriesTesterActivate = _candleSeriesTesterActivate.OrderBy(x => x.Security.Name).ToList();
                 }
@@ -5171,8 +5175,6 @@ namespace OsEngine.Market.Servers.Tester
         #endregion
 
         #region MarketDepth
-
-        public event Action<Trade> NewMarketDepthTradeEvent;
 
         public event Action<MarketDepth> NewMarketDepthEvent;
 

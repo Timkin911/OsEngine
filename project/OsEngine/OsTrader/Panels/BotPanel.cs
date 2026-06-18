@@ -6,6 +6,7 @@
 using OsEngine.Alerts;
 using OsEngine.Attributes;
 using OsEngine.Entity;
+using OsEngine.Journal;
 using OsEngine.Journal.Internal;
 using OsEngine.Language;
 using OsEngine.Logging;
@@ -160,6 +161,15 @@ namespace OsEngine.OsTrader.Panels
                 try
                 {
                     _chartUi?.Close();
+                }
+                catch
+                {
+                    // ignore
+                }
+
+                try
+                {
+                    _journalUi?.Close();
                 }
                 catch
                 {
@@ -759,9 +769,42 @@ namespace OsEngine.OsTrader.Panels
         {
             if (_chartUi == null)
             {
+                // 1 отключаем тестирование на время, если это тестер
+
+                bool testerIsStoped = false;
+
+                if (StartProgram == StartProgram.IsTester)
+                {
+                    List<IServer> servers = ServerMaster.GetServers();
+
+                    if (servers != null
+                        && servers.Count > 0
+                        && servers[0].ServerType == ServerType.Tester)
+                    {
+                        TesterServer tester = (TesterServer)servers[0];
+
+                        if(tester.TesterRegime == TesterRegime.Play)
+                        {
+                            tester.TesterRegime = TesterRegime.Pause;
+                            testerIsStoped = true;
+                        }
+                    }
+                }
+
+                // 2 создаём и открываем чарт
+
                 _chartUi = new BotPanelChartUi(this);
                 _chartUi.Show();
                 _chartUi.Closed += _chartUi_Closed;
+
+                // 3 запускаем тестер дальше
+
+                if (StartProgram == StartProgram.IsTester
+                    && testerIsStoped == true)
+                {
+                    Thread starter = new Thread(PlayTesterAfterPause);
+                    starter.Start();
+                }
             }
             else
             {
@@ -774,6 +817,29 @@ namespace OsEngine.OsTrader.Panels
             }
 
             return _chartUi;
+        }
+
+        private void PlayTesterAfterPause()
+        {
+            try
+            {
+                Thread.Sleep(1000);
+
+                List<IServer> servers = ServerMaster.GetServers();
+
+                if (servers != null
+                    && servers.Count > 0
+                    && servers[0].ServerType == ServerType.Tester)
+                {
+                    TesterServer tester = (TesterServer)servers[0];
+                    tester.TesterRegime = TesterRegime.Play;
+                }
+
+            }
+            catch (Exception ex)
+            {
+                SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
         }
 
         public BotPanelChartUi _chartUi;
@@ -810,6 +876,85 @@ namespace OsEngine.OsTrader.Panels
         }
 
         public event Action<string> ChartClosedEvent;
+
+        #endregion
+
+        #region Journal by this bot
+
+        private JournalUi2 _journalUi;
+
+        public void ShowJournalDialog()
+        {
+            try
+            {
+                if (_journalUi != null)
+                {
+                    if (_journalUi.WindowState == System.Windows.WindowState.Minimized)
+                    {
+                        _journalUi.WindowState = System.Windows.WindowState.Normal;
+                    }
+
+                    _journalUi.Activate();
+                    return;
+                }
+
+                List<BotPanelJournal> panelsJournal = new List<BotPanelJournal>();
+
+                List<Journal.Journal> journals = this.GetJournals();
+
+                BotPanelJournal botPanel = new BotPanelJournal();
+                botPanel.BotName = this.NameStrategyUniq;
+                botPanel.BotClass = this.GetNameStrategyType();
+
+                botPanel._Tabs = new List<BotTabJournal>();
+
+                for (int i2 = 0; journals != null && i2 < journals.Count; i2++)
+                {
+                    BotTabJournal botTabJournal = new BotTabJournal();
+                    botTabJournal.TabNum = i2;
+                    botTabJournal.Journal = journals[i2];
+                    botPanel._Tabs.Add(botTabJournal);
+                }
+
+                panelsJournal.Add(botPanel);
+
+                _journalUi = new JournalUi2(panelsJournal, this.StartProgram);
+                _journalUi.Closed += _journalUi_Closed;
+                _journalUi.LogMessageEvent += _journalUi_LogMessageEvent;
+                _journalUi.Show();
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void _journalUi_LogMessageEvent(string message, LogMessageType type)
+        {
+            try
+            {
+                SendNewLogMessage(message, type);
+            }
+            catch (Exception ex)
+            {
+                SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void _journalUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                _journalUi.Closed -= _journalUi_Closed;
+                _journalUi.LogMessageEvent -= _journalUi_LogMessageEvent;
+                _journalUi.IsErase = true;
+                _journalUi = null;
+            }
+            catch (Exception ex)
+            {
+                SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
 
         #endregion
 

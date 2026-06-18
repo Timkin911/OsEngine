@@ -66,49 +66,27 @@ namespace OsEngine.OsData
             StartButtonBlinkAnimation();
         }
 
-        private void StartButtonBlinkAnimation()
+        private void DataPrunerUi_Closed(object sender, EventArgs e)
         {
             try
             {
-                DispatcherTimer timer = new DispatcherTimer();
-                int blinkCount = 0;
-                bool isGreenVisible = true;
-
-                timer.Interval = TimeSpan.FromMilliseconds(300);
-                timer.Tick += (s, e) =>
+                if (_blinkTimer != null)
                 {
-                    try
-                    {
-                        if (blinkCount >= 20)
-                        {
-                            timer.Stop();
-                            PostGreenDataDelete.Opacity = 1;
-                            PostWhiteDataDelete.Opacity = 0;
-                            return;
-                        }
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
 
-                        if (isGreenVisible)
-                        {
-                            PostGreenDataDelete.Opacity = 0;
-                            PostWhiteDataDelete.Opacity = 1;
-                        }
-                        else
-                        {
-                            PostGreenDataDelete.Opacity = 1;
-                            PostWhiteDataDelete.Opacity = 0;
-                        }
+                ButtonDelete1.Click -= ButtonDelete1_Click;
+                ButtonDelete2.Click -= ButtonDelete2_Click;
+                ButtonDelete3.Click -= ButtonDelete3_Click;
+                ButtonDelete4.Click -= ButtonDelete4_Click;
+                ButtonDataDelete.Click -= ButtonDataDelete_Click;
 
-                        isGreenVisible = !isGreenVisible;
-                        blinkCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
-                        timer.Stop();
-                    }
-                };
+                _set = null;
+                _setPainter = null;
 
-                timer.Start();
+                Closed -= DataPrunerUi_Closed;
             }
             catch (Exception ex)
             {
@@ -116,16 +94,65 @@ namespace OsEngine.OsData
             }
         }
 
-        private void DataPrunerUi_Closed(object sender, EventArgs e)
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
         {
             try
             {
-                _set = null;
-                _setPainter = null;
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
             }
             catch (Exception ex)
             {
-                ServerMaster.Log?.ProcessMessage(ex.ToString(), Logging.LogMessageType.Error);
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    PostGreenDataDelete.Opacity = 1;
+                    PostWhiteDataDelete.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenDataDelete.Opacity = 0;
+                    PostWhiteDataDelete.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenDataDelete.Opacity = 1;
+                    PostWhiteDataDelete.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 

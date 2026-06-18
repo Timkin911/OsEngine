@@ -5,6 +5,7 @@
 
 using OsEngine.Entity;
 using OsEngine.Entity.SyntheticBondEntity;
+using OsEngine.Indicators;
 using OsEngine.Language;
 using OsEngine.Logging;
 using OsEngine.Market;
@@ -14,7 +15,6 @@ using OsEngine.Market.Servers.Tester;
 using OsEngine.OsOptimizer.OptimizerEntity;
 using OsEngine.OsTrader.Panels;
 using OsEngine.OsTrader.Panels.Tab;
-using OsEngine.OsTrader.Panels.Tab.SynteticBondTab;
 using OsEngine.OsTrader.Panels.Tab.SyntheticBondTab;
 using System;
 using System.Collections.Generic;
@@ -259,7 +259,27 @@ namespace OsEngine.OsOptimizer
                         {
                             // the current index can increment the value
                             // по текущему индексу можно приращивать значение
-                            parameter.ValueInt = parameter.ValueInt + parameter.ValueIntStep;
+                            if(parameter.StepType == StrategyParameterStepType.Absolute)
+                            {
+                                parameter.ValueInt = parameter.ValueInt + parameter.ValueIntStep;
+                            }
+                            else if(parameter.StepType == StrategyParameterStepType.Percent)
+                            {
+                                int newValue = parameter.ValueInt + Math.Abs(Convert.ToInt32(parameter.ValueInt * Convert.ToDecimal(parameter.ValueIntStep) / 100));
+
+                                if (newValue == parameter.ValueInt)
+                                {
+                                    newValue = parameter.ValueInt + 1;
+                                }
+
+                                if(newValue > parameter.ValueIntStop)
+                                {
+                                    newValue = parameter.ValueIntStop;
+                                }
+
+                                parameter.ValueInt = newValue;
+                            }
+
                             if (i2 > 0)
                             {
                                 for (int i3 = 0; i3 < i2; i3++)
@@ -282,7 +302,24 @@ namespace OsEngine.OsOptimizer
                         {
                             // at the current index you can increment the value
                             // по текущему индексу можно приращивать значение
-                            parameter.ValueDecimal = parameter.ValueDecimal + parameter.ValueDecimalStep;
+                            if (parameter.StepType == StrategyParameterStepType.Absolute)
+                            {
+                                parameter.ValueDecimal = parameter.ValueDecimal + parameter.ValueDecimalStep;
+                            }
+                            else if(parameter.StepType == StrategyParameterStepType.Percent)
+                            {
+                                decimal newValue = parameter.ValueDecimal + Math.Abs(parameter.ValueDecimal * (parameter.ValueDecimalStep / 100));
+
+                                newValue = Math.Round(newValue, 6);
+
+                                if (newValue > parameter.ValueDecimalStop)
+                                {
+                                    newValue = parameter.ValueDecimalStop;
+                                }
+
+                                parameter.ValueDecimal = newValue;
+                            }
+
                             if (i2 > 0)
                             {
                                 for (int i3 = 0; i3 < i2; i3++)
@@ -292,6 +329,7 @@ namespace OsEngine.OsOptimizer
                                     ReloadParam(optimizedParamToCheckCount[i3]);
                                 }
                             }
+
                             countBots++;
                             break;
                         }
@@ -305,7 +343,25 @@ namespace OsEngine.OsOptimizer
                         {
                             // at the current index you can increment the value
                             // по текущему индексу можно приращивать значение
-                            parameter.ValueDecimal = parameter.ValueDecimal + parameter.ValueDecimalStep;
+
+                            if (parameter.StepType == StrategyParameterStepType.Absolute)
+                            {
+                                parameter.ValueDecimal = Math.Abs(parameter.ValueDecimal + parameter.ValueDecimalStep);
+                            }
+                            else if (parameter.StepType == StrategyParameterStepType.Percent)
+                            {
+                                decimal newValue = parameter.ValueDecimal + Math.Abs(parameter.ValueDecimal * (parameter.ValueDecimalStep / 100));
+
+                                newValue = Math.Round(newValue, 6);
+
+                                if (newValue > parameter.ValueDecimalStop)
+                                {
+                                    newValue = parameter.ValueDecimalStop;
+                                }
+
+                                parameter.ValueDecimal = newValue;
+                            }
+
                             if (i2 > 0)
                             {
                                 for (int i3 = 0; i3 < i2; i3++)
@@ -381,7 +437,27 @@ namespace OsEngine.OsOptimizer
                         {
                             // at the current index you can increment the value
                             // по текущему индексу можно приращивать значение
-                            parameter.ValueInt = parameter.ValueInt + parameter.ValueIntStep;
+                            if (parameter.StepType == StrategyParameterStepType.Absolute)
+                            {
+                                parameter.ValueInt = parameter.ValueInt + parameter.ValueIntStep;
+                            }
+                            else if (parameter.StepType == StrategyParameterStepType.Percent)
+                            {
+                                int newValue = parameter.ValueInt + Math.Abs(Convert.ToInt32(parameter.ValueInt * Convert.ToDecimal(parameter.ValueIntStep) / 100));
+
+                                if (newValue == parameter.ValueInt)
+                                {
+                                    newValue = parameter.ValueInt + 1;
+                                }
+
+                                if (newValue > parameter.ValueIntStop)
+                                {
+                                    newValue = parameter.ValueIntStop;
+                                }
+
+                                parameter.ValueInt = newValue;
+                            }
+
                             if (i2 > 0)
                             {
                                 for (int i3 = 0; i3 < i2; i3++)
@@ -404,7 +480,24 @@ namespace OsEngine.OsOptimizer
                         {
                             // at the current index you can increment the value
                             // по текущему индексу можно приращивать значение
-                            parameter.ValueDecimal = parameter.ValueDecimal + parameter.ValueDecimalStep;
+                            if (parameter.StepType == StrategyParameterStepType.Absolute)
+                            {
+                                parameter.ValueDecimal = parameter.ValueDecimal + parameter.ValueDecimalStep;
+                            }
+                            else if (parameter.StepType == StrategyParameterStepType.Percent)
+                            {
+                                decimal newValue = parameter.ValueDecimal + Math.Abs(parameter.ValueDecimal * (parameter.ValueDecimalStep / 100));
+
+                                newValue = Math.Round(newValue, 6);
+
+                                if (newValue > parameter.ValueDecimalStop)
+                                {
+                                    newValue = parameter.ValueDecimalStop;
+                                }
+
+                                parameter.ValueDecimal = newValue;
+                            }
+
                             if (i2 > 0)
                             {
                                 for (int i3 = 0; i3 < i2; i3++)
@@ -426,7 +519,25 @@ namespace OsEngine.OsOptimizer
                         {
                             // at the current index you can increment the value
                             // по текущему индексу можно приращивать значение
-                            parameter.ValueDecimal = parameter.ValueDecimal + parameter.ValueDecimalStep;
+
+                            if (parameter.StepType == StrategyParameterStepType.Absolute)
+                            {
+                                parameter.ValueDecimal = parameter.ValueDecimal + parameter.ValueDecimalStep;
+                            }
+                            else if (parameter.StepType == StrategyParameterStepType.Percent)
+                            {
+                                decimal newValue = parameter.ValueDecimal + Math.Abs(parameter.ValueDecimal * (parameter.ValueDecimalStep / 100));
+
+                                newValue = Math.Round(newValue, 6);
+
+                                if (newValue > parameter.ValueDecimalStop)
+                                {
+                                    newValue = parameter.ValueDecimalStop;
+                                }
+
+                                parameter.ValueDecimal = newValue;
+                            }
+
                             if (i2 > 0)
                             {
                                 for (int i3 = 0; i3 < i2; i3++)
@@ -594,6 +705,7 @@ namespace OsEngine.OsOptimizer
                         ((StrategyParameterInt)parametersToCopy[i]).ValueIntStop,
                         ((StrategyParameterInt)parametersToCopy[i]).ValueIntStep);
                     ((StrategyParameterInt)newParam).ValueInt = ((StrategyParameterInt)parametersToCopy[i]).ValueIntStart;
+                    ((StrategyParameterInt)newParam).StepType = ((StrategyParameterInt)parametersToCopy[i]).StepType;
                 }
                 else if (parametersToCopy[i].Type == StrategyParameterType.Decimal)
                 {
@@ -603,6 +715,7 @@ namespace OsEngine.OsOptimizer
                         ((StrategyParameterDecimal)parametersToCopy[i]).ValueDecimalStop,
                         ((StrategyParameterDecimal)parametersToCopy[i]).ValueDecimalStep);
                     ((StrategyParameterDecimal)newParam).ValueDecimal = ((StrategyParameterDecimal)parametersToCopy[i]).ValueDecimalStart;
+                    ((StrategyParameterDecimal)newParam).StepType = ((StrategyParameterDecimal)parametersToCopy[i]).StepType;
                 }
                 else if (parametersToCopy[i].Type == StrategyParameterType.DecimalCheckBox)
                 {
@@ -613,6 +726,7 @@ namespace OsEngine.OsOptimizer
                         ((StrategyParameterDecimalCheckBox)parametersToCopy[i]).ValueDecimalStep,
                         Convert.ToBoolean(((StrategyParameterDecimalCheckBox)parametersToCopy[i]).CheckState));
                     ((StrategyParameterDecimalCheckBox)newParam).ValueDecimal = ((StrategyParameterDecimalCheckBox)parametersToCopy[i]).ValueDecimalStart;
+                    ((StrategyParameterDecimalCheckBox)newParam).StepType = ((StrategyParameterDecimalCheckBox)parametersToCopy[i]).StepType;
                 }
 
                 newParameters.Add(newParam);
@@ -782,21 +896,21 @@ namespace OsEngine.OsOptimizer
                 }
                 else if (sources[i].TabType == BotTabType.SyntheticBond)
                 {// BotTabSyntheticBond
-                    BotTabSyntheticBond synthBond = (BotTabSyntheticBond)sources[i];
+                    BotTabSyntheticBond botTabSyntheticBond = (BotTabSyntheticBond)sources[i];
 
-                    for (int i2 = 0; i2 < synthBond.SyntheticBondSeries.Count; i2++)
+                    for (int i2 = 0; i2 < botTabSyntheticBond.SyntheticBondSeries.Count; i2++)
                     {
-                        SyntheticBondSeries series = synthBond.SyntheticBondSeries[i2];
+                        SyntheticBondSeries series = botTabSyntheticBond.SyntheticBondSeries[i2];
 
-                        if (series.BaseTab != null
-                            && series.BaseTab.Connector != null
-                            && series.BaseTab.Connector.SecurityName != null)
+                        if (series.PatternBaseTab != null
+                            && series.PatternBaseTab.Connector != null
+                            && series.PatternBaseTab.Connector.SecurityName != null)
                         {
-                            Security baseSec = FindSecurityByName(series.BaseTab.Connector.SecurityName);
+                            Security baseSec = FindSecurityByName(series.PatternBaseTab.Connector.SecurityName);
 
                             if (baseSec != null)
                             {
-                                server.GetDataToSecurity(baseSec, series.BaseTab.Connector.TimeFrame,
+                                server.GetDataToSecurity(baseSec, series.PatternBaseTab.Connector.TimeFrame,
                                     report.Faze.TimeStart, report.Faze.TimeEnd);
                             }
                         }
@@ -808,44 +922,43 @@ namespace OsEngine.OsOptimizer
 
                         for (int i3 = 0; i3 < series.SyntheticBonds.Count; i3++)
                         {
-                            SyntheticBond settings = series.SyntheticBonds[i3];
+                            SyntheticBond syntheticBond = series.SyntheticBonds[i3];
 
-                            if (settings.FuturesIcebergParameters != null
-                                && settings.FuturesIcebergParameters.BotTab != null
-                                && settings.FuturesIcebergParameters.BotTab.Connector != null
-                                && settings.FuturesIcebergParameters.BotTab.Connector.SecurityName != null)
+                            if (syntheticBond.PatternFuturesTab != null
+                                && syntheticBond.PatternFuturesTab.Connector != null
+                                && syntheticBond.PatternFuturesTab.Connector.SecurityName != null)
                             {
-                                Security futSec = FindSecurityByName(settings.FuturesIcebergParameters.BotTab.Connector.SecurityName);
+                                Security futSec = FindSecurityByName(syntheticBond.PatternFuturesTab.Connector.SecurityName);
 
                                 if (futSec != null)
                                 {
-                                    server.GetDataToSecurity(futSec, settings.FuturesIcebergParameters.BotTab.Connector.TimeFrame,
+                                    server.GetDataToSecurity(futSec, syntheticBond.PatternFuturesTab.Connector.TimeFrame,
                                         report.Faze.TimeStart, report.Faze.TimeEnd);
                                 }
                             }
 
-                            if (settings.BaseRationingSecurity != null
-                                && settings.BaseRationingSecurity.Connector != null
-                                && settings.BaseRationingSecurity.Connector.SecurityName != null)
+                            if (syntheticBond.BaseRationingSecurity != null
+                                && syntheticBond.BaseRationingSecurity.Connector != null
+                                && syntheticBond.BaseRationingSecurity.Connector.SecurityName != null)
                             {
-                                Security rationingSec = FindSecurityByName(settings.BaseRationingSecurity.Connector.SecurityName);
+                                Security rationingSec = FindSecurityByName(syntheticBond.BaseRationingSecurity.Connector.SecurityName);
 
                                 if (rationingSec != null)
                                 {
-                                    server.GetDataToSecurity(rationingSec, settings.BaseRationingSecurity.Connector.TimeFrame,
+                                    server.GetDataToSecurity(rationingSec, syntheticBond.BaseRationingSecurity.Connector.TimeFrame,
                                         report.Faze.TimeStart, report.Faze.TimeEnd);
                                 }
                             }
 
-                            if (settings.FuturesRationingSecurity != null
-                                && settings.FuturesRationingSecurity.Connector != null
-                                && settings.FuturesRationingSecurity.Connector.SecurityName != null)
+                            if (syntheticBond.FuturesRationingSecurity != null
+                                && syntheticBond.FuturesRationingSecurity.Connector != null
+                                && syntheticBond.FuturesRationingSecurity.Connector.SecurityName != null)
                             {
-                                Security rationingSec = FindSecurityByName(settings.FuturesRationingSecurity.Connector.SecurityName);
+                                Security rationingSec = FindSecurityByName(syntheticBond.FuturesRationingSecurity.Connector.SecurityName);
 
                                 if (rationingSec != null)
                                 {
-                                    server.GetDataToSecurity(rationingSec, settings.FuturesRationingSecurity.Connector.TimeFrame,
+                                    server.GetDataToSecurity(rationingSec, syntheticBond.FuturesRationingSecurity.Connector.TimeFrame,
                                         report.Faze.TimeStart, report.Faze.TimeEnd);
                                 }
                             }
@@ -1296,9 +1409,9 @@ namespace OsEngine.OsOptimizer
                         && curBot.TabsSyntheticBond != null
                         && curBot.TabsSyntheticBond.Count > 0
                         && curBot.TabsSyntheticBond[0].SyntheticBondSeries.Count > 0
-                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].BaseTab != null
-                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].BaseTab.Connector != null
-                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].BaseTab.Connector.ServerUid == serverNum)
+                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].PatternBaseTab != null
+                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].PatternBaseTab.Connector != null
+                        && curBot.TabsSyntheticBond[0].SyntheticBondSeries[0].PatternBaseTab.Connector.ServerUid == serverNum)
                     {
                         bot = curBot;
                         _botsInTest.RemoveAt(i);
@@ -1348,6 +1461,12 @@ namespace OsEngine.OsOptimizer
                         TimeToEndChangeEvent(timeToEnd);
                     }
                 }
+            }
+
+            if (bot != null)
+            {
+                // грузим индикаторы робота в кэш сервер
+                AindicatorCacheServer.TrySetIndicatorValuesInCache(bot);
             }
 
             if (bot != null)

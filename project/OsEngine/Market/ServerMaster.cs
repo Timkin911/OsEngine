@@ -91,6 +91,7 @@ using OsEngine.Market.Servers.BitGetData;
 using OsEngine.Market.Servers.MetaTrader5;
 using OsEngine.Market.Servers.QscalpMarketDepth;
 using OsEngine.Market.Servers.TData;
+using OsEngine.Market.Servers.BitGetUnified;
 
 namespace OsEngine.Market
 {
@@ -306,8 +307,6 @@ namespace OsEngine.Market
 
         public static event Action ServerMasterActivateInTesterRegimeEvent;
 
-        public static event Action ServerMasterActivateInRealRegimeEvent;
-
         public static event Action ServerMasterActivateInOptimizerRegimeEvent;
 
         #endregion
@@ -383,6 +382,7 @@ namespace OsEngine.Market
                 serverTypes.Add(ServerType.TelegramNews);
                 serverTypes.Add(ServerType.BinanceData);
                 serverTypes.Add(ServerType.AscendexSpot);
+                serverTypes.Add(ServerType.BitGetUnified);
 
                 // а теперь сортируем в зависимости от предпочтений пользователя
 
@@ -650,6 +650,10 @@ namespace OsEngine.Market
 
                     SaveMostPopularServers(type);
 
+                    if (type == ServerType.BitGetUnified)
+                    {
+                        newServer = new BitGetUnifiedServer();
+                    }
                     if (type == ServerType.TDataHistory)
                     {
                         newServer = new TDataServer();
@@ -1710,6 +1714,10 @@ namespace OsEngine.Market
                 {
                     serverPermission = new TDataServerPermission();
                 }
+                else if (type == ServerType.BitGetUnified)
+                {
+                    serverPermission = new BitGetUnifiedServerPermission();
+                }
 
                 if (serverPermission != null)
                 {
@@ -2534,6 +2542,12 @@ namespace OsEngine.Market
         /// downloading historical data from T-Invest archives
         /// скачивание исторических данных из архивов T-Invest
         /// </summary>
-        TDataHistory
+        TDataHistory,
+
+        /// <summary>
+        /// Unified API for exchange BitGet (spot and futures)
+        /// Унифицированный API для биржи BitGet (спот и фьючерсы)
+        /// </summary>
+        BitGetUnified
     }
 }

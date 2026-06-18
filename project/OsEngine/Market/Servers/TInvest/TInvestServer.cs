@@ -21,11 +21,15 @@ using Order = OsEngine.Entity.Order;
 using Trade = OsEngine.Entity.Trade;
 using Security = OsEngine.Entity.Security;
 using Portfolio = OsEngine.Entity.Portfolio;
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using Grpc.Net.Client;
 using Grpc.Core;
 using System.Threading.Tasks;
+using OsEngine.Market.Servers.Bybit.Entities;
 
 namespace OsEngine.Market.Servers.TInvest
 {
@@ -1837,11 +1841,13 @@ namespace OsEngine.Market.Servers.TInvest
                     {
                         SendLogMessage($"Couldn't get candles for {security.Name}. Info: probably invalid time interval {fromDateTime}UTC - {toDateTime}UTC", LogMessageType.System);
                         _getCandlesErrorsCount++;
+                        Thread.Sleep(300);
                     }
                     else
                     {
                         SendLogMessage($"Error getting candles for {security.Name}. Info: {message}", LogMessageType.System);
                         _getCandlesErrorsCount++;
+                        Thread.Sleep(300);
                     }  
                 }
                 catch (Exception ex)
@@ -1853,6 +1859,7 @@ namespace OsEngine.Market.Servers.TInvest
                     }
 
                     _getCandlesErrorsCount++;
+                    Thread.Sleep(300);
 
                     SendLogMessage($"Error getting candles for {security.Name}: " + ex.ToString(),
                         LogMessageType.System);
@@ -1876,7 +1883,7 @@ namespace OsEngine.Market.Servers.TInvest
                 if (_getCandlesErrorsCount >=8
                      && ServerStatus != ServerConnectStatus.Disconnect)
                 {
-                    SendLogMessage(OsLocalization.Market.Label322, LogMessageType.Error);
+                    SendLogMessage(OsLocalization.Market.Label322 + "\n Security: " + security.Name, LogMessageType.Error);
                     ServerStatus = ServerConnectStatus.Disconnect;
                     DisconnectEvent();
                 }
@@ -2050,10 +2057,9 @@ namespace OsEngine.Market.Servers.TInvest
 
         #region 6 gRPC streams creation
 
-        //private readonly string _gRPCHost = "sandbox-invest-public-api.tbank.ru:443"; // sandbox 
-        private readonly string _gRPCHost = "https://invest-public-api.tinkoff.ru:443"; // prod  as of v1.40 should be tbank.ru but doesn't work due to SSL certificate issue
+        private readonly string _gRPCHost = "https://invest-public-api.tbank.ru:443"; // prod
+        private static readonly Lazy<X509Certificate2[]> _tInvestCertificates = new Lazy<X509Certificate2[]>(LoadTInvestCertificates);
         private Metadata _gRpcMetadata;
-        private Metadata _gRpcMetadataTwo;
 
         private GrpcChannel _channel;
         private CancellationTokenSource _cancellationTokenSource;
@@ -2099,6 +2105,36 @@ namespace OsEngine.Market.Servers.TInvest
             SendLogMessage($"User stream limits: {limits}", LogMessageType.User);
         }
 
+        private static X509Certificate2[] LoadTInvestCertificates()
+        {
+            var assembly = typeof(TInvestServer).Assembly;
+
+            string[] resourceNames = new[]
+            {
+                "OsEngine.Market.Servers.TInvest.Certificates.russian_trusted_root_ca.cer",
+                "OsEngine.Market.Servers.TInvest.Certificates.russian_trusted_sub_ca.cer"
+            };
+
+            var certificates = new List<X509Certificate2>(resourceNames.Length);
+
+            foreach (string resourceName in resourceNames)
+            {
+                using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        throw new InvalidOperationException($"T-Invest certificate resource not found: {resourceName}");
+                    }
+
+                    byte[] data = new byte[stream.Length];
+                    stream.ReadExactly(data, 0, data.Length);
+                    certificates.Add(X509CertificateLoader.LoadCertificate(data));
+                }
+            }
+
+            return certificates.ToArray();
+        }
+
         private void CreateStreamsConnection()
         {
             try
@@ -2107,33 +2143,49 @@ namespace OsEngine.Market.Servers.TInvest
 
                 _gRpcMetadata.Add("Authorization", $"Bearer {_accessToken}");
                 _gRpcMetadata.Add("x-app-name", "OsEngine");
-
-                _gRpcMetadataTwo = new Metadata();
-
-                _gRpcMetadataTwo.Add("Authorization", $"Bearer {_accessToken}");
-                _gRpcMetadataTwo.Add("x-app-name", "HappyUsersSoft");
                 
                 _cancellationTokenSource = new CancellationTokenSource();
+
+                X509Certificate2[] tInvestCertificates = _tInvestCertificates.Value;
+
+                var socketsHandler = new SocketsHttpHandler()
+                {
+                    // KeepAlive настройки
+                    KeepAlivePingDelay = TimeSpan.FromSeconds(10),
+                    KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
+                    KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
+
+                    // Прокси настройки
+                    Proxy = _proxy,
+                    UseProxy = _proxy != null,
+
+                    // Оптимизации
+                    PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+                    PooledConnectionLifetime = TimeSpan.FromHours(1),
+                    EnableMultipleHttp2Connections = true,
+
+                    // SSL настройки с доверенными корнями НУЦ Минцифры РФ
+                    SslOptions = new SslClientAuthenticationOptions
+                    {
+                        EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12
+                                            | System.Security.Authentication.SslProtocols.Tls13,
+                        CertificateChainPolicy = new X509ChainPolicy
+                        {
+                            RevocationMode = X509RevocationMode.NoCheck,
+                            TrustMode = X509ChainTrustMode.CustomRootTrust,
+                        }
+                    }
+                };
+
+                foreach (X509Certificate2 cert in tInvestCertificates)
+                {
+                    socketsHandler.SslOptions.CertificateChainPolicy.CustomTrustStore.Add(cert);
+                }
 
                 _channel = GrpcChannel.ForAddress(_gRPCHost, new GrpcChannelOptions
                 {
                     Credentials = ChannelCredentials.SecureSsl,
-                    HttpHandler = new SocketsHttpHandler()
-                    {
-                        // KeepAlive настройки
-                        KeepAlivePingDelay = TimeSpan.FromSeconds(10),
-                        KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
-                        KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
-
-                        // Прокси настройки
-                        Proxy = _proxy,
-                        UseProxy = _proxy != null,
-
-                        // Оптимизации
-                        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
-                        PooledConnectionLifetime = TimeSpan.FromHours(1),
-                        EnableMultipleHttp2Connections = true
-                    }
+                    HttpHandler = socketsHandler
                 });
 
                 _usersClient = new UsersService.UsersServiceClient(_channel);
@@ -2641,7 +2693,7 @@ namespace OsEngine.Market.Servers.TInvest
                     return;
                 }
             }
-            catch (Exception exception)
+            catch (Exception)
             {
                 if (_securityStreamMap.ContainsKey(security.NameId))
                 {
@@ -2818,6 +2870,11 @@ namespace OsEngine.Market.Servers.TInvest
                         {
                             depth.Asks.Add(new MarketDepthLevel { Price = (double)GetValue(ask.Price), Ask = (double)ask.Quantity });
                         }   
+                    }
+
+                    if (_openInterestData.TryGetValue(security.Name, out var oi))
+                    {
+                        depth.OpenInterest = oi.OpenInterest_;
                     }
 
                     if (depth.Asks.Count > 0 || depth.Bids.Count > 0)
@@ -3975,59 +4032,7 @@ namespace OsEngine.Market.Servers.TInvest
 
         private Metadata GetMetaData(string securityName)
         {
-            // создаём базовый список
-            if (_tSecurities.Count == 0)
-            {
-                _tSecurities.Add("TPAY", new TinSecuritiesData());  // TPAY - пассисный доход
-                _tSecurities.Add("TDIV@", new TinSecuritiesData()); // TDIV@ - дивидендные акции
-                _tSecurities.Add("TRND@", new TinSecuritiesData()); // TRND@ - трендовые акции
-                _tSecurities.Add("TKVM", new TinSecuritiesData());  // TKVM - квадратные метры
-                _tSecurities.Add("TLCB@", new TinSecuritiesData()); // TLCB@ - валютные облигации
-                _tSecurities.Add("TOFZ@", new TinSecuritiesData()); // TOFZ@ - офзшки
-
-                _tSecurities.Add("TGLD@", new TinSecuritiesData()); // TGLD@ - золото
-                _tSecurities.Add("TITR@", new TinSecuritiesData()); // TITR@ - российские технологии
-                _tSecurities.Add("T", new TinSecuritiesData());     // Т - акции Т Технологии
-                _tSecurities.Add("TMON@", new TinSecuritiesData()); // TMON@ - фонд денежного рынка
-                _tSecurities.Add("TMOS@", new TinSecuritiesData()); // TMOS@ - Крупнейшие компании РФ
-
-                _tSecurities.Add("TKVC", new TinSecuritiesData());  // TKVC - стартапы России
-                _tSecurities.Add("TRRE", new TinSecuritiesData());  // TRRE - репаблик РЕДС Москва
-                _tSecurities.Add("TRUR@", new TinSecuritiesData()); // TRUR@ - фонд "вечный портфель"
-                _tSecurities.Add("TVEN", new TinSecuritiesData());  // TVEN - фонд "венчурные инвестиции"
-            }
-
-            TinSecuritiesData mySecurity;
-
-            if (_tSecurities.TryGetValue(securityName, out mySecurity) == true)
-            {
-                DateTime now = DateTime.Now;
-
-                if (now.Year == 2026
-                    && now.Month == 4
-                    && now.Day <= 20)
-                {
-                    return _gRpcMetadataTwo;
-                }
-
-                if (mySecurity.TimeOfTrade.DayOfYear == now.DayOfYear)
-                {
-                    mySecurity.OrdersCount++;
-
-                    if(mySecurity.OrdersCount < 15)
-                    {
-                        return _gRpcMetadataTwo;
-                    }
-                }
-                else
-                {
-                    mySecurity.TimeOfTrade = now;
-                    mySecurity.OrdersCount = 0;
-                }
-            }
-
             return _gRpcMetadata;
-            
         }
 
         public void ChangeOrderPrice(Order order, decimal newPrice)

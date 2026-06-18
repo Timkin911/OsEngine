@@ -84,7 +84,12 @@ namespace OsEngine.OsTrader.Panels.Tab
 
                 _chartMaster = new ChartCandleMaster(TabName, StartProgram);
                 _chartMaster.LogMessageEvent += SetNewLogMessage;
-                _chartMaster.SetNewSecurity(_connector.SecurityName, _connector.TimeFrameBuilder, _connector.PortfolioName, _connector.ServerFullName);
+
+                if (_connector.SecurityName != null && _connector.PortfolioName != null && _connector.ServerFullName != null)
+                {
+                    _chartMaster.SetNewSecurity(_connector.SecurityName, _connector.TimeFrameBuilder, _connector.PortfolioName, _connector.ServerFullName);
+                }
+
                 _chartMaster.SetPosition(_journal.AllPosition);
                 _chartMaster.IndicatorUpdateEvent += _chartMaster_IndicatorUpdateEvent;
                 _chartMaster.IndicatorManuallyCreateEvent += _chartMaster_IndicatorManuallyCreateEvent;
@@ -387,6 +392,9 @@ namespace OsEngine.OsTrader.Panels.Tab
                     _connector.DialogClosed -= _connector_DialogClosed;
                     _connector.FundingChangedEvent -= _connector_FundingChangedEvent;
                     _connector.NewVolume24hChangedEvent -= _connector_NewVolume24hChangedEvent;
+
+                    if (_connector.TimeFrameBuilder != null)
+                        _connector.TimeFrameBuilder.Delete();
 
                     _connector.Delete();
                     _connector.LogMessageEvent -= SetNewLogMessage;
@@ -2020,6 +2028,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                     return null;
                 }
 
+                if(minMillisecondsDistance < 5)
+                {
+                    minMillisecondsDistance = 5;
+                }
+
                 Position newDeal = new Position();
                 newDeal.Number = NumberGen.GetNumberDeal(StartProgram);
                 newDeal.Direction = Side.Buy;
@@ -2343,6 +2356,68 @@ namespace OsEngine.OsTrader.Panels.Tab
                 positionOpener.Side = Side.Buy;
                 positionOpener.SignalType = signalType;
                 positionOpener.OrderPriceType = OrderPriceType.Market;
+
+                PositionOpenerToStop.Add(positionOpener);
+                UpdateStopLimits();
+            }
+            catch (Exception error)
+            {
+                SetNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
+        /// Enter position Long at price intersection by Iceberg
+        /// </summary>
+        /// <param name="volume">volume</param>
+        /// <param name="priceLimit">order price</param>
+        /// <param name="priceRedLine">the price of the line, after reaching which a buy order will be placed</param>
+        /// <param name="activateType">activation type</param>
+        /// <param name="expiresBars">life time in candles count</param>
+        /// <param name="signalType">the opening signal. It will be written to the position as SignalTypeOpen</param>
+        /// <param name="lifeTimeType">order life type</param>
+        /// <param name="icebergOrdersCount">number of orders in the iceberg order</param>
+        /// <param name="icebergMillisecondsDistance">minimum time interval between iceberg orders in milliseconds</param>
+        public void BuyAtStopMarketIceberg(decimal volume, decimal priceLimit, decimal priceRedLine,
+            StopActivateType activateType, int expiresBars, string signalType, PositionOpenerToStopLifeTimeType lifeTimeType, 
+            int icebergOrdersCount, int icebergMillisecondsDistance)
+        {
+            try
+            {
+                if (_connector.IsConnected == false
+                   || _connector.IsReadyToTrade == false)
+                {
+                    SetNewLogMessage(OsLocalization.Trader.Label191, LogMessageType.Error);
+                    return;
+                }
+
+                PositionOpenerToStopLimit positionOpener = new PositionOpenerToStopLimit();
+
+                positionOpener.Volume = volume;
+                positionOpener.Security = Security.Name;
+                positionOpener.Number = NumberGen.GetNumberDeal(StartProgram);
+                positionOpener.ExpiresBars = expiresBars;
+                positionOpener.TimeCreate = TimeServerCurrent;
+                positionOpener.OrderCreateBarNumber = CandlesFinishedOnly.Count;
+                positionOpener.TabName = TabName;
+                positionOpener.LifeTimeType = lifeTimeType;
+
+                if (StartProgram == StartProgram.IsOsTrader)
+                {
+                    positionOpener.PriceOrder = priceLimit;
+                }
+                else
+                {
+                    positionOpener.PriceOrder = priceRedLine;
+                }
+
+                positionOpener.PriceRedLine = priceRedLine;
+                positionOpener.ActivateType = activateType;
+                positionOpener.Side = Side.Buy;
+                positionOpener.SignalType = signalType;
+                positionOpener.OrderPriceType = OrderPriceType.Iceberg;
+                positionOpener.IcebergOrdersCount = icebergOrdersCount;
+                positionOpener.IcebergMillisecondsDistance = icebergMillisecondsDistance;
 
                 PositionOpenerToStop.Add(positionOpener);
                 UpdateStopLimits();
@@ -3148,6 +3223,10 @@ namespace OsEngine.OsTrader.Panels.Tab
                     return null;
                 }
 
+                if (minMillisecondsDistance < 5)
+                {
+                    minMillisecondsDistance = 5;
+                }
 
                 Position newDeal = new Position();
                 newDeal.Number = NumberGen.GetNumberDeal(StartProgram);
@@ -3481,6 +3560,68 @@ namespace OsEngine.OsTrader.Panels.Tab
                 positionOpener.Side = Side.Sell;
                 positionOpener.SignalType = signalType;
                 positionOpener.OrderPriceType = OrderPriceType.Market;
+
+                PositionOpenerToStop.Add(positionOpener);
+                UpdateStopLimits();
+            }
+            catch (Exception error)
+            {
+                SetNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
+        /// Enter position Short at price intersection by Iceberg
+        /// </summary>
+        /// <param name="volume">volume</param>
+        /// <param name="priceLimit">order price</param>
+        /// <param name="priceRedLine">the price of the line, after reaching which a buy order will be placed</param>
+        /// <param name="activateType">activation type</param>
+        /// <param name="expiresBars">life time in candles count</param>
+        /// <param name="signalType">the opening signal. It will be written to the position as SignalTypeOpen</param>
+        /// <param name="lifeTimeType">order life type</param>
+        /// <param name="icebergOrdersCount">number of orders in the iceberg order</param>
+        /// <param name="icebergMillisecondsDistance">minimum time interval between iceberg orders in milliseconds</param>
+        public void SellAtStopMarketIceberg(decimal volume, decimal priceLimit, decimal priceRedLine,
+            StopActivateType activateType, int expiresBars, string signalType, PositionOpenerToStopLifeTimeType lifeTimeType, 
+            int icebergOrdersCount, int icebergMillisecondsDistance)
+        {
+            try
+            {
+                if (_connector.IsConnected == false
+                   || _connector.IsReadyToTrade == false)
+                {
+                    SetNewLogMessage(OsLocalization.Trader.Label191, LogMessageType.Error);
+                    return;
+                }
+
+                PositionOpenerToStopLimit positionOpener = new PositionOpenerToStopLimit();
+
+                positionOpener.Volume = volume;
+                positionOpener.Security = Security.Name;
+                positionOpener.Number = NumberGen.GetNumberDeal(StartProgram);
+                positionOpener.ExpiresBars = expiresBars;
+                positionOpener.TimeCreate = TimeServerCurrent;
+                positionOpener.OrderCreateBarNumber = CandlesFinishedOnly.Count;
+                positionOpener.TabName = TabName;
+                positionOpener.LifeTimeType = lifeTimeType;
+
+                if (StartProgram == StartProgram.IsOsTrader)
+                {
+                    positionOpener.PriceOrder = priceLimit;
+                }
+                else
+                {
+                    positionOpener.PriceOrder = priceRedLine;
+                }
+
+                positionOpener.PriceRedLine = priceRedLine;
+                positionOpener.ActivateType = activateType;
+                positionOpener.Side = Side.Sell;
+                positionOpener.SignalType = signalType;
+                positionOpener.OrderPriceType = OrderPriceType.Iceberg;
+                positionOpener.IcebergOrdersCount = icebergOrdersCount;
+                positionOpener.IcebergMillisecondsDistance = icebergMillisecondsDistance;
 
                 PositionOpenerToStop.Add(positionOpener);
                 UpdateStopLimits();
@@ -4511,6 +4652,74 @@ namespace OsEngine.OsTrader.Panels.Tab
         }
 
         /// <summary>
+        /// Place a stop market iceberg order for a position
+        /// </summary>
+        /// <param name="position">position to be closed</param>
+        /// <param name="priceActivation">the price of the stop order, after reaching which the order is placed</param>
+        /// <param name="icebergOrdersCount">number of orders in the iceberg order</param>
+        /// <param name="icebergMillisecondsDistance">minimum time interval between iceberg orders in milliseconds</param>
+        public void CloseAtStopMarketIceberg(Position position, decimal priceActivation, int icebergOrdersCount,int icebergMillisecondsDistance)
+        {
+            try
+            {
+                if (position == null)
+                {
+                    return;
+                }
+
+                if (position.State == PositionStateType.Done ||
+                    position.State == PositionStateType.OpeningFail)
+                {
+                    return;
+                }
+
+                position.StopIsIceberg = true;
+                position.StopIcebergOrdersCount = icebergOrdersCount;
+                position.StopIcebergMillisecondsDistance = icebergMillisecondsDistance;
+                CloseAtStopMarket(position,priceActivation);
+            }
+            catch (Exception error)
+            {
+                SetNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
+        /// Place a stop market iceberg order for a position
+        /// </summary>
+        /// <param name="position">position to be closed</param>
+        /// <param name="priceActivation">the price of the stop order, after reaching which the order is placed</param>
+        /// <param name="icebergOrdersCount">number of orders in the iceberg order</param>
+        /// <param name="icebergMillisecondsDistance">minimum time interval between iceberg orders in milliseconds</param>
+        /// <param name="signalType">close position signal name</param>
+        public void CloseAtStopMarketIceberg(Position position, decimal priceActivation, int icebergOrdersCount, int icebergMillisecondsDistance, string signalType)
+        {
+            try
+            {
+                if (position == null)
+                {
+                    return;
+                }
+
+                if (position.State == PositionStateType.Done ||
+                    position.State == PositionStateType.OpeningFail)
+                {
+                    return;
+                }
+
+                position.SignalTypeStop = signalType;
+                position.StopIsIceberg = true;
+                position.StopIcebergOrdersCount = icebergOrdersCount;
+                position.StopIcebergMillisecondsDistance = icebergMillisecondsDistance;
+                CloseAtStopMarket(position, priceActivation);
+            }
+            catch (Exception error)
+            {
+                SetNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
         /// Place a trailing stop order for a position
         /// </summary>
         /// <param name="position">position to be closed</param>
@@ -4691,6 +4900,74 @@ namespace OsEngine.OsTrader.Panels.Tab
         {
             position.SignalTypeProfit = signalType;
             CloseAtProfitMarket(position, priceActivation);
+        }
+
+        /// <summary>
+        /// Place a profit market iceberg order for a position
+        /// </summary>
+        /// <param name="position">position to be closed</param>
+        /// <param name="priceActivation">the price of the profit order, after reaching which the order is placed</param>
+        /// <param name="icebergOrdersCount">number of orders in the iceberg order</param>
+        /// <param name="icebergMillisecondsDistance">minimum time interval between iceberg orders in milliseconds</param>
+        public void CloseAtProfitMarketIceberg(Position position, decimal priceActivation, int icebergOrdersCount, int icebergMillisecondsDistance)
+        {
+            try
+            {
+                if (position == null)
+                {
+                    return;
+                }
+
+                if (position.State == PositionStateType.Done ||
+                    position.State == PositionStateType.OpeningFail)
+                {
+                    return;
+                }
+
+                position.ProfitIsIceberg = true;
+                position.ProfitIcebergOrdersCount = icebergOrdersCount;
+                position.ProfitIcebergMillisecondsDistance = icebergMillisecondsDistance;
+                CloseAtProfitMarket(position, priceActivation);
+            }
+            catch (Exception error)
+            {
+                SetNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
+        /// Place a profit market iceberg order for a position
+        /// </summary>
+        /// <param name="position">position to be closed</param>
+        /// <param name="priceActivation">the price of the profit order, after reaching which the order is placed</param>
+        /// <param name="icebergOrdersCount">number of orders in the iceberg order</param>
+        /// <param name="icebergMillisecondsDistance">minimum time interval between iceberg orders in milliseconds</param>
+        /// <param name="signalType">close position signal name</param>
+        public void CloseAtProfitMarketIceberg(Position position, decimal priceActivation, int icebergOrdersCount, int icebergMillisecondsDistance, string signalType)
+        {
+            try
+            {
+                if (position == null)
+                {
+                    return;
+                }
+
+                if (position.State == PositionStateType.Done ||
+                    position.State == PositionStateType.OpeningFail)
+                {
+                    return;
+                }
+
+                position.SignalTypeStop = signalType;
+                position.ProfitIsIceberg = true;
+                position.ProfitIcebergOrdersCount = icebergOrdersCount;
+                position.ProfitIcebergMillisecondsDistance = icebergMillisecondsDistance;
+                CloseAtProfitMarket(position, priceActivation);
+            }
+            catch (Exception error)
+            {
+                SetNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
         }
 
         /// <summary>
@@ -5860,13 +6137,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                             + " LastMarketPrice: " + lastTrade,
                             LogMessageType.System);
 
-                        if (position.StopIsMarket == false)
+                        if (position.StopIsIceberg == true
+                            && position.StopIsMarket == true
+                            && this.StartProgram == StartProgram.IsOsTrader)
                         {
-                            CloseDeal(position, OrderPriceType.Limit, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            CloseAtIcebergMarket(position, position.OpenVolume, position.StopIcebergOrdersCount, position.StopIcebergMillisecondsDistance);
                         }
                         else
                         {
-                            CloseDeal(position, OrderPriceType.Market, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            if (position.StopIsMarket == false)
+                            {
+                                CloseDeal(position, OrderPriceType.Limit, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
+                            else
+                            {
+                                CloseDeal(position, OrderPriceType.Market, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
                         }
 
                         PositionStopActivateEvent?.Invoke(position);
@@ -5890,13 +6176,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                             + " LastMarketPrice: " + lastTrade,
                             LogMessageType.System);
 
-                        if (position.StopIsMarket == false)
+                        if (position.StopIsIceberg == true
+                         && position.StopIsMarket == true
+                         && this.StartProgram == StartProgram.IsOsTrader)
                         {
-                            CloseDeal(position, OrderPriceType.Limit, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            CloseAtIcebergMarket(position, position.OpenVolume, position.StopIcebergOrdersCount, position.StopIcebergMillisecondsDistance);
                         }
                         else
                         {
-                            CloseDeal(position, OrderPriceType.Market, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            if (position.StopIsMarket == false)
+                            {
+                                CloseDeal(position, OrderPriceType.Limit, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
+                            else
+                            {
+                                CloseDeal(position, OrderPriceType.Market, position.StopOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
                         }
 
                         PositionStopActivateEvent?.Invoke(position);
@@ -5923,13 +6218,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                             + " LastMarketPrice: " + lastTrade,
                             LogMessageType.System);
 
-                        if (position.ProfitIsMarket == false)
+                        if (position.ProfitIsIceberg == true
+                         && position.ProfitIsMarket == true
+                         && this.StartProgram == StartProgram.IsOsTrader)
                         {
-                            CloseDeal(position, OrderPriceType.Limit, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            CloseAtIcebergMarket(position, position.OpenVolume, position.ProfitIcebergOrdersCount, position.ProfitIcebergMillisecondsDistance);
                         }
                         else
                         {
-                            CloseDeal(position, OrderPriceType.Market, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            if (position.ProfitIsMarket == false)
+                            {
+                                CloseDeal(position, OrderPriceType.Limit, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
+                            else
+                            {
+                                CloseDeal(position, OrderPriceType.Market, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
                         }
 
                         PositionProfitActivateEvent?.Invoke(position);
@@ -5953,13 +6257,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                             + " LastMarketPrice: " + lastTrade,
                             LogMessageType.System);
 
-                        if (position.ProfitIsMarket == false)
+                        if (position.ProfitIsIceberg == true
+                         && position.ProfitIsMarket == true
+                         && this.StartProgram == StartProgram.IsOsTrader)
                         {
-                            CloseDeal(position, OrderPriceType.Limit, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            CloseAtIcebergMarket(position, position.OpenVolume, position.ProfitIcebergOrdersCount, position.ProfitIcebergMillisecondsDistance);
                         }
                         else
                         {
-                            CloseDeal(position, OrderPriceType.Market, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            if (position.ProfitIsMarket == false)
+                            {
+                                CloseDeal(position, OrderPriceType.Limit, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
+                            else
+                            {
+                                CloseDeal(position, OrderPriceType.Market, position.ProfitOrderPrice, ManualPositionSupport.SecondToClose, true, true);
+                            }
                         }
 
                         PositionProfitActivateEvent?.Invoke(position);
@@ -6283,13 +6596,26 @@ namespace OsEngine.OsTrader.Panels.Tab
                         {
                             PositionOpenerToStopLimit opener = PositionOpenerToStop[i];
 
+                            if (opener.OrderPriceType == OrderPriceType.Iceberg
+                             && this.StartProgram != StartProgram.IsOsTrader)
+                            {
+                                opener.OrderPriceType = OrderPriceType.Market;
+                            }
+
                             Position pos = null;
 
                             if (opener.PositionNumber == 0)
                             {
-                                pos = LongCreate(PositionOpenerToStop[i].PriceOrder,
-                                 PositionOpenerToStop[i].Volume, PositionOpenerToStop[i].OrderPriceType,
-                                 ManualPositionSupport.SecondToOpen, true, opener.SignalType);
+                                if(opener.OrderPriceType == OrderPriceType.Iceberg)
+                                {
+                                    pos = BuyAtIcebergMarket(opener.Volume, opener.IcebergOrdersCount, opener.IcebergMillisecondsDistance);
+                                }
+                                else
+                                {
+                                    pos = LongCreate(opener.PriceOrder,
+                                        opener.Volume, opener.OrderPriceType,
+                                        ManualPositionSupport.SecondToOpen, true, opener.SignalType);
+                                }
                             }
                             else
                             {
@@ -6308,15 +6634,15 @@ namespace OsEngine.OsTrader.Panels.Tab
                                 {
                                     if (pos.Direction == Side.Buy)
                                     {
-                                        LongUpdate(pos, PositionOpenerToStop[i].PriceOrder,
-                                            PositionOpenerToStop[i].Volume, ManualPositionSupport.SecondToOpen, true,
-                                            PositionOpenerToStop[i].OrderPriceType, false);
+                                        LongUpdate(pos, opener.PriceOrder,
+                                            opener.Volume, ManualPositionSupport.SecondToOpen, true,
+                                            opener.OrderPriceType, false);
                                     }
                                     else if (pos.Direction == Side.Sell)
                                     {
-                                        ClosePeaceOfDeal(pos, PositionOpenerToStop[i].OrderPriceType,
-                                            PositionOpenerToStop[i].PriceOrder, ManualPositionSupport.SecondToClose,
-                                            PositionOpenerToStop[i].Volume, true, true);
+                                        ClosePeaceOfDeal(pos, opener.OrderPriceType,
+                                            opener.PriceOrder, ManualPositionSupport.SecondToClose,
+                                            opener.Volume, true, true);
                                     }
                                 }
                             }
@@ -6341,13 +6667,26 @@ namespace OsEngine.OsTrader.Panels.Tab
                         {
                             PositionOpenerToStopLimit opener = PositionOpenerToStop[i];
 
+                            if (opener.OrderPriceType == OrderPriceType.Iceberg
+                             && this.StartProgram != StartProgram.IsOsTrader)
+                            {
+                                opener.OrderPriceType = OrderPriceType.Market;
+                            }
+
                             Position pos = null;
 
                             if (opener.PositionNumber == 0)
                             {
-                                pos = ShortCreate(PositionOpenerToStop[i].PriceOrder,
-                                    PositionOpenerToStop[i].Volume, PositionOpenerToStop[i].OrderPriceType,
+                                if (opener.OrderPriceType == OrderPriceType.Iceberg)
+                                {
+                                    pos = SellAtIcebergMarket(opener.Volume, opener.IcebergOrdersCount, opener.IcebergMillisecondsDistance);
+                                }
+                                else
+                                {
+                                    pos = ShortCreate(opener.PriceOrder,
+                                    opener.Volume, opener.OrderPriceType,
                                     ManualPositionSupport.SecondToOpen, true, opener.SignalType);
+                                }
                             }
                             else
                             {
@@ -6366,15 +6705,15 @@ namespace OsEngine.OsTrader.Panels.Tab
                                 {
                                     if (pos.Direction == Side.Sell)
                                     {
-                                        ShortUpdate(pos, PositionOpenerToStop[i].PriceOrder,
-                                            PositionOpenerToStop[i].Volume, ManualPositionSupport.SecondToOpen, true,
-                                            PositionOpenerToStop[i].OrderPriceType, false);
+                                        ShortUpdate(pos, opener.PriceOrder,
+                                            opener.Volume, ManualPositionSupport.SecondToOpen, true,
+                                            opener.OrderPriceType, false);
                                     }
                                     else if (pos.Direction == Side.Buy)
                                     {
-                                        ClosePeaceOfDeal(pos, PositionOpenerToStop[i].OrderPriceType,
-                                            PositionOpenerToStop[i].PriceOrder, ManualPositionSupport.SecondToClose,
-                                            PositionOpenerToStop[i].Volume, true, true);
+                                        ClosePeaceOfDeal(pos, opener.OrderPriceType,
+                                            opener.PriceOrder, ManualPositionSupport.SecondToClose,
+                                            opener.Volume, true, true);
                                     }
                                 }
                             }
@@ -6456,7 +6795,7 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     price = PriceBestAsk + Security.PriceStep * 40;
                 }
-                else if(order.Side == Side.Sell
+                else if (order.Side == Side.Sell
                     && PriceBestBid != 0)
                 {
                     price = PriceBestBid - Security.PriceStep * 40;
@@ -6785,6 +7124,15 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     return;
                 }
+
+                if (StartProgram == StartProgram.IsOsOptimizer
+                    && LastTimeCandleUpdate == DateTime.MinValue)
+                {
+                    _chartMaster.SetNewSecurity(_connector.SecurityName, _connector.TimeFrameBuilder, _connector.PortfolioName, _connector.PortfolioName);
+                }
+
+                LastTimeCandleUpdate = Connector.MarketTime;
+
                 AlertControlPosition();
 
                 if (PositionOpenerToStop != null &&

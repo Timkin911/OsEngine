@@ -115,6 +115,11 @@ namespace OsEngine.Market.AutoFollow
                 File.Delete(@"Engine\" + NameStrategyUniq + "-IgnoredPos.txt");
             }
 
+            if (_grid != null)
+            {
+                _grid.DataError -= Grid_DataError;
+            }
+
             _botIsDelete = true;
         }
 
@@ -137,6 +142,8 @@ namespace OsEngine.Market.AutoFollow
             DataGridView newGrid =
                 DataGridFactory.GetDataGridView(DataGridViewSelectionMode.CellSelect,
                 DataGridViewAutoSizeRowsMode.AllCells);
+
+            newGrid.DataError += Grid_DataError;
 
             newGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             DataGridViewTextBoxCell cell0 = new DataGridViewTextBoxCell();
@@ -184,6 +191,12 @@ namespace OsEngine.Market.AutoFollow
             _grid = newGrid;
         }
 
+        private void Grid_DataError(object sender, DataGridViewDataErrorEventArgs e)
+        {
+            e.ThrowException = false;
+            SendNewLogMessage(e.Exception.ToString(), Logging.LogMessageType.Error);
+        }
+
         private void _grid_Click(object sender, EventArgs e)
         {
             try
@@ -227,7 +240,7 @@ namespace OsEngine.Market.AutoFollow
 
                             // удалить позицию и вкладку
 
-                            BotTabSimple tab = _posTabs.Tabs.Find(t => t.Security.Name.StartsWith(newSec));
+                            BotTabSimple tab = _posTabs.Tabs.Find(t => t.Connector.SecurityName.StartsWith(newSec));
 
                             if (tab != null && tab.PositionsOpenAll.Count == 1)   // у бота есть позиция с таким инструментом
                             {
@@ -394,7 +407,7 @@ namespace OsEngine.Market.AutoFollow
                             continue;
                         }
 
-                        BotTabSimple tab = _posTabs.Tabs.Find(t => t.Security.Name.Equals(positionOnEx.SecurityNameCode));
+                        BotTabSimple tab = _posTabs.Tabs.Find(t => t.Connector.SecurityName.Equals(positionOnEx.SecurityNameCode));
 
                         if (tab != null && tab.PositionsOpenAll.Count > 0)   // у бота есть позиция с таким инструментом
                         {
@@ -468,6 +481,12 @@ namespace OsEngine.Market.AutoFollow
                                 if (_posTabs.SecuritiesNames[i2].SecurityName.Equals(securitiesToScreener[i].SecurityName))
                                 {
                                     isInArray = true;
+
+                                    if(_posTabs.SecuritiesNames[i2].IsOn == false)
+                                    {
+                                        _posTabs.SecuritiesNames[i2].IsOn = true;
+                                    }
+
                                     break;
                                 }
                             }
@@ -492,11 +511,18 @@ namespace OsEngine.Market.AutoFollow
 
                         for (int j = 0; j < securitiesToScreener.Count; j++)
                         {
-                            Tuple<Security, Side, decimal> sec = _notIgnoredSec.Find(s => s.Item1.Name == securitiesToScreener[j].SecurityName);
+                            ActivatedSecurity currentSecurity = securitiesToScreener[j];
 
-                            BotTabSimple tab = _posTabs.Tabs.Find(t => t.Security.Name == securitiesToScreener[j].SecurityName);
+                            Tuple<Security, Side, decimal> sec = _notIgnoredSec.Find(s => s.Item1.Name == currentSecurity.SecurityName);
 
-                            if (tab != null)
+                            BotTabSimple tab = _posTabs.Tabs.Find(t => t.Connector.SecurityName == currentSecurity.SecurityName);
+
+                            if (tab != null
+                                && tab.Security != null
+                                && tab.IsConnected
+                                && tab.PriceBestAsk != 0
+                                && tab.CandlesAll != null
+                                && tab.CandlesAll.Count > 0)
                             {
                                 Position newDeal = tab._dealCreator.CreatePosition(tab.TabName, sec.Item2, sec.Item2 == Side.Buy ? tab.PriceBestAsk : tab.PriceBestBid,
                                                    Math.Abs(sec.Item3), OrderPriceType.Market, tab.ManualPositionSupport.SecondToOpen, sec.Item1, tab.Portfolio,
@@ -521,7 +547,7 @@ namespace OsEngine.Market.AutoFollow
 
                         if (openPositionsInTab.Count == 0)
                         {
-                            _posTabs.RemoveTabBySecurityName(tabCurrent.Security.Name, tabCurrent.Security.NameClass);
+                            _posTabs.RemoveTabBySecurityName(tabCurrent.Connector.SecurityName, tabCurrent.Connector.SecurityClass);
                             Thread.Sleep(1000);
                             break;
                         }
@@ -538,15 +564,15 @@ namespace OsEngine.Market.AutoFollow
 
                                 if(string.IsNullOrEmpty(positionOnEx.SecurityNameClass) == false)
                                 {
-                                    if(positionOnEx.SecurityNameCode == tabCurrent.Security.Name
-                                        && positionOnEx.SecurityNameClass == tabCurrent.Security.NameClass)
+                                    if(positionOnEx.SecurityNameCode == tabCurrent.Connector.SecurityName
+                                        && positionOnEx.SecurityNameClass == tabCurrent.Connector.SecurityClass)
                                     {
                                         mySecurity = true;
                                     }
                                 }
                                 else
                                 {
-                                    if (positionOnEx.SecurityNameCode == tabCurrent.Security.Name)
+                                    if (positionOnEx.SecurityNameCode == tabCurrent.Connector.SecurityName)
                                     {
                                         mySecurity = true;
                                     }
@@ -562,7 +588,7 @@ namespace OsEngine.Market.AutoFollow
 
                             if(haveOnExchange == false)
                             {
-                                _posTabs.RemoveTabBySecurityName(tabCurrent.Security.Name, tabCurrent.Security.NameClass);
+                                _posTabs.RemoveTabBySecurityName(tabCurrent.Connector.SecurityName, tabCurrent.Connector.SecurityClass);
                                 Thread.Sleep(1000);
                                 break;
                             }
@@ -587,6 +613,20 @@ namespace OsEngine.Market.AutoFollow
                             }
 
                             Thread.Sleep(3000);
+                            break;
+                        }
+                    }
+
+                    // 5 проверяем экспирированные бумаги. Если Security равен null - удаляем такую вкладку
+
+                    for (int i = 0; i < _posTabs.Tabs.Count; i++)
+                    {
+                        BotTabSimple tabCurrent = _posTabs.Tabs[i];
+
+                        if (tabCurrent.Security == null)
+                        {
+                            _posTabs.RemoveTabBySecurityName(tabCurrent.Connector.SecurityName, tabCurrent.Connector.SecurityClass);
+                            Thread.Sleep(1000);
                             break;
                         }
                     }

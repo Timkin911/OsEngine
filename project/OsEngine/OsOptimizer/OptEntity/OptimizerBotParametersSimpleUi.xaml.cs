@@ -9,6 +9,8 @@ using OsEngine.Entity;
 using System.Windows.Forms.Integration;
 using System.Windows.Forms;
 using System;
+using OsEngine.Logging;
+using OsEngine.Market;
 
 namespace OsEngine.OsOptimizer.OptEntity
 {
@@ -61,13 +63,57 @@ namespace OsEngine.OsOptimizer.OptEntity
 
         private void OptimizerBotParametersSimpleUi_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            _report = null;
-            _faze = null;
+            try
+            {
+                if (HostParams1 != null)
+                {
+                    HostParams1.Child = null;
+                }
+                if (HostParams2 != null)
+                {
+                    HostParams2.Child = null;
+                }
+
+                if (_gridParams1 != null)
+                {
+                    _gridParams1.DataError -= Grid_DataError;
+                    DataGridFactory.ClearLinks(_gridParams1);
+                    _gridParams1.Rows.Clear();
+                    _gridParams1.Columns.Clear();
+                    _gridParams1.DataSource = null;
+                    _gridParams1.Dispose();
+                    _gridParams1 = null;
+                }
+
+                if (_gridParams2 != null)
+                {
+                    _gridParams2.DataError -= Grid_DataError;
+                    DataGridFactory.ClearLinks(_gridParams2);
+                    _gridParams2.Rows.Clear();
+                    _gridParams2.Columns.Clear();
+                    _gridParams2.DataSource = null;
+                    _gridParams2.Dispose();
+                    _gridParams2 = null;
+                }
+
+                _report = null;
+                _faze = null;
+
+                Closing -= OptimizerBotParametersSimpleUi_Closing;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
         }
 
         private OptimizerReport _report;
 
         private OptimizerFazeReport _faze;
+
+        private DataGridView _gridParams1;
+
+        private DataGridView _gridParams2;
 
         private void PaintParameters(List<IIStrategyParameter> parameters, WindowsFormsHost host)
         {
@@ -84,7 +130,23 @@ namespace OsEngine.OsOptimizer.OptEntity
                 grid.Rows.Add(row);
             }
 
+            if (host == HostParams1)
+            {
+                _gridParams1 = grid;
+            }
+            else if (host == HostParams2)
+            {
+                _gridParams2 = grid;
+            }
+
+            grid.DataError += Grid_DataError;
             host.Child = grid;
+        }
+
+        private void Grid_DataError(object sender, DataGridViewDataErrorEventArgs e)
+        {
+            e.ThrowException = false;
+            ServerMaster.SendNewLogMessage(e.Exception.ToString(), LogMessageType.Error);
         }
 
         private DataGridViewRow GetRow(IIStrategyParameter parameter)

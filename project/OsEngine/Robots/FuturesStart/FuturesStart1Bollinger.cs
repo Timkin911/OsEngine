@@ -660,6 +660,16 @@ namespace OsEngine.Robots.FuturesStart
 
             decimal futuresLastPrice = futuresCandles[^1].Close;
 
+            if(this.StartProgram == StartProgram.IsOsTrader)
+            { // если у нас реальные торги, берём цену из стакана
+                futuresLastPrice = futuresSource.PriceCenterMarketDepth;
+
+                if(futuresLastPrice == 0)
+                {
+                    return;
+                }
+            }
+
             if(_regime.ValueString != "OnlyShort"
                 && futuresLastPrice > futuresBollinger.DataSeries[0].Last)   // фьючерс выше верхнего боллинджера
             {// Лонг
@@ -726,7 +736,6 @@ namespace OsEngine.Robots.FuturesStart
                 return;
             }
 
-            decimal baseLastPrice = baseCandles[^1].Close;
             decimal futuresLastPrice = futuresCandles[^1].Close;
 
             bool needToExit = false;
