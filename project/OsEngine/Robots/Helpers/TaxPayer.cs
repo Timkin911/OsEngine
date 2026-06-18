@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Your rights to use code governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
@@ -17,6 +17,9 @@ using System.Windows.Forms.Integration;
 using OsEngine.OsTrader;
 using OsEngine.OsTrader.Panels.Tab.Internal;
 using OsEngine.Market.Connectors;
+using OsEngine.Market.Servers;
+using OsEngine.Market.Servers.Tester;
+using OsEngine.Market;
 using OsEngine.Language;
 
 /* Description
@@ -35,6 +38,9 @@ namespace OsEngine.Robots.Helpers
         private BotTabSimple _tab;
         private StrategyParameterString _regime;
         private StrategyParameterBool _fullLogIsOn;
+        private StrategyParameterBool _separateCommodityFutures;
+        private StrategyParameterString _commodityFuturesPrefixes;
+        private Dictionary<string, Security> _testerSecurities = new();
 
         public TaxPayer(string name, StartProgram startProgram) : base(name, startProgram)
         {
@@ -55,6 +61,10 @@ namespace OsEngine.Robots.Helpers
 
             _fullLogIsOn = CreateParameter("Full log is on", false, tabName);
 
+            _separateCommodityFutures = CreateParameter("Separate commodity futures", true, tabName);
+
+            _commodityFuturesPrefixes = CreateParameter("Commodity futures prefixes", "GD,SV,BR,NG,PT,PD", tabName);
+
             try
             {
                 CustomTabToParametersUi customTab = ParamGuiSettings.CreateCustomTab(" Periods ");
@@ -74,7 +84,72 @@ namespace OsEngine.Robots.Helpers
 
             _tab.CandleFinishedEvent += _tab_CandleFinishedEvent;
 
+            if (StartProgram == StartProgram.IsTester
+                && ServerMaster.GetServers() != null)
+            {
+                List<IServer> servers = ServerMaster.GetServers();
+
+                if (servers != null
+                    && servers.Count > 0
+                    && servers[0].ServerType == ServerType.Tester)
+                {
+                    TesterServer server = (TesterServer)servers[0];
+                    server.TestingStartEvent += Server_TestingStartEvent;
+                }
+            }
+
             Description = OsLocalization.Description.DescriptionLabel327;
+        }
+
+        private void Server_TestingStartEvent()
+        {
+            LoadTesterSecurities();
+        }
+
+        private void LoadTesterSecurities()
+        {
+            try
+            {
+                _testerSecurities.Clear();
+
+                List<IServer> servers = ServerMaster.GetServers();
+
+                if (servers == null)
+                {
+                    return;
+                }
+
+                for (int i = 0; i < servers.Count; i++)
+                {
+                    if (servers[i].ServerType != ServerType.Tester)
+                    {
+                        continue;
+                    }
+
+                    TesterServer testerServer = (TesterServer)servers[i];
+
+                    if (testerServer.Securities == null)
+                    {
+                        continue;
+                    }
+
+                    for (int j = 0; j < testerServer.Securities.Count; j++)
+                    {
+                        Security sec = testerServer.Securities[j];
+
+                        if (string.IsNullOrEmpty(sec.Name))
+                        {
+                            continue;
+                        }
+
+                        _testerSecurities[sec.Name] = sec;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         #region Table Periods
@@ -129,7 +204,7 @@ namespace OsEngine.Robots.Helpers
             }
             catch (Exception ex)
             {
-                //SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -356,7 +431,7 @@ namespace OsEngine.Robots.Helpers
                     return;
                 }
 
-                if (_regime == "Off")
+                if (_regime.ValueString == "Off")
                 {
                     return;
                 }
@@ -391,6 +466,7 @@ namespace OsEngine.Robots.Helpers
             }
 
             decimal profit = 0;
+            decimal profitCommodity = 0;
 
             List<BotPanel> bots = OsTraderMaster.Master.PanelsArray;
 
@@ -412,6 +488,7 @@ namespace OsEngine.Robots.Helpers
                 List<Journal.Journal> journals = bots[i].GetJournals();
 
                 decimal profitBot = 0;
+                decimal profitBotCommodity = 0;
 
                 for(int j = 0; j < journals.Count;j++)
                 {
@@ -424,27 +501,46 @@ namespace OsEngine.Robots.Helpers
                             continue;
                         }
 
-                        profitBot += curJournal.CloseAllPositions[i2].ProfitPortfolioAbs;
+                        if (IsCommodityFuture(curJournal.CloseAllPositions[i2]))
+                        {
+                            profitBotCommodity += curJournal.CloseAllPositions[i2].ProfitPortfolioAbs;
+                        }
+                        else
+                        {
+                            profitBot += curJournal.CloseAllPositions[i2].ProfitPortfolioAbs;
+                        }
                     }
                 }
 
                 profit += profitBot;
+                profitCommodity += profitBotCommodity;
             }
 
-            if(profit > 0)
+            if (_fullLogIsOn.ValueBool == true)
             {
-                TaxDeal(taxBot, year, profit);
+                SendNewLogMessage("Year: " + year + " Profit other: " + profit + " Profit commodity futures: " + profitCommodity, Logging.LogMessageType.System);
             }
-            else
+
+            if (profitCommodity > 0)
             {
-                if (_fullLogIsOn.ValueBool == true)
-                {
-                    SendNewLogMessage("No profit . Year: " + year + " Profit: " + profit, Logging.LogMessageType.System);
-                }
+                TaxDeal(taxBot, year, profitCommodity, "Taxes Commodity Futures");
+            }
+            else if (_fullLogIsOn.ValueBool == true)
+            {
+                SendNewLogMessage("No commodity futures profit. Year: " + year + " Profit: " + profitCommodity, Logging.LogMessageType.System);
+            }
+
+            if (profit > 0)
+            {
+                TaxDeal(taxBot, year, profit, "Taxes");
+            }
+            else if (_fullLogIsOn.ValueBool == true)
+            {
+                SendNewLogMessage("No other profit. Year: " + year + " Profit: " + profit, Logging.LogMessageType.System);
             }
         }
 
-        private void TaxDeal(BotPanel taxBot, int year, decimal profit)
+        private void TaxDeal(BotPanel taxBot, int year, decimal profit, string dealName)
         {
             if (taxBot == null)
             {
@@ -475,17 +571,18 @@ namespace OsEngine.Robots.Helpers
             if (_fullLogIsOn.ValueBool == true)
             {
                 SendNewLogMessage("Pay tax. Year: " + year +
+                    "\nDeal name: " + dealName +
                     "\nProfit: " + profit +
                     "\nRate: " + rate +
-                    "\nTax: " + tax 
-                    , 
+                    "\nTax: " + tax
+                    ,
                     Logging.LogMessageType.System);
             }
 
             if (tax > 0)
             {
                 Security security = new();
-                security.Name = "Taxes";
+                security.Name = dealName;
                 security.NameClass = "TestClass";
 
                 ConnectorCandles connector = taxBot.TabsSimple[0].Connector;
@@ -523,6 +620,69 @@ namespace OsEngine.Robots.Helpers
 
                 taxBot.TabsSimple[0].OrderFakeExecute(closeOrder, new DateTime(year, 12, 31, 23, 59, 59));
             }
+        }
+
+        private bool IsCommodityFuture(Position position)
+        {
+            if (position == null)
+            {
+                return false;
+            }
+
+            if (_separateCommodityFutures.ValueBool == false)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(_commodityFuturesPrefixes.ValueString))
+            {
+                return false;
+            }
+
+            string securityName = position.SecurityName;
+
+            if (string.IsNullOrWhiteSpace(securityName))
+            {
+                return false;
+            }
+
+            if (_testerSecurities.Count == 0)
+            {
+                LoadTesterSecurities();
+            }
+
+            _testerSecurities.TryGetValue(securityName, out Security security);
+
+            if (security != null &&
+                security.SecurityType != SecurityType.Futures)
+            {
+                return false;
+            }
+
+            string[] prefixes = _commodityFuturesPrefixes.ValueString
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (prefixes.Length == 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < prefixes.Length; i++)
+            {
+                string prefix = prefixes[i].Trim();
+
+                if (string.IsNullOrWhiteSpace(prefix))
+                {
+                    continue;
+                }
+
+                if (securityName.StartsWith(prefix, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         #endregion

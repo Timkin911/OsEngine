@@ -118,11 +118,6 @@ namespace OsEngine.Market.Servers.Bybit
             get { return true; }
         }
 
-        public bool IsTradeServer
-        {
-            get { return true; }
-        }
-
         public bool IsCanChangeOrderPrice
         {
             get { return false; }
@@ -275,7 +270,7 @@ namespace OsEngine.Market.Servers.Bybit
 
         public bool IsSupports_AsyncCandlesStarter
         {
-            get { return true; }
+            get { return false; }
         }
 
         public int AsyncCandlesStarter_RateGateLimitMls
@@ -331,6 +326,19 @@ namespace OsEngine.Market.Servers.Bybit
         public bool CanChangeOrderMarketNumber
         {
             get { return false; }
+        }
+
+        public OrderLifeTimePermission OrdersLifeTimeRealization
+        {
+            get
+            {
+                return new OrderLifeTimePermission
+                {
+                    GtcIsReady = true,
+                    SpecifiedIsReady = true,
+                    DayIsReady = false
+                };
+            }
         }
 
         #endregion

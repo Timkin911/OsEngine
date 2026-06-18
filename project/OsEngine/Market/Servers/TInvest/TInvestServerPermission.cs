@@ -290,6 +290,19 @@ namespace OsEngine.Market.Servers.TInvest
             get { return true; }
         }
 
+        public OrderLifeTimePermission OrdersLifeTimeRealization
+        {
+            get
+            {
+                return new OrderLifeTimePermission
+                {
+                    GtcIsReady = false,
+                    SpecifiedIsReady = true,
+                    DayIsReady = true
+                };
+            }
+        }
+
         #endregion
     }
 }

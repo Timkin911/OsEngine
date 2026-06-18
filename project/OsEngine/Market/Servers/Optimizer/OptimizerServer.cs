@@ -505,23 +505,26 @@ namespace OsEngine.Market.Servers.Optimizer
                 TimeNow = TimeNow.AddSeconds(1);
             }
 
-            bool haveLoadingSec = false;
-
             for (int i = 0; _candleSeriesTesterActivate != null && i < _candleSeriesTesterActivate.Count; i++)
             {
                 if (TimeNow > _candleSeriesTesterActivate[i].RealEndTime)
                 {
                     continue;
                 }
-                haveLoadingSec = true;
                 _candleSeriesTesterActivate[i].Load(TimeNow);
             }
 
-            if (haveLoadingSec == false)
+            if (EndNextMinuteWithCandlesEvent != null
+                 && (_timeAddType == TimeAddInTestType.Minute || _timeAddType == TimeAddInTestType.FiveMinute)
+                && _timeLastCandle == TimeNow)
             {
-
+                EndNextMinuteWithCandlesEvent();
             }
         }
+
+        public event Action EndNextMinuteWithCandlesEvent;
+
+        private DateTime _timeLastCandle;
 
         #endregion
 
@@ -2010,6 +2013,8 @@ namespace OsEngine.Market.Servers.Optimizer
         private void TesterServer_NewCandleEvent(Candle candle, string nameSecurity, TimeSpan timeFrame, int currentCandleCount, int allCandleCount)
         {
             ServerTime = candle.TimeStart;
+
+            _timeLastCandle = candle.TimeStart;
 
             if (_dataIsActive == false)
             {

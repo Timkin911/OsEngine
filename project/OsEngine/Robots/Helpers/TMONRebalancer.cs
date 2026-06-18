@@ -386,7 +386,7 @@ namespace OsEngine.Robots
                         {
                             if (positions[i].SecurityNameCode == "rub")
                             {
-                                return positions[i].ValueCurrent - positions[i].ValueBlocked;
+                                return positions[i].ValueCurrent;
                             }
                         }
                     }
@@ -519,7 +519,7 @@ namespace OsEngine.Robots
                     volume = balance / (contractPrice * _tab.Security.Lot);
                 }
 
-                volume = Math.Round(volume, _tab.Security.DecimalsVolume);
+                volume = Math.Floor(volume);
             }
             else // Tester or Optimizer
             {

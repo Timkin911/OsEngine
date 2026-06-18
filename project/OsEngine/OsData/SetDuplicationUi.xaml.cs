@@ -10,6 +10,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
+using System.Windows.Threading;
 
 
 namespace OsEngine.OsData
@@ -56,18 +57,104 @@ namespace OsEngine.OsData
             Focus();
 
             Closed += SetDuplicationUi_Closed;
+
+            if (InteractiveInstructions.Data.AllInstructionsInClass == null
+            || InteractiveInstructions.Data.AllInstructionsInClass.Count == 0)
+            {
+                ButtonDataDuplication.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void SetDuplicationUi_Closed(object sender, EventArgs e)
         {
             try
             {
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                NewPathButton.Click -= NewPathButton_Click;
+                NowButton.Click -= NowButton_Click;
+                ButtonDataDuplication.Click -= ButtonDataDuplication_Click;
+                ComboBoxRegime.SelectionChanged -= RegimeChanged;
+
                 _set = null;
                 _newPathForCopy = null;
+
+                Closed -= SetDuplicationUi_Closed;
             }
             catch (Exception ex)
             {
                 ServerMaster.Log?.ProcessMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenDataDuplication.Opacity = 1;
+                    PostWhiteDataDuplication.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenDataDuplication.Opacity = 0;
+                    PostWhiteDataDuplication.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenDataDuplication.Opacity = 1;
+                    PostWhiteDataDuplication.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -211,5 +298,21 @@ namespace OsEngine.OsData
                 ServerMaster.Log?.ProcessMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
+
+        #region Posts collection
+
+        private void ButtonDataDuplication_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.Data.Link8.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

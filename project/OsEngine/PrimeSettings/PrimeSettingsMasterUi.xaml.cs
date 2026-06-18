@@ -9,16 +9,23 @@ using System.Diagnostics;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using OsEngine.Language;
+using OsEngine.Market;
 
 
 namespace OsEngine.PrimeSettings
 {
     public partial class PrimeSettingsMasterUi
     {
+        private DispatcherTimer _blinkTimer;
+        private int _blinkCount;
+        private bool _isGreenVisible = true;
+
         public PrimeSettingsMasterUi()
         {
             InitializeComponent();
+            Closed += PrimeSettingsMasterUi_Closed;
             OsEngine.Layout.StickyBorders.Listen(this);
             OsEngine.Layout.StartupLocation.Start_MouseInCentre(this);
 
@@ -85,6 +92,104 @@ namespace OsEngine.PrimeSettings
 
             this.Activate();
             this.Focus();
+
+            if (InteractiveInstructions.MainMenu.AllInstructionsInClass == null
+              || InteractiveInstructions.MainMenu.AllInstructionsInClass.Count == 0)
+            {
+                ButtonGeneralSettings.Visibility = Visibility.Hidden;
+            }
+
+            StartButtonBlinkAnimation();
+        }
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenGeneralSettings.Opacity = 1;
+                    PostWhiteGeneralSettings.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenGeneralSettings.Opacity = 0;
+                    PostWhiteGeneralSettings.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenGeneralSettings.Opacity = 1;
+                    PostWhiteGeneralSettings.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+            }
+        }
+
+        private void PrimeSettingsMasterUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                Closed -= PrimeSettingsMasterUi_Closed;
+
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                OsLocalization.LocalizationTypeChangeEvent -= ChangeText;
+
+                ComboBoxMemoryCleanUp.SelectionChanged -= ComboBoxMemoryCleanUp_SelectionChanged;
+
+                CheckBoxExtraLogWindow.Click -= CheckBoxExtraLogWindow_Click;
+                CheckBoxExtraLogSound.Click -= CheckBoxExtraLogSound_Click;
+                CheckBoxTransactionSound.Click -= CheckBoxTransactionSound_Click;
+                TextBoxBotHeader.TextChanged -= TextBoxBotHeader_TextChanged;
+                CheckBoxRebootTradeUiLigth.Click -= RebootTradeUiLight_Click;
+                CheckBoxReportCriticalErrors.Click -= CheckBoxReportCriticalErrors_Click;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         private void ChangeText()
@@ -178,5 +283,21 @@ namespace OsEngine.PrimeSettings
                 // ignore
             }
         }
+
+        #region Posts collection
+
+        private void ButtonGeneralSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.MainMenu.Link2.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

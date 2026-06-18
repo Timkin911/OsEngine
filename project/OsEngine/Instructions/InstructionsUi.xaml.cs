@@ -26,7 +26,7 @@ namespace OsEngine.Instructions
             _instructions = instructions;
             _description = description;
 
-            if(string.IsNullOrEmpty(_description))
+            if (string.IsNullOrEmpty(_description))
             {
                 GridPrime.RowDefinitions[0].Height = new GridLength(0, GridUnitType.Pixel);
             }
@@ -39,6 +39,35 @@ namespace OsEngine.Instructions
             RePaintGridTable();
 
             Title = OsLocalization.Trader.Label643;
+
+            Closed += InstructionsUi_Closed;
+        }
+
+        private void InstructionsUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                Closed -= InstructionsUi_Closed;
+
+                _instructions = null;
+
+                if (_gridDataGrid != null)
+                {
+                    HostLinks.Child = null;
+                    _gridDataGrid.DataError -= _gridDataGrid_DataError;
+                    _gridDataGrid.CellClick -= _gridDataGrid_CellClick;
+                    DataGridFactory.ClearLinks(_gridDataGrid);
+                    _gridDataGrid.Rows.Clear();
+                    _gridDataGrid.Columns.Clear();
+                    _gridDataGrid.DataSource = null;
+                    _gridDataGrid.Dispose();
+                    _gridDataGrid = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), OsEngine.Logging.LogMessageType.Error);
+            }
         }
 
         public List<Instruction> _instructions;
@@ -92,14 +121,14 @@ namespace OsEngine.Instructions
                 _gridDataGrid.Columns.Add(newColumn4);
                 newColumn4.AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells;
 
-                HostLinks.Child = _gridDataGrid; 
+                HostLinks.Child = _gridDataGrid;
 
                 _gridDataGrid.DataError += _gridDataGrid_DataError;
                 _gridDataGrid.CellClick += _gridDataGrid_CellClick;
             }
             catch (Exception ex)
             {
-                ServerMaster.SendNewLogMessage(ex.ToString(), OsEngine.Logging.LogMessageType.Error); 
+                ServerMaster.SendNewLogMessage(ex.ToString(), OsEngine.Logging.LogMessageType.Error);
             }
         }
 
@@ -170,6 +199,11 @@ namespace OsEngine.Instructions
                 if (column == 3)
                 { // кнопка "Перейти"
                     Instruction instruction = _instructions[row];
+
+                    if (string.IsNullOrEmpty(instruction.PostLink))
+                    {
+                        return;
+                    }
 
                     Process.Start(new ProcessStartInfo(instruction.PostLink) { UseShellExecute = true });
                 }

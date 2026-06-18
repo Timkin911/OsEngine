@@ -9,6 +9,7 @@ using OsEngine.Market;
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Threading;
 
 
 namespace OsEngine.OsData
@@ -21,7 +22,7 @@ namespace OsEngine.OsData
 
         public DataPrunerUi(OsDataSet set, OsDataSetPainter setPainter)
         {
-             InitializeComponent();
+            InitializeComponent();
 
             OsEngine.Layout.StickyBorders.Listen(this);
             OsEngine.Layout.StartupLocation.Start_MouseInCentre(this);
@@ -55,18 +56,103 @@ namespace OsEngine.OsData
             Focus();
 
             Closed += DataPrunerUi_Closed;
+
+            if (InteractiveInstructions.Data.AllInstructionsInClass == null
+             || InteractiveInstructions.Data.AllInstructionsInClass.Count == 0)
+            {
+                ButtonDataDelete.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void DataPrunerUi_Closed(object sender, EventArgs e)
         {
             try
             {
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                ButtonDelete1.Click -= ButtonDelete1_Click;
+                ButtonDelete2.Click -= ButtonDelete2_Click;
+                ButtonDelete3.Click -= ButtonDelete3_Click;
+                ButtonDelete4.Click -= ButtonDelete4_Click;
+                ButtonDataDelete.Click -= ButtonDataDelete_Click;
+
                 _set = null;
                 _setPainter = null;
+
+                Closed -= DataPrunerUi_Closed;
             }
             catch (Exception ex)
             {
-                ServerMaster.Log?.ProcessMessage(ex.ToString(), Logging.LogMessageType.Error);
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    PostGreenDataDelete.Opacity = 1;
+                    PostWhiteDataDelete.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenDataDelete.Opacity = 0;
+                    PostWhiteDataDelete.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenDataDelete.Opacity = 1;
+                    PostWhiteDataDelete.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -77,7 +163,7 @@ namespace OsEngine.OsData
                 if (DatePickerTimeStart.SelectedDate == null || DatePickerTimeEnd.SelectedDate == null)
                 {
                     ServerMaster.Log?.ProcessMessage(OsLocalization.Data.Label74, Logging.LogMessageType.Error);
-                     return;
+                    return;
                 }
 
                 if (DatePickerTimeStart.SelectedDate > DatePickerTimeEnd.SelectedDate)
@@ -172,7 +258,7 @@ namespace OsEngine.OsData
         {
             try
             {
-                if (string.IsNullOrEmpty( TextBoxMaxVol.Text) || string.IsNullOrEmpty(TextBoxMinVol.Text))
+                if (string.IsNullOrEmpty(TextBoxMaxVol.Text) || string.IsNullOrEmpty(TextBoxMinVol.Text))
                 {
                     ServerMaster.Log?.ProcessMessage(OsLocalization.Data.Label77, Logging.LogMessageType.Error);
                     return;
@@ -180,7 +266,7 @@ namespace OsEngine.OsData
 
                 decimal maxVol = TextBoxMaxVol.Text.ToDecimal();
                 decimal minVol = TextBoxMinVol.Text.ToDecimal();
-                
+
 
                 List<SecurityToLoad> wrongSecurities = [];
 
@@ -249,7 +335,7 @@ namespace OsEngine.OsData
                     lastDay = lastDay.AddDays(-1);
                     continue;
                 }
-    
+
                 decimal high = decimal.MinValue;
                 decimal low = decimal.MaxValue;
 
@@ -334,7 +420,7 @@ namespace OsEngine.OsData
 
                 if (wrongSecurities.Count > 0)
                     DeleteWrongSecurities(wrongSecurities);
-   
+
             }
             catch (Exception ex)
             {
@@ -433,5 +519,21 @@ namespace OsEngine.OsData
 
             Close();
         }
+
+        #region Posts collection
+
+        private void ButtonDataDelete_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.Data.Link5.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

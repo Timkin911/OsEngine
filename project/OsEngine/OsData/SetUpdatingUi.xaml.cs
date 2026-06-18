@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 
 namespace OsEngine.OsData
@@ -46,17 +47,103 @@ namespace OsEngine.OsData
             UpdTimeLabel.Content = OsLocalization.Data.Label97;
 
             Closed += SetUpdatingUi_Closed;
+
+            if (InteractiveInstructions.Data.AllInstructionsInClass == null
+             || InteractiveInstructions.Data.AllInstructionsInClass.Count == 0)
+            {
+                ButtonDataSetUpdating.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void SetUpdatingUi_Closed(object sender, EventArgs e)
         {
             try
             {
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                ComboBoxRegime.SelectionChanged -= RegimeChanged;
+                DayRBut.Checked -= DayRBut_Checked;
+                HourRBut.Checked -= HourRBut_Checked;
+                ButtonDataSetUpdating.Click -= ButtonDataSetUpdating_Click;
+
                 _set = null;
+
+                Closed -= SetUpdatingUi_Closed;
             }
             catch (Exception ex)
             {
                 ServerMaster.Log?.ProcessMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenDataSetUpdating.Opacity = 1;
+                    PostWhiteDataSetUpdating.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenDataSetUpdating.Opacity = 0;
+                    PostWhiteDataSetUpdating.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenDataSetUpdating.Opacity = 1;
+                    PostWhiteDataSetUpdating.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -190,6 +277,22 @@ namespace OsEngine.OsData
 
             _set.Updater.Period = "Day";
         }
+
+        #region Posts collection
+
+        private void ButtonDataSetUpdating_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.Data.Link6.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }
 

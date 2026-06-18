@@ -83,10 +83,13 @@ namespace OsEngine.Entity
                 TextBoxSearchSecurity.KeyDown -= TextBoxSearchSecurity_KeyDown;
                 ButtonRightInSearchResults.Click -= ButtonRightInSearchResults_Click;
                 ButtonLeftInSearchResults.Click -= ButtonLeftInSearchResults_Click;
+
+                ComboBoxClass.SelectionChanged -= ComboBoxClass_SelectionChanged;
+                Closed -= SecuritiesUi_Closed;
             }
             catch
             {
-
+                // ignore
             }
         }
 
@@ -900,6 +903,10 @@ namespace OsEngine.Entity
             {
                 if (e.Key == Key.Enter)
                 {
+                    if (_gridSecurities == null ||
+                        (_gridSecurities != null && _gridSecurities.Rows.Count == 0))
+                        return;
+
                     int rowIndex = 0;
                     for (int i = 0; i < _gridSecurities.Rows.Count; i++)
                     {
@@ -917,7 +924,13 @@ namespace OsEngine.Entity
                     DataGridViewCheckBoxCell checkBox;
                     for (int i = 0; i < _gridSecurities.Rows.Count; i++)
                     {
-                        checkBox = (DataGridViewCheckBoxCell)_gridSecurities.Rows[i].Cells[4];
+                        DataGridViewCell cell = _gridSecurities.Rows[i].Cells[4];
+                        checkBox = cell as DataGridViewCheckBoxCell;
+
+                        if (checkBox == null)
+                        {
+                            continue;
+                        }
 
                         if (checkBox.Value == null)
                         {
@@ -934,7 +947,12 @@ namespace OsEngine.Entity
                         }
                     }
 
-                    checkBox = (DataGridViewCheckBoxCell)_gridSecurities.Rows[rowIndex].Cells[4];
+                    DataGridViewCell row = _gridSecurities.Rows[rowIndex].Cells[4];
+                    checkBox = row as DataGridViewCheckBoxCell;
+
+                    if (checkBox == null)
+                        return;
+
                     if (Convert.ToBoolean(checkBox.Value) == false)
                     {
                         checkBox.Value = true;

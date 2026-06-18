@@ -12,6 +12,7 @@ using OsEngine.Language;
 using System.Windows;
 using System.Windows.Input;
 using OsEngine.Market;
+using System.Windows.Threading;
 
 namespace OsEngine.OsData
 {
@@ -58,13 +59,28 @@ namespace OsEngine.OsData
             this.Focus();
 
             Closed += NewSecurityUi_Closed;
+
+            if (InteractiveInstructions.Data.AllInstructionsInClass == null
+             || InteractiveInstructions.Data.AllInstructionsInClass.Count == 0)
+            {
+                ButtonDataNewSecurity.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void NewSecurityUi_Closed(object sender, EventArgs e)
         {
             try
             {
-                CheckBoxSelectAllCheckBox.Click -= CheckBoxSelectAllCheckBox_Click;
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                ComboBoxClass.SelectionChanged -= ComboBoxClass_SelectionChanged;
                 CheckBoxSelectAllCheckBox.Click -= CheckBoxSelectAllCheckBox_Click;
                 TextBoxSearchSecurity.MouseEnter -= TextBoxSearchSecurity_MouseEnter;
                 TextBoxSearchSecurity.TextChanged -= TextBoxSearchSecurity_TextChanged;
@@ -73,25 +89,91 @@ namespace OsEngine.OsData
                 ButtonRightInSearchResults.Click -= ButtonRightInSearchResults_Click;
                 ButtonLeftInSearchResults.Click -= ButtonLeftInSearchResults_Click;
                 TextBoxSearchSecurity.KeyDown -= TextBoxSearchSecurity_KeyDown;
+                ButtonAccept.Click -= ButtonAccept_Click;
+                ButtonDataNewSecurity.Click -= ButtonDataNewSecurity_Click;
 
                 _securities = null;
+                _securitiesInBox = null;
 
-                if (HostSecurity != null)
-                {
-                    HostSecurity.Child = null;
-                    HostSecurity = null;
-                }
-                
                 if (_gridSecurities != null)
                 {
+                    HostSecurity.Child = null;
                     DataGridFactory.ClearLinks(_gridSecurities);
                     _gridSecurities.DataError -= _gridSecurities_DataError;
+                    _gridSecurities.Rows.Clear();
+                    _gridSecurities.Columns.Clear();
+                    _gridSecurities.DataSource = null;
+                    _gridSecurities.Dispose();
                     _gridSecurities = null;
-                } 
+                }
+
+                HostSecurity = null;
+
+                Closed -= NewSecurityUi_Closed;
             }
             catch (Exception ex)
             {
-                ServerMaster.Log?.ProcessMessage(ex.ToString(), Logging.LogMessageType.Error);
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+        private int _blinkCount;
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    PostGreenDataNewSecurity.Opacity = 1;
+                    PostWhiteDataNewSecurity.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenDataNewSecurity.Opacity = 0;
+                    PostWhiteDataNewSecurity.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenDataNewSecurity.Opacity = 1;
+                    PostWhiteDataNewSecurity.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -464,6 +546,22 @@ namespace OsEngine.OsData
             {
                 System.Windows.MessageBox.Show(error.ToString());
             }		
+        }
+
+        #endregion
+
+        #region Posts collection
+
+        private void ButtonDataNewSecurity_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.Data.Link10.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         #endregion

@@ -7,6 +7,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Forms;
+using System.Windows.Threading;
 
 namespace OsEngine.OsData
 {
@@ -36,6 +37,14 @@ namespace OsEngine.OsData
 
             Closed += OsDataSetDetailUi_Closed;
 
+            if (InteractiveInstructions.Data.AllInstructionsInClass == null
+            || InteractiveInstructions.Data.AllInstructionsInClass.Count == 0)
+            {
+                ButtonDataSetDetail.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
+
             Task.Run(PainterThreadArea);
         }
 
@@ -44,24 +53,98 @@ namespace OsEngine.OsData
             try
             {
                 _isDeleted = true;
-                _loader = null;
 
-                if (HostDataPiesDetails != null)
+                if (_blinkTimer != null)
                 {
-                    HostDataPiesDetails.Child = null;
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
                 }
+
+                ButtonDataSetDetail.Click -= ButtonDataSetDetail_Click;
 
                 if (_grid != null)
                 {
+                    HostDataPiesDetails.Child = null;
+                    DataGridFactory.ClearLinks(_grid);
                     _grid.CellClick -= _grid_CellClick;
                     _grid.DataError -= _grid_DataError;
-                    DataGridFactory.ClearLinks(_grid);
+                    _grid.Rows.Clear();
+                    _grid.Columns.Clear();
+                    _grid.DataSource = null;
+                    _grid.Dispose();
                     _grid = null;
                 }
+
+                _loader = null;
+
+                Closed -= OsDataSetDetailUi_Closed;
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                _loader?.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                _loader.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    PostGreenDataSetDetail.Opacity = 1;
+                    PostWhiteDataSetDetail.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenDataSetDetail.Opacity = 0;
+                    PostWhiteDataSetDetail.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenDataSetDetail.Opacity = 1;
+                    PostWhiteDataSetDetail.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                _loader.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -394,5 +477,21 @@ namespace OsEngine.OsData
 
             return nRow;
         }
+
+        #region Posts collection
+
+        private void ButtonDataSetDetail_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.Data.Link11.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                _loader.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

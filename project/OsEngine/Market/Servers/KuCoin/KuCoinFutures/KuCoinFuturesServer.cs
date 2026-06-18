@@ -14,6 +14,7 @@ using RestSharp;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -38,6 +39,7 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
             CreateParameterEnum("Margin Mode", "Cross", new List<string> { "Cross", "Isolated" });
             CreateParameterString("Leverage", "1");
             CreateParameterBoolean("Extended Data", false);
+            CreateParameterBoolean("Use Shared RateGate", false);
 
             ServerParameters[0].Comment = OsLocalization.Market.Label246;
             ServerParameters[1].Comment = OsLocalization.Market.Label247;
@@ -46,6 +48,7 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
             ServerParameters[4].Comment = OsLocalization.Market.Label249;
             ServerParameters[5].Comment = OsLocalization.Market.Label256;
             ServerParameters[6].Comment = OsLocalization.Market.Label270;
+            ServerParameters[7].Comment = OsLocalization.Market.Label324;
         }
 
         private void KuCoinFuturesServer_ValueChange()
@@ -367,6 +370,11 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
 
                                 securities.Add(newSecurity);
                             }
+                        }
+
+                        if (securities.Count > 0)
+                        {
+                            securities = securities.OrderBy(s => s.Name).ToList();
                         }
 
                         foreach (Security sec in securities)
@@ -2207,8 +2215,21 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
                 data.symbol = order.SecurityNameCode;
                 data.side = order.Side.ToString().ToLower();
                 data.type = order.TypeOrder.ToString().ToLower();
-                data.price = order.TypeOrder == OrderPriceType.Market ? null : order.Price.ToString().Replace(",", ".");
 
+                if (order.TypeOrder == OrderPriceType.Limit)
+                {
+                    data.price = order.Price.ToString().Replace(",", ".");
+
+                    if (order.OrderTypeTime == OrderTypeTime.GTC)
+                    {
+                        data.timeInForce = "GTC";
+                    }
+                    else
+                    {
+                        data.timeInForce = "GTC";
+                    }
+                }
+                
                 decimal volume = order.Volume / GetVolume(order.SecurityNameCode);
                 data.size = volume.ToString().Replace(",", ".");
                 data.leverage = _leverage;
@@ -2724,11 +2745,18 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
 
         #region 12 Queries
 
+        private static readonly RateGate _sharedRateGate = new RateGate(20, TimeSpan.FromMilliseconds(300));
+
         private RateGate _rateGate = new RateGate(20, TimeSpan.FromMilliseconds(300));
+
+        private RateGate GetRateGate()
+        {
+            return ((ServerParameterBool)ServerParameters[7]).Value ? _sharedRateGate : _rateGate;
+        }
 
         private IRestResponse CreatePrivateQueryOrders(string path, Method method, string body)
         {
-            _rateGate.WaitToProceed();
+            GetRateGate().WaitToProceed();
 
             try
             {
@@ -2773,7 +2801,7 @@ namespace OsEngine.Market.Servers.KuCoin.KuCoinFutures
 
         private IRestResponse CreatePrivateQuery(string path, Method method, string body)
         {
-            _rateGate.WaitToProceed();
+            GetRateGate().WaitToProceed();
 
             try
             {

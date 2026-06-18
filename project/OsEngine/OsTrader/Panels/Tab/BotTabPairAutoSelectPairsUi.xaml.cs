@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Input;
+using System.Windows.Threading;
 using MessageBox = System.Windows.MessageBox;
 
 namespace OsEngine.OsTrader.Panels.Tab
@@ -132,8 +133,6 @@ namespace OsEngine.OsTrader.Panels.Tab
                 ButtonConvertToPairs.Content = OsLocalization.Trader.Label261;
                 LabelConverter.Content = OsLocalization.Trader.Label263;
                 ButtonAccept.Content = OsLocalization.Trader.Label264;
-
-                CheckBoxSelectAllCheckBox.Click += CheckBoxSelectAllCheckBox_Click;
                 ButtonRightInSearchResults.Click += ButtonRightInSearchResults_Click;
                 ButtonLeftInSearchResults.Click += ButtonLeftInSearchResults_Click;
                 TextBoxSearchSecurity.MouseEnter += TextBoxSearchSecurity_MouseEnter;
@@ -142,7 +141,7 @@ namespace OsEngine.OsTrader.Panels.Tab
                 TextBoxSearchSecurity.LostKeyboardFocus += TextBoxSearchSecurity_LostKeyboardFocus;
                 TextBoxSearchSecurity.KeyDown += TextBoxSearchSecurity_KeyDown;
 
-                Closed += BotTabScreenerUi_Closed;
+                Closed += BotTabPairUi_Closed;
             }
             catch (Exception error)
             {
@@ -153,17 +152,27 @@ namespace OsEngine.OsTrader.Panels.Tab
             this.Focus();
 
             _pairTrader.TabDeletedEvent += _pairTrader_TabDeletedEvent;
+
+            if (InteractiveInstructions.PairPosts.AllInstructionsInClass == null
+            || InteractiveInstructions.PairPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPostAutoSelectPair.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
-        private void _pairTrader_TabDeletedEvent()
-        {
-            Close();
-        }
-
-        private void BotTabScreenerUi_Closed(object sender, EventArgs e)
+        private void BotTabPairUi_Closed(object sender, EventArgs e)
         {
             try
             {
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
                 List<IServer> serversAll = ServerMaster.GetServers();
 
                 for (int i = 0; serversAll != null && i < serversAll.Count; i++)
@@ -180,33 +189,121 @@ namespace OsEngine.OsTrader.Panels.Tab
                 TextBoxSearchSecurity.TextChanged -= TextBoxSearchSecurity_TextChanged;
                 TextBoxSearchSecurity.MouseLeave -= TextBoxSearchSecurity_MouseLeave;
                 TextBoxSearchSecurity.LostKeyboardFocus -= TextBoxSearchSecurity_LostKeyboardFocus;
+                TextBoxSearchSecurity.KeyDown -= TextBoxSearchSecurity_KeyDown;
                 ComboBoxClass.SelectionChanged -= ComboBoxClass_SelectionChanged;
                 ComboBoxTypeServer.SelectionChanged -= ComboBoxTypeServer_SelectionChanged;
                 CheckBoxSelectAllCheckBox.Click -= CheckBoxSelectAllCheckBox_Click;
                 ButtonRightInSearchResults.Click -= ButtonRightInSearchResults_Click;
                 ButtonLeftInSearchResults.Click -= ButtonLeftInSearchResults_Click;
-                TextBoxSearchSecurity.KeyDown -= TextBoxSearchSecurity_KeyDown;
-
-                Closed -= BotTabScreenerUi_Closed;
+                ButtonConvertToPairs.Click -= ButtonConvertToPairs_Click;
 
                 if (SecuritiesHost != null)
                 {
                     SecuritiesHost.Child = null;
                 }
+                if (HostPairs != null)
+                {
+                    HostPairs.Child = null;
+                }
 
                 if (_gridSecurities != null)
                 {
-                    DataGridFactory.ClearLinks(_gridSecurities);
                     _gridSecurities.DataError -= _gridSecurities_DataError;
+                    DataGridFactory.ClearLinks(_gridSecurities);
+                    _gridSecurities.Rows.Clear();
+                    _gridSecurities.Columns.Clear();
+                    _gridSecurities.DataSource = null;
+                    _gridSecurities.Dispose();
                     _gridSecurities = null;
+                }
+
+                if (_pairsGrid != null)
+                {
+                    _pairsGrid.CellClick -= _pairsGrid_CellClick;
+                    _pairsGrid.DataError -= _gridSecurities_DataError;
+                    DataGridFactory.ClearLinks(_pairsGrid);
+                    _pairsGrid.Rows.Clear();
+                    _pairsGrid.Columns.Clear();
+                    _pairsGrid.DataSource = null;
+                    _pairsGrid.Dispose();
+                    _pairsGrid = null;
                 }
 
                 _pairTrader.TabDeletedEvent -= _pairTrader_TabDeletedEvent;
                 _pairTrader = null;
+
+                Closed -= BotTabPairUi_Closed;
             }
             catch (Exception error)
             {
                 SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void _pairTrader_TabDeletedEvent()
+        {
+            Close();
+        }
+
+        private DispatcherTimer _blinkTimer;
+        private int _blinkCount;
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenAutoSelectPair.Opacity = 1;
+                    PostWhiteAutoSelectPair.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenAutoSelectPair.Opacity = 0;
+                    PostWhiteAutoSelectPair.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenAutoSelectPair.Opacity = 1;
+                    PostWhiteAutoSelectPair.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -1418,6 +1515,22 @@ namespace OsEngine.OsTrader.Panels.Tab
         }
 
         public event Action<string, LogMessageType> LogMessageEvent;
+
+        #endregion
+
+        #region Posts collection
+
+        private void ButtonPostAutoSelectPair_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.PairPosts.Link13.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
 
         #endregion
     }

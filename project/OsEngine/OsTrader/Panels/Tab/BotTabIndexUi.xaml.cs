@@ -12,12 +12,13 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Threading;
 using OsEngine.Market;
+using System.Windows.Threading;
+using OsEngine.Instructions;
 
 namespace OsEngine.OsTrader.Panels.Tab
 {
     public partial class BotTabIndexUi
     {
-
         public BotTabIndexUi(BotTabIndex spread)
         {
             InitializeComponent();
@@ -131,6 +132,19 @@ namespace OsEngine.OsTrader.Panels.Tab
             this.Activate();
             this.Focus();
 
+            if (InteractiveInstructions.IndexPosts.AllInstructionsInClass == null
+             || InteractiveInstructions.IndexPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPostsIndex.Visibility = Visibility.Hidden;
+                ButtonInstructionIndex.Visibility = Visibility.Hidden;
+            }
+            else
+            {
+                ButtonPostsIndex.Click += ButtonPostsIndex_Click;
+            }
+
+            StartButtonBlinkAnimation();
+
             Thread worker = new Thread(PricePainterThreadWorker);
             worker.Name = "BotTabIndexPricePainter";
             worker.Start();
@@ -142,10 +156,24 @@ namespace OsEngine.OsTrader.Panels.Tab
             {
                 _windowIsClosed = true;
 
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
                 if (_uiNewSecurities != null)
                 {
+                    _uiNewSecurities.Closed -= UiSecuritiesSelection_Closed;
                     _uiNewSecurities.Close();
+                    _uiNewSecurities = null;
                 }
+
+                TextboxUserFormula.TextChanged -= TextboxUserFormula_TextChanged;
+                TextBoxDepth.TextChanged -= TextBoxDepth_TextChanged;
+                CheckBoxPercentNormalization.Click -= CheckBoxPercentNormalization_Click;
+                ButtonPostsIndex.Click -= ButtonPostsIndex_Click;
 
                 ComboBoxRegime.SelectionChanged -= ComboBoxRegime_SelectionChanged;
                 ComboBoxDayOfWeekToRebuildIndex.SelectionChanged -= ComboBoxDayOfWeekToRebuildIndex_SelectionChanged;
@@ -157,7 +185,10 @@ namespace OsEngine.OsTrader.Panels.Tab
                 ComboBoxDaysLookBackInBuilding.SelectionChanged -= ComboBoxDaysLookBackInBuilding_SelectionChanged;
                 ButtonRebuildFormulaNow.Click -= ButtonRebuildFormulaNow_Click;
 
-                this.Closed -= BotTabIndexUi_Closed;
+                if (HostSecurity1 != null)
+                {
+                    HostSecurity1.Child = null;
+                }
 
                 if (_sourcesGrid != null)
                 {
@@ -166,15 +197,90 @@ namespace OsEngine.OsTrader.Panels.Tab
                     _sourcesGrid.DataError -= _sourcesGrid_DataError;
                     DataGridFactory.ClearLinks(_sourcesGrid);
                     _sourcesGrid.Rows.Clear();
+                    _sourcesGrid.Columns.Clear();
+                    _sourcesGrid.DataSource = null;
+                    _sourcesGrid.Dispose();
                     _sourcesGrid = null;
                 }
-                
+
                 _spread = null;
+
+                this.Closed -= BotTabIndexUi_Closed;
             }
             catch (Exception ex)
             {
                 CustomMessageBoxUi ui = new CustomMessageBoxUi(ex.Message);
                 ui.ShowDialog();
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    GreenCollectionIndex.Opacity = 1;
+                    WhiteCollectionIndex.Opacity = 0;
+                    PostGreenIndex.Opacity = 1;
+                    PostWhiteIndex.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    GreenCollectionIndex.Opacity = 0;
+                    WhiteCollectionIndex.Opacity = 1;
+                    PostGreenIndex.Opacity = 0;
+                    PostWhiteIndex.Opacity = 1;
+                }
+                else
+                {
+                    GreenCollectionIndex.Opacity = 1;
+                    WhiteCollectionIndex.Opacity = 0;
+                    PostGreenIndex.Opacity = 1;
+                    PostWhiteIndex.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -756,5 +862,61 @@ namespace OsEngine.OsTrader.Panels.Tab
             }
         }
 
+        #region Posts collection
+
+        private InstructionsUi _instructionsUi;
+
+        private void ButtonPostsIndex_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_instructionsUi == null)
+                {
+                    _instructionsUi = new InstructionsUi(
+                        InteractiveInstructions.IndexPosts.AllInstructionsInClass, InteractiveInstructions.IndexPosts.AllInstructionsInClassDescription);
+                    _instructionsUi.Show();
+                    _instructionsUi.Closed += _instructionsUi_Closed;
+                }
+                else
+                {
+                    if (_instructionsUi.WindowState == WindowState.Minimized)
+                    {
+                        _instructionsUi.WindowState = WindowState.Normal;
+                    }
+                    _instructionsUi.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _instructionsUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                _instructionsUi.Closed -= _instructionsUi_Closed;
+                _instructionsUi = null;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void ButtonInstructionIndex_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.IndexPosts.Link3.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

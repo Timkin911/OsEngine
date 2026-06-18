@@ -10,10 +10,12 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Forms;
 using OsEngine.Entity;
+using OsEngine.Instructions;
 using OsEngine.Language;
 using OsEngine.Market.Servers.Entity;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 
 namespace OsEngine.Market.Servers
 {
@@ -43,6 +45,8 @@ namespace OsEngine.Market.Servers
 
             _serversArray = servers;
             _serverType = servers[numServerInArray].ServerType;
+            _serverNeedToHideParameters = servers[numServerInArray].NeedToHideParameters;
+            _serverCanDoMultipleConnections = servers[numServerInArray].CanDoMultipleConnections;
 
             if (servers[numServerInArray].CanDoMultipleConnections == false)
             {
@@ -91,6 +95,126 @@ namespace OsEngine.Market.Servers
             this.Closed += AServerParameterUi_Closed;
 
             ServerMaster.ServerDeleteEvent += ServerMaster_ServerDeleteEvent;
+
+            if (InteractiveInstructions.ServerParameterPosts.GetInstructionsForServerType(_serverType, _serverNeedToHideParameters, _serverCanDoMultipleConnections).Count == 0)
+            {
+                ButtonPostsServerParameter.Visibility = Visibility.Hidden;
+            }
+            else
+            {
+                ButtonPostsServerParameter.Click += ButtonPostsAServerParameter_Click;
+            }
+
+            StartButtonBlinkAnimation();
+        }
+
+        private void AServerParameterUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                _uiIsClosed = true;
+
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                ButtonConnect.Click -= ButtonConnect_Click;
+                ButtonAbort.Click -= ButtonAbort_Click;
+                ButtonPostsServerParameter.Click -= ButtonPostsAServerParameter_Click;
+
+                ServerMaster.ServerDeleteEvent -= ServerMaster_ServerDeleteEvent;
+
+                if (_server != null)
+                {
+                    _server.Log.StopPaint();
+                    _server.ConnectStatusChangeEvent -= Server_ConnectStatusChangeEvent;
+                }
+
+                if (_instructionsUi != null)
+                {
+                    _instructionsUi.Closed -= _instructionsUi_Closed;
+                    _instructionsUi = null;
+                }
+
+                DeleteGridServerParameters();
+                DeleteGridConnections();
+
+                HostLog.Child = null;
+                HostPreConfiguredConnections.Child = null;
+                HostSettings.Child = null;
+
+                _serversArray = null;
+                _server = null;
+
+                Closed -= AServerParameterUi_Closed;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+        private int _blinkCount;
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    GreenCollectionServerParameter.Opacity = 1;
+                    WhiteCollectionServerParameter.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    GreenCollectionServerParameter.Opacity = 0;
+                    WhiteCollectionServerParameter.Opacity = 1;
+                }
+                else
+                {
+                    GreenCollectionServerParameter.Opacity = 1;
+                    WhiteCollectionServerParameter.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
+            }
         }
 
         private void UpDateTitle()
@@ -103,16 +227,16 @@ namespace OsEngine.Market.Servers
                     return;
                 }
 
-                if(_server == null)
+                if (_server == null)
                 {
                     return;
                 }
-                
+
                 string title = OsLocalization.Market.TitleAServerParametrUi + _server.ServerType;
 
                 bool haveNoTradePeriodsConnection = false;
 
-                for(int i = 0;i < _serversArray.Count;i++)
+                for (int i = 0; i < _serversArray.Count; i++)
                 {
                     if (_serversArray[i].IsNonTradePeriod == true)
                     {
@@ -120,58 +244,23 @@ namespace OsEngine.Market.Servers
                     }
                 }
 
-                if(haveNoTradePeriodsConnection == true)
+                if (haveNoTradePeriodsConnection == true)
                 {
                     title += " " + OsLocalization.Market.Label313;
                 }
 
-                if(title != Title)
+                if (title != Title)
                 {
                     Title = title;
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
-        private void AServerParameterUi_Closed(object sender, EventArgs e)
-        {
-            _uiIsClosed = true;
-            this.Closed -= AServerParameterUi_Closed;
-            ServerMaster.ServerDeleteEvent -= ServerMaster_ServerDeleteEvent;
-
-            _server.Log.StopPaint();
-            _server.ConnectStatusChangeEvent -= Server_ConnectStatusChangeEvent;
-            _server = null;
-
-            _serversArray = null;
-
-            if (_gridServerParameters != null)
-            {
-                _gridServerParameters.CellValueChanged -= _gridServerParameters_CellValueChanged;
-                _gridServerParameters.Click -= _gridServerParameters_Click;
-                _gridServerParameters.CellClick -= _gridServerParameters_CellClick;
-                _gridServerParameters.DataError -= _gridServerParameters_DataError;
-                _gridServerParameters.Rows.Clear();
-                DataGridFactory.ClearLinks(_gridServerParameters);
-                _gridServerParameters = null;
-            }
-
-            if (_gridConnections != null)
-            {
-                _gridConnections.CellClick -= _gridConnections_CellClick;
-                _gridConnections.CellEndEdit -= _gridConnections_CellEndEdit;
-                _gridConnections.DataError -= _gridConnections_DataError;
-                _gridConnections.Columns.Clear();
-                DataGridFactory.ClearLinks(_gridConnections);
-                _gridConnections = null;
-            }
-
-            HostPreConfiguredConnections.Child = null;
-            HostSettings.Child = null;
-        }
+     
 
         private void ServerMaster_ServerDeleteEvent(IServer server)
         {
@@ -188,6 +277,10 @@ namespace OsEngine.Market.Servers
         }
 
         private ServerType _serverType;
+
+        private bool _serverNeedToHideParameters;
+
+        private bool _serverCanDoMultipleConnections;
 
         private bool _uiIsClosed;
 
@@ -284,6 +377,45 @@ namespace OsEngine.Market.Servers
             ServerMaster.SendNewLogMessage(e.ToString(), Logging.LogMessageType.Error);
         }
 
+        private void DeleteGridConnections()
+        {
+            if (_gridConnections == null)
+            {
+                return;
+            }
+
+            HostPreConfiguredConnections.Child = null;
+            DataGridFactory.ClearLinks(_gridConnections);
+            _gridConnections.CellClick -= _gridConnections_CellClick;
+            _gridConnections.CellEndEdit -= _gridConnections_CellEndEdit;
+            _gridConnections.DataError -= _gridConnections_DataError;
+            _gridConnections.Rows.Clear();
+            _gridConnections.Columns.Clear();
+            _gridConnections.DataSource = null;
+            _gridConnections.Dispose();
+            _gridConnections = null;
+        }
+
+        private void DeleteGridServerParameters()
+        {
+            if (_gridServerParameters == null)
+            {
+                return;
+            }
+
+            HostSettings.Child = null;
+            DataGridFactory.ClearLinks(_gridServerParameters);
+            _gridServerParameters.CellValueChanged -= _gridServerParameters_CellValueChanged;
+            _gridServerParameters.Click -= _gridServerParameters_Click;
+            _gridServerParameters.CellClick -= _gridServerParameters_CellClick;
+            _gridServerParameters.DataError -= _gridServerParameters_DataError;
+            _gridServerParameters.Rows.Clear();
+            _gridServerParameters.Columns.Clear();
+            _gridServerParameters.DataSource = null;
+            _gridServerParameters.Dispose();
+            _gridServerParameters = null;
+        }
+
         private void _gridConnections_CellEndEdit(object sender, DataGridViewCellEventArgs e)
         {
             try
@@ -324,7 +456,7 @@ namespace OsEngine.Market.Servers
                 int row = e.RowIndex;
                 int column = e.ColumnIndex;
 
-                if(row == -1)
+                if (row == -1)
                 {
                     return;
                 }
@@ -829,7 +961,7 @@ namespace OsEngine.Market.Servers
                 int row = e.RowIndex;
                 int col = e.ColumnIndex;
 
-                if(row < 0 || col < 0)
+                if (row < 0 || col < 0)
                 {
                     return;
                 }
@@ -874,6 +1006,12 @@ namespace OsEngine.Market.Servers
         {
             try
             {
+                if(_gridServerParameters.SelectedCells == null
+                    || _gridServerParameters.SelectedCells.Count == 0)
+                {
+                    return;
+                }
+
                 var s = e.GetType();
 
                 var mouse = (MouseEventArgs)e;
@@ -1218,5 +1356,54 @@ namespace OsEngine.Market.Servers
         {
             _server.StopServer();
         }
+
+        #region Posts collection
+
+        private InstructionsUi _instructionsUi;
+
+        private void ButtonPostsAServerParameter_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_instructionsUi == null)
+                {
+                    List<OsEngine.Instructions.Instruction> instructions =
+                        InteractiveInstructions.ServerParameterPosts.GetInstructionsForServerType(_serverType, _serverNeedToHideParameters, _serverCanDoMultipleConnections);
+
+                    _instructionsUi = new InstructionsUi(
+                        instructions,
+                        InteractiveInstructions.ServerParameterPosts.AllInstructionsInClassDescription);
+                    _instructionsUi.Show();
+                    _instructionsUi.Closed += _instructionsUi_Closed;
+                }
+                else
+                {
+                    if (_instructionsUi.WindowState == WindowState.Minimized)
+                    {
+                        _instructionsUi.WindowState = WindowState.Normal;
+                    }
+                    _instructionsUi.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _instructionsUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                _instructionsUi.Closed -= _instructionsUi_Closed;
+                _instructionsUi = null;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

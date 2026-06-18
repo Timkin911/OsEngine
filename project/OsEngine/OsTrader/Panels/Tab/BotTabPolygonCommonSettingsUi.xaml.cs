@@ -5,8 +5,10 @@
 
 using OsEngine.Entity;
 using OsEngine.Language;
+using OsEngine.Market;
 using System;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace OsEngine.OsTrader.Panels.Tab
 {
@@ -15,7 +17,7 @@ namespace OsEngine.OsTrader.Panels.Tab
     /// </summary>
     public partial class BotTabPolygonCommonSettingsUi : Window
     {
-        BotTabPolygon _polygon;
+        private BotTabPolygon _polygon;
 
         public BotTabPolygonCommonSettingsUi(BotTabPolygon polygon)
         {
@@ -86,14 +88,105 @@ namespace OsEngine.OsTrader.Panels.Tab
             ButtonApply.Click += ButtonApply_Click;
 
             this.Closed += BotTabPolygonCommonSettingsUi_Closed;
+
+            if (InteractiveInstructions.PolygonPosts.AllInstructionsInClass == null
+            || InteractiveInstructions.PolygonPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPostPolygonCommonSettings.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void BotTabPolygonCommonSettingsUi_Closed(object sender, EventArgs e)
         {
-            ButtonSave.Click -= ButtonSave_Click;
-            ButtonApply.Click -= ButtonApply_Click;
-            this.Closed -= BotTabPolygonCommonSettingsUi_Closed;
-            _polygon = null;
+            try
+            {
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                ButtonSave.Click -= ButtonSave_Click;
+                ButtonApply.Click -= ButtonApply_Click;
+                ButtonPostPolygonCommonSettings.Click -= ButtonPostPolygonCommonSettings_Click;
+
+                _polygon = null;
+
+                Closed -= BotTabPolygonCommonSettingsUi_Closed;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenPolygonCommonSettings.Opacity = 1;
+                    PostWhitePolygonCommonSettings.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenPolygonCommonSettings.Opacity = 0;
+                    PostWhitePolygonCommonSettings.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenPolygonCommonSettings.Opacity = 1;
+                    PostWhitePolygonCommonSettings.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+            }
         }
 
         private void ButtonApply_Click(object sender, RoutedEventArgs e)
@@ -210,5 +303,21 @@ namespace OsEngine.OsTrader.Panels.Tab
 
             _polygon.SaveStandartSettings();
         }
+
+        #region Posts collection
+
+        private void ButtonPostPolygonCommonSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.PolygonPosts.Link9.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

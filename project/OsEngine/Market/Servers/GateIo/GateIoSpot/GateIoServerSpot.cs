@@ -14,6 +14,7 @@ using RestSharp;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -282,6 +283,11 @@ namespace OsEngine.Market.Servers.GateIo.GateIoSpot
                         security.MinTradeAmountType = MinTradeAmountType.C_Currency;
 
                         securities.Add(security);
+                    }
+
+                    if (securities.Count > 0)
+                    {
+                        securities = securities.OrderBy(s => s.Name).ToList();
                     }
 
                     foreach (Security sec in securities)
@@ -2052,13 +2058,23 @@ namespace OsEngine.Market.Servers.GateIo.GateIoSpot
                 string secName = order.SecurityNameCode;
                 string price = order.Price.ToString().Replace(",", ".");
                 string volume = order.Volume.ToString().Replace(",", ".");
+                string timeInForce = "gtc";
+
+                if (order.OrderTypeTime == OrderTypeTime.GTC)
+                {
+                    timeInForce = "gtc";
+                }
+                else
+                {
+                    timeInForce = "gtc";
+                }
 
                 string method = "POST";
                 string url = "/spot/orders";
                 string query_param = "";
 
                 string bodyParam = $"{{\"text\":\"t-{order.NumberUser}\",\"currency_pair\":" +
-                                    $"\"{secName}\",\"type\":\"limit\",\"account\":\"spot\",\"side\":\"{side}\",\"iceberg\":\"0\",\"amount\":\"{volume}\",\"price\":\"{price}\",\"time_in_force\":\"gtc\"}}";
+                                    $"\"{secName}\",\"type\":\"limit\",\"account\":\"spot\",\"side\":\"{side}\",\"iceberg\":\"0\",\"amount\":\"{volume}\",\"price\":\"{price}\",\"time_in_force\":\"{timeInForce}\"}}";
 
                 string bodyHash = GetHash(bodyParam);
 

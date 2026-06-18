@@ -1304,6 +1304,31 @@ namespace OsEngine.Language
           "Eng:There are no portfolio numbers in the GetAccountesReques. request. There is an internet error, a sandbox token has been issued, or a new portfolio has been created and you need to wait a few hours._" +
           "Ru:Нет номеров портфелей в запросе GetAccountesReques. Ошибка интернета, выписан токен песочницы или создан новый портфель и нужно подождать несколько часов._");
 
+        public string Label319 => OsLocalization.ConvertToLocString(
+          "Eng:You do not have permission to trade this instrument. You need to pass tests in your broker's personal account._" +
+          "Ru:У Вас нет разрешения торговать этот инструмент. Нужно проходить тесты в личном кабинете брокера._");
+
+        public string Label320 => OsLocalization.ConvertToLocString(
+          "Eng:Do you want to delete the security? All data will be lost!_" +
+          "Ru:Хотите удалить торговый инструмент? Все данные будут утеряны! _");
+
+        public string Label321 => OsLocalization.ConvertToLocString(
+          "Eng:The connector is being forced to restart_" +
+          "Ru:Запущена процедура принудительного перезапуска коннектора _");
+
+        public string Label322 => OsLocalization.ConvertToLocString(
+          "Eng:Failed to load candles. The T-Investments server is not available. Restarting the connector_" +
+          "Ru:Не удалось загрузить свечи. Сервер Т-Инвестиции не доступен.  Перезапускаем коннектор _");
+
+        public string Label323 => OsLocalization.ConvertToLocString(
+          "Eng:Error while loading securities. The T-Investments server is not available. The connector has been restarted. Cheburnet is offline_" +
+          "Ru:Ошибка при загрузке инструментов. Сервер Т-Инвестиции не доступен. Коннектор отправлен на перезапуск. Чебурнет перегружен... _");
+
+        public string Label324 => OsLocalization.ConvertToLocString(
+        "Eng:If set to True, similar servers will share a common request counter to avoid exceeding API limits_" +
+        "Ru:Если True - то аналогичные сервера будут иметь общий счетчик запросов (чтобы не выходить за пределы API лимитов)_");
+
+
 
 
 
@@ -1755,6 +1780,38 @@ namespace OsEngine.Language
             "Eng:Connection during the non-trading period of the connector is interrupted_" +
             "Ru:Подключение в неторговый период коннектора прервано_");
 
+        public string Message105 => OsLocalization.ConvertToLocString(
+         "Eng:You are adding security # to the ignored list.\nIt will no longer be tracked in the portfolio, the virtual position will be deleted from the bot_" +
+         "Ru:Вы добавляете инструмент # в список игнорируемых.\nОн больше не будет отслеживаться в портфеле, виртуальная позиция будет удалена из бота._");
+
+        public string Message106 => OsLocalization.ConvertToLocString(
+         "Eng:You are going to remove # security from the ignored list.The bot will start monitoring it in the portfolio and possibly create a viral position._" +
+         "Ru:Вы собираетесь удалить инструмент # из игнорируемых.\nБот начнёт следить за ним в портфеле и, возможно, создаст вируальную позицию._");
+
+        public string Message107 => OsLocalization.ConvertToLocString(
+        "Eng: security was not found in the connector's securities. Perhaps this is the currency for transactions._" +
+        "Ru: не найден в торгуемых у коннектора. Возможно это валюта для операций. Либо надо включить соответствующую площадку в настройках коннектора._");
+
+        public string Message108 => OsLocalization.ConvertToLocString(
+          "Eng: Add to the ignored list_" +
+          "Ru: Добавьте в список игнорируемых_");
+
+        public string Message109 => OsLocalization.ConvertToLocString(
+          "Eng: Deletion is not possible_" +
+          "Ru: Удаление невозможно_");
+
+        public string Message111 => OsLocalization.ConvertToLocString(
+          "Eng:There are no positions in the portfolio. Check the connection_" +
+          "Ru:Нет позиций в портфеле. Проверьте подключение_");
+
+        public string Message112 => OsLocalization.ConvertToLocString(
+          "Eng:There are no papers in the connector. Check the connection_" +
+          "Ru:В коннекторе нет бумаг. Проверьте подключение_");
+
+        public string Message113 => OsLocalization.ConvertToLocString(
+          "Eng:First, connect the bot to the portfolio to avoid deleting the quoted currency._" +
+          "Ru:Сначала подключите бота к портфелю, чтобы избежать удаления котируемой валюты._");
+
         public string TitleTester => OsLocalization.ConvertToLocString(
             "Eng:Exchange emulator_" +
             "Ru:Эмулятор биржи_");
@@ -1954,5 +2011,9 @@ namespace OsEngine.Language
         public string LeverageButtonCommit => OsLocalization.ConvertToLocString(
            "Eng:The button opens the leverage settings window for instruments._" +
            "Ru:Кнопка открывает окно настроек плеча по инструментам._");
+
+        public string LabelIgnorSec => OsLocalization.ConvertToLocString(
+         "Eng: Ignored securities _" +
+         "Ru: Игнорируемые инструменты _");
     }
 }

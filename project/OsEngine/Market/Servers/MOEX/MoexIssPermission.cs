@@ -80,7 +80,7 @@ namespace OsEngine.Market.Servers.MOEX
         }
         public bool DataFeedTfDayCanLoad
         {
-            get { return false; }
+            get { return true; }
         }
         public bool DataFeedTfTickCanLoad
         {
@@ -267,6 +267,19 @@ namespace OsEngine.Market.Servers.MOEX
         public bool CanChangeOrderMarketNumber
         {
             get { return false; }
+        }
+
+        public OrderLifeTimePermission OrdersLifeTimeRealization
+        {
+            get
+            {
+                return new OrderLifeTimePermission
+                {
+                    GtcIsReady = true,
+                    SpecifiedIsReady = true,
+                    DayIsReady = false
+                };
+            }
         }
 
         #endregion

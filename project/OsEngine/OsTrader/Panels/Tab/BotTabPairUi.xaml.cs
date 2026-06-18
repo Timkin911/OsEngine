@@ -18,6 +18,7 @@ using OsEngine.Market;
 using OsEngine.Market.Servers.Tester;
 using OsEngine.Journal;
 using OsEngine.Logging;
+using System.Windows.Threading;
 
 namespace OsEngine.OsTrader.Panels.Tab
 {
@@ -217,13 +218,26 @@ namespace OsEngine.OsTrader.Panels.Tab
             {
                 ButtonHideShowRightPanel_Click(null, null);
             }
+
+            if (InteractiveInstructions.PairPosts.AllInstructionsInClass == null
+                || InteractiveInstructions.PairPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPostTabPair.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void BotTabPairUi_Closed(object sender, EventArgs e)
         {
             try
             {
-                Closed -= BotTabPairUi_Closed;
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
 
                 TextBoxCorrelationLookBack.TextChanged -= TextBoxCorrelationLookBack_TextChanged;
                 TextBoxCointegrationLookBack.TextChanged -= TextBoxCointegrationLookBack_TextChanged;
@@ -236,19 +250,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                 ButtonClosePositions.Click -= ButtonClosePositions_Click;
                 ButtonPairJournal.Click -= ButtonPairJournal_Click;
                 ButtonHideShowRightPanel.Click -= ButtonHideShowRightPanel_Click;
+                ButtonSec1Connection.Click -= ButtonSec1Connection_Click;
+                ButtonSec2Connection.Click -= ButtonSec2Connection_Click;
+                ButtonPostTabPair.Click -= ButtonPostTabPair_Click;
 
                 CheckBoxCorrelationAutoIsOn.Click -= CheckBoxCorrelationAutoIsOn_Click;
                 CheckBoxCointegrationAutoIsOn.Click -= CheckBoxCointegrationAutoIsOn_Click;
 
+                ComboBoxSec1Volume.SelectionChanged -= ComboBoxSec1Volume_SelectionChanged;
+                ComboBoxSec1Slippage.SelectionChanged -= ComboBoxSec1Slippage_SelectionChanged;
+                ComboBoxSec2Volume.SelectionChanged -= ComboBoxSec2Volume_SelectionChanged;
+                ComboBoxSec2Slippage.SelectionChanged -= ComboBoxSec2Slippage_SelectionChanged;
+                ComboBoxSec1Regime.SelectionChanged -= ComboBoxSec1Regime_SelectionChanged;
+                ComboBoxSec2Regime.SelectionChanged -= ComboBoxSec2Regime_SelectionChanged;
+
                 TextBoxSec1Volume.TextChanged -= TextBoxSec1Volume_TextChanged;
                 TextBoxSec1Slippage.TextChanged -= TextBoxSec1Slippage_TextChanged;
-
-                TextBoxSec2Volume.TextChanged -= TextBoxSec2Volume_TextChanged;
-                TextBoxSec2Slippage.TextChanged -= TextBoxSec2Slippage_TextChanged;
-
-                TextBoxSec1Volume.TextChanged -= TextBoxSec1Volume_TextChanged;
-                TextBoxSec1Slippage.TextChanged -= TextBoxSec1Slippage_TextChanged;
-
                 TextBoxSec2Volume.TextChanged -= TextBoxSec2Volume_TextChanged;
                 TextBoxSec2Slippage.TextChanged -= TextBoxSec2Slippage_TextChanged;
 
@@ -274,15 +291,50 @@ namespace OsEngine.OsTrader.Panels.Tab
                     _chartSec2 = null;
                 }
 
+                if (HostSec1 != null)
+                {
+                    HostSec1.Child = null;
+                }
+                if (HostSec2 != null)
+                {
+                    HostSec2.Child = null;
+                }
+
                 if (_chartCorrelation != null)
                 {
-                    _chartCorrelation.Series.Clear();
+                    try
+                    {
+                        if (HostCorrelation != null)
+                        {
+                            HostCorrelation.Child = null;
+                        }
+                        _chartCorrelation.Series.Clear();
+                        _chartCorrelation.ChartAreas.Clear();
+                        _chartCorrelation.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        ServerMaster.SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+                    }
                     _chartCorrelation = null;
                 }
 
                 if (_chartCointegration != null)
                 {
-                    _chartCointegration.Series.Clear();
+                    try
+                    {
+                        if (HostCointegration != null)
+                        {
+                            HostCointegration.Child = null;
+                        }
+                        _chartCointegration.Series.Clear();
+                        _chartCointegration.ChartAreas.Clear();
+                        _chartCointegration.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        ServerMaster.SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+                    }
                     _chartCointegration = null;
                 }
 
@@ -335,11 +387,75 @@ namespace OsEngine.OsTrader.Panels.Tab
                 _pair.PairDeletedEvent -= _pair_PairDeletedEvent;
                 _pair = null;
 
-
+                Closed -= BotTabPairUi_Closed;
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenTabPair.Opacity = 1;
+                    PostWhiteTabPair.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenTabPair.Opacity = 0;
+                    PostWhiteTabPair.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenTabPair.Opacity = 1;
+                    PostWhiteTabPair.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -385,7 +501,7 @@ namespace OsEngine.OsTrader.Panels.Tab
             _pair.Save();
         }
 
-        JournalUi2 _journalUi2;
+        private JournalUi2 _journalUi2;
 
         private void ButtonPairJournal_Click(object sender, RoutedEventArgs e)
         {
@@ -797,7 +913,7 @@ namespace OsEngine.OsTrader.Panels.Tab
 
         // обработка нажатий на кнопки
 
-        PairToTrade _pair;
+        private PairToTrade _pair;
 
         private void ButtonCointegrationReload_Click(object sender, RoutedEventArgs e)
         {
@@ -811,9 +927,9 @@ namespace OsEngine.OsTrader.Panels.Tab
 
         // прорисовка инструментов
 
-        ChartCandleMaster _chartSec1;
+        private ChartCandleMaster _chartSec1;
 
-        ChartCandleMaster _chartSec2;
+        private ChartCandleMaster _chartSec2;
 
         private void PaintCandles()
         {
@@ -1112,5 +1228,21 @@ namespace OsEngine.OsTrader.Panels.Tab
                 System.Windows.MessageBox.Show(ex.ToString());
             }
         }
+
+        #region Posts collection
+
+        private void ButtonPostTabPair_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.PairPosts.Link12.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

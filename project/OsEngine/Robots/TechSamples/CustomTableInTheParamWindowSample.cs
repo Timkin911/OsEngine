@@ -125,7 +125,16 @@ namespace OsEngine.Robots.TechSamples
             }
             catch(Exception ex)
             {
-                _tab.SendNewLogMessage(ex.ToString(), OsEngine.Logging.LogMessageType.Error);
+                _tab.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        // Event of grid data error
+        private void TableDataGrid_DataError(object sender, DataGridViewDataErrorEventArgs e)
+        {
+            if (e.Exception != null)
+            {
+                SendNewLogMessage(e.Exception.ToString(), OsEngine.Logging.LogMessageType.Error);
             }
         }
 
@@ -155,7 +164,7 @@ namespace OsEngine.Robots.TechSamples
             }
             catch (Exception ex)
             {
-                _tab.SendNewLogMessage(ex.ToString(), OsEngine.Logging.LogMessageType.Error);
+                _tab.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -191,7 +200,7 @@ namespace OsEngine.Robots.TechSamples
             }
             catch (Exception ex)
             {
-                _tab.SendNewLogMessage(ex.ToString(), OsEngine.Logging.LogMessageType.Error);
+                _tab.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -261,6 +270,8 @@ namespace OsEngine.Robots.TechSamples
                 newColumn4.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
 
                 _hostTable.Child = _tableDataGrid;
+
+                _tableDataGrid.DataError += TableDataGrid_DataError;
             }
             catch (Exception ex)
             {
@@ -324,7 +335,7 @@ namespace OsEngine.Robots.TechSamples
             }
             catch(Exception ex)
             {
-                _tab.SendNewLogMessage(ex.ToString(), OsEngine.Logging.LogMessageType.Error);
+                _tab.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -336,8 +347,8 @@ namespace OsEngine.Robots.TechSamples
             row.Cells.Add(security);
             security.ReadOnly = true;
 
-            DataGridViewTextBoxCell candelCount = new DataGridViewTextBoxCell();
-            row.Cells.Add(candelCount);
+            DataGridViewTextBoxCell candleCount = new DataGridViewTextBoxCell();
+            row.Cells.Add(candleCount);
 
             DataGridViewTextBoxCell movementToEnter = new DataGridViewTextBoxCell();
             row.Cells.Add(movementToEnter);
@@ -354,7 +365,7 @@ namespace OsEngine.Robots.TechSamples
             try
             {
                 security.Value = Lines[index].Security.ToString();
-                candelCount.Value = Lines[index].CandleCount.ToString();
+                candleCount.Value = Lines[index].CandleCount.ToString();
                 movementToEnter.Value = Lines[index].MovementToEnter.ToString();
                 currentMovement.Value = Lines[index].CurrentMovement.ToString()+'%';
                 sideBox.Value = Lines[index].Side == OsEngine.Entity.Side.Buy ? "Buy" : "Sell";

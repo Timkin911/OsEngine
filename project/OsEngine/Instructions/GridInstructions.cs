@@ -52,6 +52,14 @@ namespace OsEngine.Instructions
                 result.Add(Link14);
                 result.Add(Link15);
                 result.Add(Link16);
+                result.Add(Link17);
+                result.Add(Link18);
+                result.Add(Link19);
+                result.Add(Link20);
+                result.Add(Link21);
+                result.Add(Link22);
+                result.Add(Link23);
+                result.Add(Link24);
 
                 return result;
             }
@@ -233,5 +241,92 @@ namespace OsEngine.Instructions
             }
         };
 
+        public Instruction Link17 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Сетки. Базовые настройки",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item850"
+            }
+        };
+
+        public Instruction Link18 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Сетки. Создание сетки",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item851"
+            }
+        };
+
+        public Instruction Link19 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Сетки. Стоп торги",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item852"
+            }
+        };
+
+        public Instruction Link20 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Сетки. Авто старт",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item853"
+            }
+        };
+
+        public Instruction Link21 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Сетки. Стоп и профит",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item854"
+            }
+        };
+
+        public Instruction Link22 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Сетки. Остановка сетки по ошибкам выставления и отзыва ордеров",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item855"
+            }
+        };
+
+        public Instruction Link23 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Настройки неторговых периодов для сетки",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item858"
+            }
+        };
+
+        public Instruction Link24 = new Instruction()
+        {
+            Type = InstructionType.Post,
+
+            Ru = new InstructionLocalized()
+            {
+                Description = "Как запустить сетку и ребалансировщик на одном счёте",
+                PostLink = "https://o-s-a.net/os-engine-faq?cats%5B%5D=tab88&subcats%5B%5D=sub101&items%5B%5D=item859"
+            }
+        };
     }
 }

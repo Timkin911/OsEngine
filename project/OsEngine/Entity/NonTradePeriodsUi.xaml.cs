@@ -5,12 +5,14 @@
 
 using OsEngine.Language;
 using OsEngine.Market;
+using OsEngine.Market.Servers;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace OsEngine.Entity
 {
@@ -233,16 +235,16 @@ namespace OsEngine.Entity
             ButtonLoadSet.Content = OsLocalization.Market.Label98;
             ButtonSaveSet.Content = OsLocalization.Market.Label99;
 
-            if(OsLocalization.CurLocalization == OsLocalization.OsLocalType.Ru)
+            if (OsLocalization.CurLocalization == OsLocalization.OsLocalType.Ru)
             {
                 TabItemStandardSettings.Header = "Преднастройки";
-                ButtonSetStandardMoexSpot.Content = "Установить стандартные настройки рынка Акций MOEX";
-                ButtonSetStandardMoexFutures.Content = "Установить стандартные настройки срочного(фьючерсы и опционы) рынка MOEX";
+                ButtonSetStandardMoexSpot.Content = "Установить настройки рынка MOEX СПОТ (акции, облигации) площадки";
+                ButtonSetStandardMoexFutures.Content = "Установить настройки рынка MOEX СРОЧНОЙ (фьючерсы, опционы) площадки";
             }
             else
             {
                 TabItemStandardSettings.Visibility = Visibility.Collapsed;
-                
+
             }
 
             // general non trade periods 
@@ -296,25 +298,22 @@ namespace OsEngine.Entity
             CheckBoxTradeInSunday.Content = OsLocalization.Trader.Label480;
 
             this.Closed += NonTradePeriodsUi_Closed;
-        }
 
-        private void LocalToPeriods(
-            CheckBox checkBoxNonTradePeriod1OnOff,
-            CheckBox checkBoxNonTradePeriod2OnOff,
-            CheckBox checkBoxNonTradePeriod3OnOff,
-             CheckBox checkBoxNonTradePeriod4OnOff,
-              CheckBox checkBoxNonTradePeriod5OnOff)
-        {
-            checkBoxNonTradePeriod1OnOff.Content = OsLocalization.Trader.Label473 + " 1";
-            checkBoxNonTradePeriod2OnOff.Content = OsLocalization.Trader.Label473 + " 2";
-            checkBoxNonTradePeriod3OnOff.Content = OsLocalization.Trader.Label473 + " 3";
-            checkBoxNonTradePeriod4OnOff.Content = OsLocalization.Trader.Label473 + " 4";
-            checkBoxNonTradePeriod5OnOff.Content = OsLocalization.Trader.Label473 + " 5";
+            if (InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass == null
+                || InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass.Count == 0
+                || !IsOpenedFromServerContext())
+            {
+                ButtonPostNonTradePeriods.Visibility = Visibility.Hidden;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void NonTradePeriodsUi_Closed(object sender, EventArgs e)
         {
-            if (_periods.NonTradePeriodGeneral.NonTradePeriod1Start.TimeSpan >= _periods.NonTradePeriodGeneral.NonTradePeriod1End.TimeSpan)
+            try
+            {
+                if (_periods.NonTradePeriodGeneral.NonTradePeriod1Start.TimeSpan >= _periods.NonTradePeriodGeneral.NonTradePeriod1End.TimeSpan)
             {
                 OffPeriod(ref _periods.NonTradePeriodGeneral.NonTradePeriod1OnOff, OsLocalization.Trader.Label462, numberPeriod: 1, $"{_periods.NonTradePeriodGeneral.NonTradePeriod1Start.TimeSpan.ToString()} >= {_periods.NonTradePeriodGeneral.NonTradePeriod1End.TimeSpan.ToString()}");
             }
@@ -482,8 +481,129 @@ namespace OsEngine.Entity
                 OffPeriod(ref _periods.NonTradePeriodSunday.NonTradePeriod5OnOff, OsLocalization.Trader.Label624 + ". " + OsLocalization.Trader.Label631, numberPeriod: 5, $"{_periods.NonTradePeriodSunday.NonTradePeriod5Start.TimeSpan.ToString()} > {_periods.NonTradePeriodSunday.NonTradePeriod5End.TimeSpan.ToString()}");
             }
 
+            if (_blinkTimer != null)
+            {
+                _blinkTimer.Stop();
+                _blinkTimer.Tick -= _blinkTimer_Tick;
+                _blinkTimer = null;
+            }
+
             _periods = null;
+            Closed -= NonTradePeriodsUi_Closed;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
+
+        private bool IsOpenedFromServerContext()
+        {
+            List<IServer> servers = ServerMaster.GetServers();
+
+            if (servers == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < servers.Count; i++)
+            {
+                AServer aServer = servers[i] as AServer;
+
+                if (aServer == null)
+                {
+                    continue;
+                }
+
+                if (aServer.ServerNameUnique + "nonTradePeriod" == _periods.NameUnique)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkCount = 0;
+                _isGreenVisible = true;
+
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    PostGreenNonTradePeriods.Opacity = 1;
+                    PostWhiteNonTradePeriods.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenNonTradePeriods.Opacity = 0;
+                    PostWhiteNonTradePeriods.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenNonTradePeriods.Opacity = 1;
+                    PostWhiteNonTradePeriods.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
+            }
+        }
+
+        private void LocalToPeriods(
+            CheckBox checkBoxNonTradePeriod1OnOff,
+            CheckBox checkBoxNonTradePeriod2OnOff,
+            CheckBox checkBoxNonTradePeriod3OnOff,
+             CheckBox checkBoxNonTradePeriod4OnOff,
+              CheckBox checkBoxNonTradePeriod5OnOff)
+        {
+            checkBoxNonTradePeriod1OnOff.Content = OsLocalization.Trader.Label473 + " 1";
+            checkBoxNonTradePeriod2OnOff.Content = OsLocalization.Trader.Label473 + " 2";
+            checkBoxNonTradePeriod3OnOff.Content = OsLocalization.Trader.Label473 + " 3";
+            checkBoxNonTradePeriod4OnOff.Content = OsLocalization.Trader.Label473 + " 4";
+            checkBoxNonTradePeriod5OnOff.Content = OsLocalization.Trader.Label473 + " 5";
+        }
+
+      
 
         #region Trade days 
 
@@ -1285,7 +1405,7 @@ namespace OsEngine.Entity
 
         #region Standard settings
 
-        private void ButtonSetStandardMoexSpot_Click(object sender, RoutedEventArgs e)
+        private void ButtonSetStandardMoex_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -1301,9 +1421,9 @@ namespace OsEngine.Entity
                 _periods.SetMoexSpotNonTradePeriods();
                 SetCurrentSettingsInForm();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                ServerMaster.SendNewLogMessage(ex.ToString(),Logging.LogMessageType.Error);
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -1381,5 +1501,20 @@ namespace OsEngine.Entity
 
         #endregion
 
+        #region Posts collection
+
+        private void ButtonPostNonTradePeriods_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.BotStationLightPosts.Link32.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

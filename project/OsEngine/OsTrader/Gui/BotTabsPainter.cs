@@ -16,6 +16,9 @@ using OsEngine.Journal;
 using OsEngine.Logging;
 using OsEngine.OsTrader.Panels.Tab;
 using OsEngine.Market;
+using System.Drawing;
+using System.IO;
+using OsEngine.Instructions;
 
 namespace OsEngine.OsTrader.Gui
 {
@@ -27,7 +30,7 @@ namespace OsEngine.OsTrader.Gui
             _host = host;
 
             CreateTable(master._startProgram);
-            RePaintTable(); 
+            RePaintTable();
             _master.BotCreateEvent += _master_NewBotCreateEvent;
             _master.BotDeleteEvent += _master_BotDeleteEvent;
             _master.UserClickOnPositionShowBotInTableEvent += _master_UserClickOnPositionShowBotInTableEvent;
@@ -112,7 +115,7 @@ namespace OsEngine.OsTrader.Gui
             column07.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
             newGrid.Columns.Add(column07);
 
-            if(startProgram != StartProgram.IsOsTrader)
+            if (startProgram != StartProgram.IsOsTrader)
             {
                 column07.ReadOnly = true;
             }
@@ -138,11 +141,19 @@ namespace OsEngine.OsTrader.Gui
             colum11.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
             newGrid.Columns.Add(colum11);
 
+            DataGridViewButtonColumn colum12 = new DataGridViewButtonColumn();
+            // colum09.CellTemplate = cell0;
+            //colum09.HeaderText = "Action";
+            colum12.ReadOnly = true;
+            colum12.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            newGrid.Columns.Add(colum12);
+
             _grid = newGrid;
             _host.Child = _grid;
 
             _grid.Click += _grid_Click;
-            _grid.CellBeginEdit += _grid_CellBeginEdit;
+            _grid.CellContentClick += _grid_CellContentClick;
+            _grid.CurrentCellDirtyStateChanged += _grid_CurrentCellDirtyStateChanged;
             _grid.CellEndEdit += _grid_CellEndEdit;
             _grid.MouseLeave += _grid_MouseLeave;
             _grid.CellMouseClick += _grid_CellMouseClick;
@@ -209,13 +220,13 @@ namespace OsEngine.OsTrader.Gui
             {
                 _grid.ClearSelection();
             }
-            catch (Exception ex) 
+            catch (Exception ex)
             {
-                _master.SendNewLogMessage(ex.ToString(),Logging.LogMessageType.Error);
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
-		private int _prevActiveRow;
+        private int _prevActiveRow;
 
         private void _grid_Click(object sender, EventArgs e)
         {
@@ -239,10 +250,10 @@ namespace OsEngine.OsTrader.Gui
 
                 int rowIndex = _grid.SelectedCells[0].RowIndex;
 
-                if(coluIndex < 3)
-                {
-                    return;
-                }
+                //if (coluIndex < 3)
+                //{
+                //    return;
+                //}
 
                 /*
     colum0.HeaderText = "Num";
@@ -296,11 +307,36 @@ namespace OsEngine.OsTrader.Gui
 
                     _master.DeleteRobotByNum(rowIndex);
                 }
+                else if (coluIndex == 10 &&
+                    rowIndex < botsCount)
+                { // вызываем журнал конкретного робота
+                    bot.ShowJournalDialog();
+                    return;
+                }
 
-                if(rowIndex == botsCount + 1)
+                if (rowIndex == botsCount + 1)
                 { // последняя строка
 
-                    if (_master._startProgram == StartProgram.IsOsTrader
+                    if (coluIndex == 1 &&
+                       rowIndex == botsCount + 1)
+                    {
+                        if (_master._startProgram == StartProgram.IsOsTrader)
+                        {
+                            ShowInstructionsForTheBotStation();
+                        }
+                        else if (_master._startProgram == StartProgram.IsTester)
+                        {
+                            ShowInstructionsForTheTester();
+                        }
+                    }
+
+                    if ((_master._startProgram == StartProgram.IsOsTrader
+                        || _master._startProgram == StartProgram.IsTester)
+                       && coluIndex == 4)
+                    {
+                        ServerMaster.ShowMatrixManagerDialog();
+                    }
+                    else if (_master._startProgram == StartProgram.IsOsTrader
                        && coluIndex == 5)
                     {
                         ServerMaster.ShowApiDialog();
@@ -337,9 +373,9 @@ namespace OsEngine.OsTrader.Gui
                 _grid.Rows[rowIndex].DefaultCellStyle.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
                 _prevActiveRow = rowIndex;
             }
-            catch(Exception error)
+            catch (Exception error)
             {
-                _master.SendNewLogMessage(error.ToString(),Logging.LogMessageType.Error);
+                _master.SendNewLogMessage(error.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -368,7 +404,7 @@ namespace OsEngine.OsTrader.Gui
                 int rowIndex = e.RowIndex;
                 int columnIndex = e.ColumnIndex;
 
-                if(rowIndex >= _master.PanelsArray.Count
+                if (rowIndex >= _master.PanelsArray.Count
                     || rowIndex < 0)
                 {
                     return;
@@ -390,7 +426,7 @@ namespace OsEngine.OsTrader.Gui
                 items.Add(new ToolStripMenuItem(OsLocalization.Trader.Label40));
                 items[3].Click += BotTabsPainter_Journal_Click;
 
-                if(_lastSelectedBot.OnOffEventsInTabs == true)
+                if (_lastSelectedBot.OnOffEventsInTabs == true)
                 {
                     items.Add(new ToolStripMenuItem(OsLocalization.Trader.Label412));
                 }
@@ -406,9 +442,9 @@ namespace OsEngine.OsTrader.Gui
                 }
                 else //if (selectedBot.OnOffEventsInTabs == false)
                 {
-                   items.Add(new ToolStripMenuItem(OsLocalization.Trader.Label415));
+                    items.Add(new ToolStripMenuItem(OsLocalization.Trader.Label415));
                 }
-                if(_master._startProgram == StartProgram.IsTester)
+                if (_master._startProgram == StartProgram.IsTester)
                 {
                     items[5].Enabled = false;
                 }
@@ -440,9 +476,9 @@ namespace OsEngine.OsTrader.Gui
             {
                 _lastSelectedBot.ShowChartDialog();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                _master.SendNewLogMessage(ex.ToString(),Logging.LogMessageType.Error);
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -462,43 +498,7 @@ namespace OsEngine.OsTrader.Gui
         {
             try
             {
-                string journalName = 
-                    "Journal2Ui_" + _lastSelectedBot.NameStrategyUniq + _master._startProgram.ToString();
-
-                for(int i = 0;i < _journalUi.Count;i++)
-                {
-                    if (_journalUi[i].JournalName == journalName)
-                    {
-                        _journalUi[i].Activate();
-                        return;
-                    }
-                }
-
-                List<BotPanelJournal> panelsJournal = new List<BotPanelJournal>();
-
-                List<Journal.Journal> journals = _lastSelectedBot.GetJournals();
-
-
-                BotPanelJournal botPanel = new BotPanelJournal();
-                botPanel.BotName = _lastSelectedBot.NameStrategyUniq;
-                botPanel.BotClass = _lastSelectedBot.GetNameStrategyType();
-
-                botPanel._Tabs = new List<BotTabJournal>();
-
-                for (int i2 = 0; journals != null && i2 < journals.Count; i2++)
-                {
-                    BotTabJournal botTabJournal = new BotTabJournal();
-                    botTabJournal.TabNum = i2;
-                    botTabJournal.Journal = journals[i2];
-                    botPanel._Tabs.Add(botTabJournal);
-                }
-
-                panelsJournal.Add(botPanel);
-
-                _journalUi.Add(new JournalUi2(panelsJournal, _lastSelectedBot.StartProgram));
-                _journalUi[_journalUi.Count-1].Closed += _journalUi_Closed;
-                _journalUi[_journalUi.Count - 1].LogMessageEvent += _journalUi_LogMessageEvent;
-                _journalUi[_journalUi.Count - 1].Show();
+                _lastSelectedBot.ShowJournalDialog();
             }
             catch (Exception error)
             {
@@ -545,7 +545,7 @@ namespace OsEngine.OsTrader.Gui
         {
             try
             {
-                if(_lastSelectedBot.OnOffEventsInTabs == true)
+                if (_lastSelectedBot.OnOffEventsInTabs == true)
                 {
                     _lastSelectedBot.OnOffEventsInTabs = false;
                 }
@@ -606,7 +606,7 @@ namespace OsEngine.OsTrader.Gui
         {
             try
             {
-                for (int i = 0; i < _master.PanelsArray.Count-1; i++)
+                for (int i = 0; i < _master.PanelsArray.Count - 1; i++)
                 {
                     if (_master.PanelsArray[i].NameStrategyUniq == _lastSelectedBot.NameStrategyUniq)
                     {
@@ -632,7 +632,7 @@ namespace OsEngine.OsTrader.Gui
             {
                 int rowIndex = -1;
 
-                for(int i = 0;i < _master.PanelsArray.Count;i++)
+                for (int i = 0; i < _master.PanelsArray.Count; i++)
                 {
                     if (_master.PanelsArray[i].NameStrategyUniq == _lastSelectedBot.NameStrategyUniq)
                     {
@@ -641,7 +641,7 @@ namespace OsEngine.OsTrader.Gui
                     }
                 }
 
-                if(rowIndex == -1)
+                if (rowIndex == -1)
                 {
                     return;
                 }
@@ -667,29 +667,17 @@ namespace OsEngine.OsTrader.Gui
 
         #region работа с чек-боксами включений и отключений
 
-        private int _lastChangeRow;
+        private DateTime _lastTimeClick = DateTime.MinValue;
 
-        private int _lastChangeColumn;
-
-        private void _grid_CellBeginEdit(object sender, DataGridViewCellCancelEventArgs e)
+        private void _grid_CurrentCellDirtyStateChanged(object sender, EventArgs e)
         {
             try
             {
-                if(e.ColumnIndex < 3)
+                if (_grid.IsCurrentCellDirty
+                    && _grid.CurrentCell is DataGridViewCheckBoxCell)
                 {
-                    return;
+                    _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
                 }
-
-                if (_lastTimeClick.AddMilliseconds(500) > DateTime.Now)
-                {
-                    return;
-                }
-                _lastTimeClick = DateTime.Now;
-
-                _lastChangeRow = e.RowIndex;
-                _lastChangeColumn = e.ColumnIndex;
-
-                Task.Run(ChangeOnOffAwait);
             }
             catch (Exception ex)
             {
@@ -697,89 +685,61 @@ namespace OsEngine.OsTrader.Gui
             }
         }
 
-        private DateTime _lastTimeClick = DateTime.MinValue;
-
-        private async void ChangeOnOffAwait()
+        private void _grid_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
             try
             {
-                await Task.Delay(200);
-                ChangeFocus();
-                await Task.Delay(200);
-                ChangeOnOff();
+                int columnIndex = e.ColumnIndex;
+                int rowIndex = e.RowIndex;
+
+                if (columnIndex != 5 && columnIndex != 6)
+                {
+                    return;
+                }
+
+                if (rowIndex < 0)
+                {
+                    return;
+                }
+
+                _lastTimeClick = DateTime.Now;
+
+                int botsCount = 0;
+
+                if (_master.PanelsArray != null)
+                {
+                    botsCount = _master.PanelsArray.Count;
+                }
+
+                object cellValue = _grid.Rows[rowIndex].Cells[columnIndex].Value;
+
+                if (cellValue == null)
+                {
+                    return;
+                }
+
+                bool isOn = Convert.ToBoolean(cellValue);
+
+                if (columnIndex == 5 && rowIndex < botsCount)
+                {
+                    OnOffBot(rowIndex, isOn);
+                }
+                else if (columnIndex == 5 && rowIndex == botsCount)
+                {
+                    OnOffAll(isOn);
+                }
+                else if (columnIndex == 6 && rowIndex < botsCount)
+                {
+                    OnOffEmulatorBot(rowIndex, isOn);
+                }
+                else if (columnIndex == 6 && rowIndex == botsCount)
+                {
+                    OnOffEmulatorAll(isOn);
+                }
             }
-            catch(Exception error)
+            catch (Exception ex)
             {
-                System.Windows.MessageBox.Show(error.ToString());
-            }
-        }
-
-        private void ChangeFocus()
-        {
-            if (_grid.InvokeRequired)
-            {
-                _grid.Invoke(new Action(ChangeFocus));
-                return;
-            }
-
-            _grid.Rows[_lastChangeRow].Cells[0].Selected = true;
-        }
-
-        private void ChangeOnOff()
-        {
-            if (_grid.InvokeRequired)
-            {
-                _grid.Invoke(new Action(ChangeOnOff));
-                return;
-            }
-
-            int coluIndex = _lastChangeColumn;
-            int rowIndex = _lastChangeRow;
-
-            int botsCount = 0;
-
-            if (_master.PanelsArray != null)
-            {
-                botsCount = _master.PanelsArray.Count;
-            }
-
-            if (coluIndex == 5 &&
-                rowIndex < botsCount &&
-                _grid.Rows[rowIndex].Cells[5].Value != null)
-            {
-                string textInCell = _grid.Rows[rowIndex].Cells[5].Value.ToString();
-                bool isOn = Convert.ToBoolean(textInCell);
-
-                OnOffBot(rowIndex, isOn);
-            }
-            if (coluIndex == 5 &&
-                rowIndex == botsCount &&
-                _grid.Rows[rowIndex].Cells[5].Value != null)
-            {
-                string textInCell = _grid.Rows[rowIndex].Cells[5].Value.ToString();
-                bool isOn = Convert.ToBoolean(textInCell);
-
-                OnOffAll(isOn);
-            }
-
-            if (coluIndex == 6 &&
-                rowIndex < botsCount &&
-                _grid.Rows[rowIndex].Cells[6].Value != null)
-            {
-                string textInCell = _grid.Rows[rowIndex].Cells[6].Value.ToString();
-
-                bool isOn = Convert.ToBoolean(textInCell);
-
-                OnOffEmulatorBot(rowIndex, isOn);
-            }
-            if (coluIndex == 6 &&
-                rowIndex == botsCount &&
-                _grid.Rows[rowIndex].Cells[6].Value != null)
-            {
-                string textInCell = _grid.Rows[rowIndex].Cells[6].Value.ToString();
-                bool isOn = Convert.ToBoolean(textInCell);
-
-                OnOffEmulatorAll(isOn);
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -791,11 +751,11 @@ namespace OsEngine.OsTrader.Gui
 
         private void OnOffAll(bool value)
         {
-            if(_master.PanelsArray == null)
+            if (_master.PanelsArray == null)
             {
                 return;
             }
-            for(int i = 0;i < _master.PanelsArray.Count;i++)
+            for (int i = 0; i < _master.PanelsArray.Count; i++)
             {
                 BotPanel bot = _master.PanelsArray[i];
                 bot.OnOffEventsInTabs = value;
@@ -835,7 +795,7 @@ namespace OsEngine.OsTrader.Gui
                 {
                     BotPanel bot = _master.PanelsArray[i];
 
-                    if(bot == null)
+                    if (bot == null)
                     {
                         continue;
                     }
@@ -880,7 +840,7 @@ colum06.HeaderText = "Emulator on/off";
 
 colum07.HeaderText = "Chart";
 colum08.HeaderText = "Parameters";
-colum9.HeaderText = "Journal";
+colum9.HeaderText = "Journal common";
 colum10.HeaderText = "Action";
 */
             DataGridViewRow row = new DataGridViewRow();
@@ -890,7 +850,7 @@ colum10.HeaderText = "Action";
 
             row.Cells.Add(new DataGridViewTextBoxCell());
 
-            if(string.IsNullOrEmpty(bot.PublicName) == false)
+            if (string.IsNullOrEmpty(bot.PublicName) == false)
             {
                 row.Cells[1].Value = bot.PublicName;
             }
@@ -898,13 +858,13 @@ colum10.HeaderText = "Action";
             {
                 row.Cells[1].Value = bot.NameStrategyUniq;
             }
-           
+
             row.Cells.Add(new DataGridViewTextBoxCell());
             row.Cells[2].Value = bot.GetType().Name;
 
             row.Cells.Add(new DataGridViewTextBoxCell());
 
-            if(bot.TabsSimple.Count != 0 &&
+            if (bot.TabsSimple.Count != 0 &&
                 bot.TabsSimple[0].Security != null)
             {
                 row.Cells[3].Value = bot.TabsSimple[0].Security.Name;
@@ -920,13 +880,16 @@ colum10.HeaderText = "Action";
             row.Cells[6].Value = bot.OnOffEmulatorsInTabs;
 
             row.Cells.Add(new DataGridViewButtonCell());
-            row.Cells[7].Value =  OsLocalization.Trader.Label172;//"Chart";
+            row.Cells[7].Value = OsLocalization.Trader.Label172;//"Chart";
 
             row.Cells.Add(new DataGridViewButtonCell());
             row.Cells[8].Value = OsLocalization.Trader.Label45;//"Parameters";
 
             row.Cells.Add(new DataGridViewButtonCell());
             row.Cells[9].Value = OsLocalization.Trader.Label39;//"Delete";
+
+            row.Cells.Add(new DataGridViewButtonCell());
+            row.Cells[10].Value = OsLocalization.Trader.Label40; //"Journal";
 
             if (num % 2 == 0)
             {
@@ -970,7 +933,7 @@ colum9.HeaderText = "Journal";
             row.Cells.Add(new DataGridViewButtonCell());
             row.Cells.Add(new DataGridViewButtonCell());
             row.Cells.Add(new DataGridViewButtonCell());
-
+            row.Cells.Add(new DataGridViewButtonCell());
             return row;
         }
 
@@ -979,7 +942,32 @@ colum9.HeaderText = "Journal";
             DataGridViewRow row = new DataGridViewRow();
 
             row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells.Add(new DataGridViewTextBoxCell());
+
+            if (_master._startProgram == StartProgram.IsOsTrader)
+            {
+                if (InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass != null
+                    && InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass.Count > 0)
+                {
+                    AddImageToRow(row);
+                }
+                else
+                {
+                    row.Cells.Add(new DataGridViewTextBoxCell());
+                }
+            }
+            else
+            {
+                if (InteractiveInstructions.TesterLightPosts.AllInstructionsInClass != null
+                    && InteractiveInstructions.TesterLightPosts.AllInstructionsInClass.Count > 0)
+                {
+                    AddImageToRow(row);
+                }
+                else
+                {
+                    row.Cells.Add(new DataGridViewTextBoxCell());
+                }
+            }
+
             row.Cells.Add(new DataGridViewTextBoxCell());
             row.Cells.Add(new DataGridViewTextBoxCell());
             row.Cells.Add(new DataGridViewTextBoxCell());
@@ -990,25 +978,58 @@ colum9.HeaderText = "Journal";
             row.Cells.Add(new DataGridViewTextBoxCell());
             row.Cells[6].Value = "";
             row.Cells[6].ReadOnly = true;
-            
+
             row.Cells.Add(new DataGridViewButtonCell());
 
-            if(_master._startProgram == StartProgram.IsOsTrader)
+            if (_master._startProgram == StartProgram.IsOsTrader)
             {
                 row.Cells[7].Value = OsLocalization.Trader.Label570; //"Copy trading";
             }
 
             row.Cells.Add(new DataGridViewButtonCell());
-            row.Cells[8].Value = OsLocalization.Trader.Label40; //"Journal";
+            row.Cells[8].Value = OsLocalization.Trader.Label747; //"Journal common";
             row.Cells.Add(new DataGridViewButtonCell());
             row.Cells[9].Value = OsLocalization.Trader.Label38; //"Add New...";
+            row.Cells.Add(new DataGridViewTextBoxCell());
 
             return row;
         }
 
+        private void AddImageToRow(DataGridViewRow row)
+        {
+            try
+            {
+                DataGridViewImageCell imageCell = new DataGridViewImageCell();
+                imageCell.ImageLayout = DataGridViewImageCellLayout.Normal;
+                row.Cells.Add(imageCell);
+                imageCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
+
+                string altPath = Path.Combine(Application.StartupPath, @"Images\InstructionPosts\GreenPostCollection.png");
+
+                if (File.Exists(altPath))
+                {
+                    using (FileStream fs = new FileStream(altPath, FileMode.Open, FileAccess.Read))
+                    {
+                        Image originalImage = Image.FromStream(fs);
+                        Image resizedImage = new Bitmap(originalImage, new Size(25, 20));
+                        row.Cells[1].Value = resizedImage;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+
+                if (row.Cells.Count < 2)
+                {
+                    row.Cells.Add(new DataGridViewTextBoxCell());
+                }
+            }
+        }
+
         private void UpdaterThreadArea()
         {
-            while(true)
+            while (true)
             {
                 Thread.Sleep(2000);
 
@@ -1052,7 +1073,7 @@ colum9.HeaderText = "Journal";
 
                     BotPanel bot = _master.PanelsArray[i];
 
-                    if(bot == null)
+                    if (bot == null)
                     {
                         continue;
                     }
@@ -1204,7 +1225,7 @@ colum9.HeaderText = "Journal";
             }
             catch
             {
-               // ignore
+                // ignore
             }
         }
 
@@ -1228,6 +1249,89 @@ colum9.HeaderText = "Journal";
             catch
             {
                 return;
+            }
+        }
+
+        #endregion
+
+        #region Posts collection
+
+        private InstructionsUi _instructionsUi;
+
+        private void ShowInstructionsForTheTester()
+        {
+            if (InteractiveInstructions.TesterLightPosts.AllInstructionsInClass == null
+                    || InteractiveInstructions.TesterLightPosts.AllInstructionsInClass.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_instructionsUi == null)
+                {
+                    _instructionsUi = new InstructionsUi(
+                        InteractiveInstructions.TesterLightPosts.AllInstructionsInClass, InteractiveInstructions.TesterLightPosts.AllInstructionsInClassDescription);
+                    _instructionsUi.Show();
+                    _instructionsUi.Closed += _instructionsUi_Closed;
+                }
+                else
+                {
+                    if (_instructionsUi.WindowState == System.Windows.WindowState.Minimized)
+                    {
+                        _instructionsUi.WindowState = System.Windows.WindowState.Normal;
+                    }
+                    _instructionsUi.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void ShowInstructionsForTheBotStation()
+        {
+            if (InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass == null
+                    || InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass.Count == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_instructionsUi == null)
+                {
+                    _instructionsUi = new InstructionsUi(
+                        InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass, InteractiveInstructions.BotStationLightPosts.AllInstructionsInClassDescription);
+                    _instructionsUi.Show();
+                    _instructionsUi.Closed += _instructionsUi_Closed;
+                }
+                else
+                {
+                    if (_instructionsUi.WindowState == System.Windows.WindowState.Minimized)
+                    {
+                        _instructionsUi.WindowState = System.Windows.WindowState.Normal;
+                    }
+                    _instructionsUi.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _instructionsUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                _instructionsUi.Closed -= _instructionsUi_Closed;
+                _instructionsUi = null;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 

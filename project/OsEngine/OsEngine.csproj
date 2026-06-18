@@ -1,6 +1,6 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
     <ExpressionBlendVersion>12.0.41002.1</ExpressionBlendVersion>
     <IsWebBootstrapper>false</IsWebBootstrapper>
@@ -25,23 +25,23 @@
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationIcon>OsLogo.ico</ApplicationIcon>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-    <AssemblyVersion>2.0.0.9</AssemblyVersion>
+    <AssemblyVersion>2.0.1.5</AssemblyVersion>
     <PackageOutputPath>$(OutputPath)\</PackageOutputPath>
-    <FileVersion>2.0.0.9</FileVersion>
+    <FileVersion>2.0.1.5</FileVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
    <OutputPath>bin\Debug\</OutputPath>
    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
    <Optimize>False</Optimize>
-   <DebugType>full</DebugType>
+   <DebugType>portable</DebugType>
    <GenerateAssemblyInfo>True</GenerateAssemblyInfo>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
    <OutputPath>bin\Release\</OutputPath>
    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-   <DebugType>full</DebugType>
+   <DebugType>portable</DebugType>
    <Optimize>False</Optimize>
    <GenerateAssemblyInfo>True</GenerateAssemblyInfo>
   </PropertyGroup>
@@ -103,6 +103,10 @@
       <HintPath>bin\Debug\MtClient.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="NSec.Cryptography">
+      <HintPath>bin\Debug\NSec.Cryptography.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="OpenFAST">
       <HintPath>bin\Debug\OpenFAST.dll</HintPath>
     </Reference>
@@ -127,13 +131,10 @@
     <PackageReference Include="Google.Api.CommonProtos" Version="2.16.0" />
     <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
-    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3240.44" />
     <PackageReference Include="Google.Protobuf" Version="3.31.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
     <PackageReference Include="System.ServiceModel.Syndication" Version="9.0.5" />
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.5" />
-    <PackageReference Include="System.Threading.Channels" Version="9.0.5" />
     <PackageReference Include="System.ServiceModel.Primitives" Version="8.1.2" />
     <PackageReference Include="System.ServiceModel.Http" Version="8.1.2" />
     <PackageReference Include="System.ServiceModel.Duplex" Version="6.0.0" />
@@ -160,14 +161,23 @@
     <Content Remove="bin\Release\libssl-3-x64.dll" />
   </ItemGroup>
   <ItemGroup>
+    <None Remove="Images\InstructionPosts\GreenPost.png" />
+    <None Remove="Images\InstructionPosts\GreenPostCollection.png" />
+    <None Remove="Images\InstructionPosts\WhitePost.png" />
+    <None Remove="Images\InstructionPosts\WhitePostCollection.png" />
     <None Remove="Images\MainWIndow\flag_eng.png" />
     <None Remove="Images\MainWIndow\flag_ru.png" />
     <None Remove="Images\MainWIndow\tbank.mp4" />
+    <None Remove="Images\RestartBenchmark.png" />
   </ItemGroup>
   <ItemGroup>
     <AppDesigner Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
+    <Resource Include="Images\InstructionPosts\GreenPost.png" />
+    <Resource Include="Images\InstructionPosts\GreenPostCollection.png" />
+    <Resource Include="Images\InstructionPosts\WhitePost.png" />
+    <Resource Include="Images\InstructionPosts\WhitePostCollection.png" />
     <Resource Include="Images\MainWIndow\flag_eng.png" />
     <Resource Include="Images\MainWIndow\flag_ru.png" />
     <Resource Include="Images\OsLogo.ico" />
@@ -247,8 +257,11 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\OsEngine_logo_transpared.png" />
+    <EmbeddedResource Include="Market\Servers\TInvest\Certificates\russian_trusted_root_ca.cer" />
+    <EmbeddedResource Include="Market\Servers\TInvest\Certificates\russian_trusted_sub_ca.cer" />
   </ItemGroup>
   <ItemGroup>
+    <Resource Include="Images\RestartBenchmark.png" />
     <Resource Include="Images\Support\No.png" />
     <Resource Include="Images\Support\Prime.png" />
     <Resource Include="Images\Support\Standart.png" />
@@ -259,6 +272,7 @@
   <ItemGroup>
     <Folder Include="bin\Debug\" />
     <Folder Include="bin\Release\" />
+    <Folder Include="Indicators\Scripts\" />
   </ItemGroup>
   <ItemGroup>
     <Compile Update="Properties\Settings.Designer.cs">

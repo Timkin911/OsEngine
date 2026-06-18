@@ -21,11 +21,15 @@ using Order = OsEngine.Entity.Order;
 using Trade = OsEngine.Entity.Trade;
 using Security = OsEngine.Entity.Security;
 using Portfolio = OsEngine.Entity.Portfolio;
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using Grpc.Net.Client;
 using Grpc.Core;
 using System.Threading.Tasks;
+using OsEngine.Market.Servers.Bybit.Entities;
 
 namespace OsEngine.Market.Servers.TInvest
 {
@@ -136,6 +140,8 @@ namespace OsEngine.Market.Servers.TInvest
             }
         }
 
+        private DateTime _lastTimeEntryLogicConnectionCheckThread;
+
         private void ConnectionCheckThread()
         {
             while (true)
@@ -147,6 +153,29 @@ namespace OsEngine.Market.Servers.TInvest
                         Thread.Sleep(1000);
                         continue;
                     }
+
+                    if(_securitiesDictionary.Count == 0)
+                    {
+                        Thread.Sleep(1000);
+                        continue;
+                    }
+
+                    DateTime utcTime = DateTime.UtcNow;
+
+                    if(_lastTimeEntryLogicConnectionCheckThread != DateTime.MinValue 
+                        && _lastTimeEntryLogicConnectionCheckThread.Hour == 2
+                        && utcTime.Hour == 3)
+                    {
+                        _lastTimeEntryLogicConnectionCheckThread = utcTime;
+
+                        SendLogMessage(OsLocalization.Market.Label321, LogMessageType.System);
+                        ServerStatus = ServerConnectStatus.Disconnect;
+                        DisconnectEvent();
+                        Thread.Sleep(2000);
+                        continue;
+                    }
+
+                    _lastTimeEntryLogicConnectionCheckThread = utcTime;
 
                     bool streamsIsLost = false;
                     string lostStreamName = null;
@@ -271,8 +300,12 @@ namespace OsEngine.Market.Servers.TInvest
                     }
                     else
                     {
-                        GetPortfolios();
-                        Thread.Sleep(20000);
+                        if (_lastTimeGetPortfolio.AddSeconds(10) < DateTime.Now)
+                        {
+                            GetPortfolios();
+                        }
+
+                        Thread.Sleep(5000);
                     }
                 }
                 catch (Exception ex)
@@ -478,14 +511,28 @@ namespace OsEngine.Market.Servers.TInvest
                     CurrenciesResponse currenciesResponse = null;
 
                     currenciesResponse = _instrumentsClient.Currencies(new InstrumentsRequest(), headers: _gRpcMetadata);
-                    UpdateCurrenciesFromServer(currenciesResponse);
+                    
+                    if(UpdateCurrenciesFromServer(currenciesResponse) == false)
+                    {
+                        SendLogMessage(OsLocalization.Market.Label323, LogMessageType.Error);
+                        ServerStatus = ServerConnectStatus.Disconnect;
+                        DisconnectEvent();
+                        return;
+                    }
 
                     if (_useStock || _useOther)
                     {
                         _rateGateInstruments.WaitToProceed();
 
                         SharesResponse result = _instrumentsClient.Shares(new InstrumentsRequest(), headers: _gRpcMetadata);
-                        UpdateSharesFromServer(result);
+
+                        if(UpdateSharesFromServer(result) == false)
+                        {
+                            SendLogMessage(OsLocalization.Market.Label323, LogMessageType.Error);
+                            ServerStatus = ServerConnectStatus.Disconnect;
+                            DisconnectEvent();
+                            return;
+                        }
                     }
 
                     if (_useFutures)
@@ -493,7 +540,14 @@ namespace OsEngine.Market.Servers.TInvest
                         _rateGateInstruments.WaitToProceed();
 
                         FuturesResponse result = _instrumentsClient.Futures(new InstrumentsRequest(), headers: _gRpcMetadata);
-                        UpdateFuturesFromServer(result);
+
+                        if(UpdateFuturesFromServer(result) == false)
+                        {
+                            SendLogMessage(OsLocalization.Market.Label323, LogMessageType.Error);
+                            ServerStatus = ServerConnectStatus.Disconnect;
+                            DisconnectEvent();
+                            return;
+                        }
                     }
 
                     if (_useOptions)
@@ -527,16 +581,35 @@ namespace OsEngine.Market.Servers.TInvest
                         _rateGateInstruments.WaitToProceed();
 
                         BondsResponse result = _instrumentsClient.Bonds(new InstrumentsRequest(), headers: _gRpcMetadata);
-                        UpdateBondsFromServer(result);
+                        if(UpdateBondsFromServer(result) == false)
+                        {
+                            SendLogMessage(OsLocalization.Market.Label323, LogMessageType.Error);
+                            ServerStatus = ServerConnectStatus.Disconnect;
+                            DisconnectEvent();
+                            return;
+                        }
 
                         _rateGateInstruments.WaitToProceed();
 
                         EtfsResponse etfs = _instrumentsClient.Etfs(new InstrumentsRequest(), headers: _gRpcMetadata);
-                        UpdateEtfsFromServer(etfs);
+                        if(UpdateEtfsFromServer(etfs) == false)
+                        {
+                            SendLogMessage(OsLocalization.Market.Label323, LogMessageType.Error);
+                            ServerStatus = ServerConnectStatus.Disconnect;
+                            DisconnectEvent();
+                            return;
+                        }
 
                         _rateGateInstruments.WaitToProceed();
+
                         IndicativesResponse indicatives = _instrumentsClient.Indicatives(new IndicativesRequest(), headers: _gRpcMetadata);
-                        UpdateIndicativesFromServer(indicatives);
+                        if(UpdateIndicativesFromServer(indicatives) == false)
+                        {
+                            SendLogMessage(OsLocalization.Market.Label323, LogMessageType.Error);
+                            ServerStatus = ServerConnectStatus.Disconnect;
+                            DisconnectEvent();
+                            return;
+                        }
                     }
 
                     if (_securities.Count > 0)
@@ -566,7 +639,7 @@ namespace OsEngine.Market.Servers.TInvest
             {
                 if (ServerStatus != ServerConnectStatus.Disconnect)
                 {
-                    SendLogMessage(OsLocalization.Market.Label288 + ex.ToString(), LogMessageType.Error);
+                    SendLogMessage(OsLocalization.Market.Label323 + ex.ToString(), LogMessageType.Error);
 
                     ServerStatus = ServerConnectStatus.Disconnect;
                     DisconnectEvent();
@@ -574,14 +647,14 @@ namespace OsEngine.Market.Servers.TInvest
             }
         }
 
-        private void UpdateSharesFromServer(SharesResponse sharesResponse)
+        private bool UpdateSharesFromServer(SharesResponse sharesResponse)
         {
             try
             {
                 if (sharesResponse == null ||
                     sharesResponse.Instruments.Count == 0)
                 {
-                    return;
+                    return false;
                 }
 
                 for (int i = 0; i < sharesResponse.Instruments.Count; i++)
@@ -618,25 +691,36 @@ namespace OsEngine.Market.Servers.TInvest
                     newSecurity.VolumeStep = 1;
 
                     newSecurity.State = SecurityStateType.Activ;
-                    _securities.Add(newSecurity);
-                    _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+
+                    if (_securities.Find(s => s.NameId == newSecurity.NameId) == null)
+                    {
+                        _securities.Add(newSecurity);
+                    }
+
+                    Security outSec = null;
+                    if (_securitiesDictionary.TryGetValue(newSecurity.NameId, out outSec) == false)
+                    {
+                        _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+                    }
                 }
 
             }
             catch (Exception e)
             {
                 SendLogMessage($"Error loading stocks: {e.Message}", LogMessageType.System);
+                return false;
             }
+            return true;
         }
 
-        private void UpdateBondsFromServer(BondsResponse bondsResponse)
+        private bool UpdateBondsFromServer(BondsResponse bondsResponse)
         {
             try
             {
                 if (bondsResponse == null ||
                     bondsResponse.Instruments.Count == 0)
                 {
-                    return;
+                    return false;
                 }
 
                 for (int i = 0; i < bondsResponse.Instruments.Count; i++)
@@ -673,25 +757,53 @@ namespace OsEngine.Market.Servers.TInvest
                     newSecurity.VolumeStep = 1;
 
                     newSecurity.State = SecurityStateType.Activ;
-                    _securities.Add(newSecurity);
-                    _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+
+                    newSecurity.NominalCurrent = GetValue(item.Nominal);
+                    newSecurity.NominalInitial = GetValue(item.InitialNominal);
+
+                    if(item.MaturityDate != null)
+                    {
+                        newSecurity.MaturityDate = TimeZoneInfo.ConvertTimeFromUtc(item.MaturityDate.ToDateTime(), _mskTimeZone); // convert to MSK;
+                    }
+          
+                    if(item.PlacementDate != null)
+                    {
+                        newSecurity.PlacementDate = TimeZoneInfo.ConvertTimeFromUtc(item.PlacementDate.ToDateTime(), _mskTimeZone); // convert to MSK;
+                    }
+                  
+                    newSecurity.PlacementPrice = GetValue(item.PlacementPrice);
+                    newSecurity.AciValue = GetValue(item.AciValue);
+
+                    if (_securities.Find(s => s.NameId == newSecurity.NameId) == null)
+                    {
+                        _securities.Add(newSecurity);
+                    }
+
+                    Security outSec = null;
+                    if (_securitiesDictionary.TryGetValue(newSecurity.NameId, out outSec) == false)
+                    {
+                        _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+                    }
                 }
 
             }
             catch (Exception e)
             {
                 SendLogMessage($"Error loading bonds: {e.Message}", LogMessageType.System);
+                return false;
             }
+
+            return true;
         }
 
-        private void UpdateEtfsFromServer(EtfsResponse etfs)
+        private bool UpdateEtfsFromServer(EtfsResponse etfs)
         {
             try
             {
                 if (etfs == null ||
                     etfs.Instruments.Count == 0)
                 {
-                    return;
+                    return false;
                 }
 
                 for (int i = 0; i < etfs.Instruments.Count; i++)
@@ -727,24 +839,35 @@ namespace OsEngine.Market.Servers.TInvest
                     newSecurity.VolumeStep = 1;
 
                     newSecurity.State = SecurityStateType.Activ;
-                    _securities.Add(newSecurity);
-                    _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+
+                    if (_securities.Find(s => s.NameId == newSecurity.NameId) == null)
+                    {
+                        _securities.Add(newSecurity);
+                    }
+
+                    Security outSec = null;
+                    if (_securitiesDictionary.TryGetValue(newSecurity.NameId, out outSec) == false)
+                    {
+                        _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+                    }
                 }
             }
             catch (Exception e)
             {
                 SendLogMessage($"Error loading ETFs: {e.Message}", LogMessageType.System);
+                return false;
             }
+            return true;
         }
 
-        private void UpdateIndicativesFromServer(IndicativesResponse indicatives)
+        private bool UpdateIndicativesFromServer(IndicativesResponse indicatives)
         {
             try
             {
                 if (indicatives == null ||
                     indicatives.Instruments.Count == 0)
                 {
-                    return;
+                    return false;
                 }
 
                 for (int i = 0; i < indicatives.Instruments.Count; i++)
@@ -768,25 +891,36 @@ namespace OsEngine.Market.Servers.TInvest
                     newSecurity.VolumeStep = 1;
 
                     newSecurity.State = SecurityStateType.Activ;
-                    _securities.Add(newSecurity);
-                    _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+
+                    if (_securities.Find(s => s.NameId == newSecurity.NameId) == null)
+                    {
+                        _securities.Add(newSecurity);
+                    }
+
+                    Security outSec = null;
+                    if (_securitiesDictionary.TryGetValue(newSecurity.NameId, out outSec) == false)
+                    {
+                        _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+                    }
                 }
 
             }
             catch (Exception e)
             {
                 SendLogMessage($"Error loading indicatives: {e.Message}", LogMessageType.System);
+                return false;
             }
+            return true;
         }
 
-        private void UpdateCurrenciesFromServer(CurrenciesResponse currenciesResponse)
+        private bool UpdateCurrenciesFromServer(CurrenciesResponse currenciesResponse)
         {
             try
             {
                 if (currenciesResponse == null ||
                     currenciesResponse.Instruments.Count == 0)
                 {
-                    return;
+                    return false;
                 }
 
                 for (int i = 0; i < currenciesResponse.Instruments.Count; i++)
@@ -822,27 +956,37 @@ namespace OsEngine.Market.Servers.TInvest
                     newSecurity.Lot = item.Lot;
                     newSecurity.VolumeStep = 1;
 
-
                     newSecurity.State = SecurityStateType.Activ;
-                    _securities.Add(newSecurity);
-                    _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+
+                    if (_securities.Find(s => s.NameId == newSecurity.NameId) == null)
+                    {
+                        _securities.Add(newSecurity);
+                    }
+
+                    Security outSec = null;
+                    if (_securitiesDictionary.TryGetValue(newSecurity.NameId, out outSec) == false)
+                    {
+                        _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+                    }
                 }
 
             }
             catch (Exception e)
             {
                 SendLogMessage($"Error loading currency pairs: {e.Message}", LogMessageType.System);
+                return false;
             }
+            return true;
         }
 
-        private void UpdateFuturesFromServer(FuturesResponse futures)
+        private bool UpdateFuturesFromServer(FuturesResponse futures)
         {
             try
             {
                 if (futures == null ||
                     futures.Instruments.Count == 0)
                 {
-                    return;
+                    return false;
                 }
 
                 for (int i = 0; i < futures.Instruments.Count; i++)
@@ -881,6 +1025,10 @@ namespace OsEngine.Market.Servers.TInvest
 
                     newSecurity.SecurityType = SecurityType.Futures;
                     newSecurity.VolumeStep = 1;
+
+                    decimal magrinBuyRiskCoeffClient = GetValue(item.DlongClient);
+                    decimal magrinSellRiskCoeffMoex = GetValue(item.DshortClient);
+
                     newSecurity.MarginBuy = GetValue(item.InitialMarginOnBuy);
                     newSecurity.MarginSell = GetValue(item.InitialMarginOnSell);
 
@@ -890,15 +1038,36 @@ namespace OsEngine.Market.Servers.TInvest
                     }
 
                     newSecurity.State = SecurityStateType.Activ;
-                    _securities.Add(newSecurity);
-                    _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
-                }
 
+                    if (_securities.Find(s => s.NameId == newSecurity.NameId) == null)
+                    {
+                        _securities.Add(newSecurity);
+                    }
+
+                    Security outSec = null;
+                    if (_securitiesDictionary.TryGetValue(newSecurity.NameId, out outSec) == false)
+                    {
+                        _securitiesDictionary.Add(newSecurity.NameId, newSecurity);
+                    }
+
+                    TinSecuritiesRisksFutures riskFutures = null;
+
+                    if (_tSecuritiesRiskFutures.TryGetValue(newSecurity.NameId, out riskFutures) == false)
+                    {
+                        riskFutures = new TinSecuritiesRisksFutures();
+                        riskFutures.MarginBuyCoeffClient = magrinBuyRiskCoeffClient;
+                        riskFutures.MarginSellCoeffClient = magrinSellRiskCoeffMoex;
+
+                        _tSecuritiesRiskFutures.Add(newSecurity.NameId, riskFutures);
+                    }
+                }
             }
             catch (Exception e)
             {
                 SendLogMessage($"Error loading futures: {e.Message}", LogMessageType.System);
+                return false;
             }
+            return true;
         }
 
         private void UpdateOptionsFromServer(OptionsResponse options)
@@ -960,6 +1129,8 @@ namespace OsEngine.Market.Servers.TInvest
 
         private Dictionary<string, Security> _securitiesDictionary = new Dictionary<string, Security>();
 
+        private Dictionary<string, TinSecuritiesRisksFutures> _tSecuritiesRiskFutures = new Dictionary<string, TinSecuritiesRisksFutures>();
+
         private Security GetSecurityByIdFast(string instrumentId)
         {
             Security mySecurity = null;
@@ -970,6 +1141,27 @@ namespace OsEngine.Market.Servers.TInvest
             }
 
             return null;
+        }
+
+        private string GetClassName(Tinkoff.InvestApi.V1.Instrument instrument)
+        {
+            // shares newSecurity.NameClass = SecurityType.Stock.ToString() + " " + item.Currency;
+            // bonds  newSecurity.NameClass = SecurityType.Bond.ToString() + " " + item.Currency;
+            // etfs   newSecurity.NameClass = SecurityType.Fund.ToString() + " " + item.Currency;
+            // indexes  newSecurity.NameClass = SecurityType.Index.ToString() + " " + item.Currency;
+            // currency newSecurity.NameClass = "Currency pair";
+            // futures newSecurity.NameClass = SecurityType.Futures.ToString();
+
+            string uid = instrument.Uid;
+
+            Security mySecurity = GetSecurityByIdFast(uid);
+
+            if(mySecurity == null)
+            {
+                return null;
+            }
+
+            return mySecurity.NameClass;
         }
 
         public event Action<List<Security>> SecurityEvent;
@@ -984,9 +1176,22 @@ namespace OsEngine.Market.Servers.TInvest
 
         public void GetPortfolios()
         {
+            if(_securitiesDictionary.Count == 0)
+            {
+                return;
+            }
+
+            GetPortfolioRecursion(0);
+        }
+
+        private void GetPortfolioRecursion(int tryCount)
+        {
             try
             {
-                if (_lastTimeGetPortfolio.AddSeconds(10) > DateTime.Now)
+                tryCount++;
+
+                if (tryCount == 1 
+                    && _lastTimeGetPortfolio.AddSeconds(5) > DateTime.Now)
                 {
                     return;
                 }
@@ -1021,6 +1226,12 @@ namespace OsEngine.Market.Servers.TInvest
                             continue;
                         }
 
+                        if(account.Type != AccountType.Tinkoff
+                            && account.Type != AccountType.TinkoffIis)
+                        {
+                            continue;
+                        }
+
                         PortfolioRequest portfolioRequest = new PortfolioRequest();
                         portfolioRequest.AccountId = account.Id;
 
@@ -1038,7 +1249,7 @@ namespace OsEngine.Market.Servers.TInvest
                         if (portfolioResponse != null)
                         {
                             GetPortfolios(portfolioResponse);
-                            UpdatePositionsInPortfolio(portfolioResponse);
+                            UpdatePositionsInPortfolio(portfolioResponse,0);
                         }
                     }
                     catch (Exception)
@@ -1067,12 +1278,19 @@ namespace OsEngine.Market.Servers.TInvest
             }
             catch (Exception ex)
             {
-                if (ServerStatus != ServerConnectStatus.Disconnect)
+                if(tryCount == 1)
+                {// отправляем ещё на один круг. Возможно был кратковременный сбой
+                    GetPortfolioRecursion(tryCount);
+                }
+                else
                 {
-                    SendLogMessage(OsLocalization.Market.Label290 + " \n" + ex.ToString(), LogMessageType.Error);
+                    if (ServerStatus != ServerConnectStatus.Disconnect)
+                    {
+                        SendLogMessage(OsLocalization.Market.Label290 + " \n" + ex.ToString(), LogMessageType.Error);
 
-                    ServerStatus = ServerConnectStatus.Disconnect;
-                    DisconnectEvent();
+                        ServerStatus = ServerConnectStatus.Disconnect;
+                        DisconnectEvent();
+                    }
                 }
             }
         }
@@ -1096,24 +1314,21 @@ namespace OsEngine.Market.Servers.TInvest
             }
             else
             {
-                myPortfolio.Number = portfolioResponse.AccountId;
-
-                decimal value = portfolioResponse.TotalAmountPortfolio != null ? GetValue(portfolioResponse.TotalAmountPortfolio) : 1;
-
-                if (value != 1)
+                if(portfolioResponse.TotalAmountPortfolio != null)
                 {
-                    myPortfolio.ValueCurrent = value;
+                    myPortfolio.ValueCurrent = GetValue(portfolioResponse.TotalAmountPortfolio);
                 }
-
             }
         }
 
-        private void UpdatePositionsInPortfolio(PortfolioResponse portfolio)
+        private void UpdatePositionsInPortfolio(PortfolioResponse portfolio, int tryCount)
         {
             if (portfolio == null)
             {
                 return;
             }
+
+            tryCount++;
 
             Portfolio portf = _myPortfolios.Find(p => p.Number == portfolio.AccountId);
 
@@ -1135,12 +1350,30 @@ namespace OsEngine.Market.Servers.TInvest
             }
             catch (RpcException ex)
             {
-                string message = GetGRPCErrorMessage(ex);
-                SendLogMessage($"Error getting positions in portfolio. Info: {message}", LogMessageType.System);
+                if(tryCount < 3)
+                {// дополнительно две попытки запросить данные. На случай сбоев связи
+                    UpdatePositionsInPortfolio(portfolio, tryCount);
+                    return;
+                }
+                else
+                {
+                    string message = GetGRPCErrorMessage(ex);
+                    SendLogMessage($"Error getting positions in portfolio. Portfolio id: " + portfolio.AccountId + " Info: " + message, LogMessageType.System);
+                    return;
+                }
             }
             catch
             {
-                SendLogMessage("Error getting positions in portfolio", LogMessageType.System);
+                if (tryCount < 3)
+                {// дополнительно две попытки запросить данные. На случай сбоев связи
+                    UpdatePositionsInPortfolio(portfolio, tryCount);
+                    return;
+                }
+                else
+                {
+                    SendLogMessage("Error getting positions in portfolio. Portfolio id: " + portfolio.AccountId, LogMessageType.System);
+                    return;
+                }
             }
 
             // переменные для учёта позиций
@@ -1190,6 +1423,7 @@ namespace OsEngine.Market.Servers.TInvest
 
                 newPos.ValueBegin = newPos.ValueCurrent;
                 newPos.SecurityNameCode = instrument.Instrument.Ticker;
+                newPos.SecurityNameClass = GetClassName(instrument.Instrument);
 
                 sectionPoses.Add(newPos);
 
@@ -1237,6 +1471,7 @@ namespace OsEngine.Market.Servers.TInvest
 
                 newPos.ValueBegin = newPos.ValueCurrent;
                 newPos.SecurityNameCode = instrument.Instrument.Ticker;
+                newPos.SecurityNameClass = GetClassName(instrument.Instrument);
 
                 sectionPoses.Add(newPos);
 
@@ -1283,6 +1518,7 @@ namespace OsEngine.Market.Servers.TInvest
 
                 newPos.ValueBegin = newPos.ValueCurrent;
                 newPos.SecurityNameCode = instrument.Instrument.Ticker;
+                newPos.SecurityNameClass = GetClassName(instrument.Instrument);
 
                 sectionPoses.Add(newPos);
 
@@ -1304,15 +1540,17 @@ namespace OsEngine.Market.Servers.TInvest
 
             // Блокированные средства по портфелю целиком
 
-            portf.ValueBlocked = 0;
+            decimal valueBlock = 0;
 
             for (int i = 0; i < portfolio.Positions.Count; i++)
             {
                 if (portfolio.Positions[i].InstrumentType == "currency")
                 {
-                    portf.ValueBlocked += GetValue(portfolio.Positions[i].BlockedLots) * GetValue(portfolio.Positions[i].AveragePositionPrice);
+                    valueBlock += GetValue(portfolio.Positions[i].BlockedLots) * GetValue(portfolio.Positions[i].AveragePositionPrice);
                 }
             }
+
+            portf.ValueBlocked = valueBlock;
 
             // Денежная позиция в портфеле
 
@@ -1328,7 +1566,9 @@ namespace OsEngine.Market.Servers.TInvest
                 {
                     decimal valuePortfolio = GetValue(posMoney);
 
-                    newPos.ValueCurrent = valuePortfolio - futuresAndOptionsGO - spotShortValue;
+                    decimal blockRub = portf.ValueBlocked;
+
+                    newPos.ValueCurrent = valuePortfolio - blockRub; // - futuresAndOptionsGO; // -spotShortValue;
 
                     /*if(portf.ValueBlocked != 0)
                     {
@@ -1525,7 +1765,7 @@ namespace OsEngine.Market.Servers.TInvest
                 if (endDateTime > endTime) // не заказываем лишних данных
                     endDateTime = endTime;
 
-                List<Candle> range = GetCandleHistoryFromDays(startTime, endDateTime, security, tf);
+                List<Candle> range = GetCandleHistoryFromDays(startTime, endDateTime, security, tf, 0);
 
                 if (range == null) // Если запрошен некорректный таймфрейм, то возвращает null
                     return null;
@@ -1539,7 +1779,7 @@ namespace OsEngine.Market.Servers.TInvest
             return filterCorrectCandles(candles);
         }
 
-        List<Candle> filterCorrectCandles(List<Candle> candles)
+        private List<Candle> filterCorrectCandles(List<Candle> candles)
         {
             if (candles == null || candles.Count == 0)
                 return candles;
@@ -1563,7 +1803,7 @@ namespace OsEngine.Market.Servers.TInvest
             return filtered;
         }
 
-        private List<Candle> GetCandleHistoryFromDays(DateTime fromDateTime, DateTime toDateTime, Security security, TimeFrame tf)
+        private List<Candle> GetCandleHistoryFromDays(DateTime fromDateTime, DateTime toDateTime, Security security, TimeFrame tf, int tryCount)
         {
             CandleInterval requestedCandleInterval = CreateTimeFrameInterval(tf);
 
@@ -1573,13 +1813,13 @@ namespace OsEngine.Market.Servers.TInvest
             Timestamp from = Timestamp.FromDateTime(fromDateTime);
             Timestamp to = Timestamp.FromDateTime(toDateTime);
 
-            _rateGateMarketData.WaitToProceed();
-
             GetCandlesResponse candlesResp = null;
             int retries = 3; // try to get 'em this many times
 
             while (candlesResp == null && retries-- > 0)
             {
+                _rateGateMarketData.WaitToProceed();
+
                 try
                 {
                     GetCandlesRequest getCandlesRequest = new GetCandlesRequest();
@@ -1598,16 +1838,28 @@ namespace OsEngine.Market.Servers.TInvest
                     string message = GetGRPCErrorMessage(ex);
 
                     if (message == "no server message")
+                    {
                         SendLogMessage($"Couldn't get candles for {security.Name}. Info: probably invalid time interval {fromDateTime}UTC - {toDateTime}UTC", LogMessageType.System);
+                        _getCandlesErrorsCount++;
+                        Thread.Sleep(300);
+                    }
                     else
+                    {
                         SendLogMessage($"Error getting candles for {security.Name}. Info: {message}", LogMessageType.System);
+                        _getCandlesErrorsCount++;
+                        Thread.Sleep(300);
+                    }  
                 }
                 catch (Exception ex)
                 {
                     if (ServerStatus == ServerConnectStatus.Disconnect)
                     {
+                        _getCandlesErrorsCount = 0;
                         break; // connection broke before we could get candles
                     }
+
+                    _getCandlesErrorsCount++;
+                    Thread.Sleep(300);
 
                     SendLogMessage($"Error getting candles for {security.Name}: " + ex.ToString(),
                         LogMessageType.System);
@@ -1616,8 +1868,32 @@ namespace OsEngine.Market.Servers.TInvest
 
             List<Candle> candles = ConvertToOsEngineCandles(candlesResp, security);
 
+            if((candles == null 
+                || candles.Count < 2)
+                && tryCount < 5)
+            {
+                Thread.Sleep(100);
+                tryCount++;
+                candles = GetCandleHistoryFromDays(fromDateTime, toDateTime, security, tf, tryCount);
+            }
+
+            if (candles == null
+                || candles.Count == 0)
+            {
+                if (_getCandlesErrorsCount >=8
+                     && ServerStatus != ServerConnectStatus.Disconnect)
+                {
+                    SendLogMessage(OsLocalization.Market.Label322 + "\n Security: " + security.Name, LogMessageType.Error);
+                    ServerStatus = ServerConnectStatus.Disconnect;
+                    DisconnectEvent();
+                }
+            }
+
+            _getCandlesErrorsCount = 0;
             return candles;
         }
+
+        private int _getCandlesErrorsCount;
 
         // расписания торгов разных бирж по дням
         private Dictionary<DateTime, TradingSchedulesResponse> _tradingSchedules = new Dictionary<DateTime, TradingSchedulesResponse>();
@@ -1696,10 +1972,23 @@ namespace OsEngine.Market.Servers.TInvest
                 HistoricCandle histCandle = response.Candles[i];
 
                 Candle candle = new Candle();
-                candle.Open = GetValue(histCandle.Open);
-                candle.Close = GetValue(histCandle.Close);
-                candle.High = GetValue(histCandle.High);
-                candle.Low = GetValue(histCandle.Low);
+
+                if(security.SecurityType == SecurityType.Bond
+                    && security.NominalCurrent != 0)
+                {
+                    candle.Open = GetValue(histCandle.Open) / 100 * security.NominalCurrent;
+                    candle.Close = GetValue(histCandle.Close) / 100 * security.NominalCurrent;
+                    candle.High = GetValue(histCandle.High) / 100 * security.NominalCurrent;
+                    candle.Low = GetValue(histCandle.Low) / 100 * security.NominalCurrent;
+                }
+                else
+                {
+                    candle.Open = GetValue(histCandle.Open);
+                    candle.Close = GetValue(histCandle.Close);
+                    candle.High = GetValue(histCandle.High);
+                    candle.Low = GetValue(histCandle.Low);
+                }
+
                 candle.Volume = histCandle.Volume;
                 candle.TimeStart = TimeZoneInfo.ConvertTimeFromUtc(histCandle.Time.ToDateTime(), _mskTimeZone);
 
@@ -1768,9 +2057,10 @@ namespace OsEngine.Market.Servers.TInvest
 
         #region 6 gRPC streams creation
 
-        //private readonly string _gRPCHost = "sandbox-invest-public-api.tbank.ru:443"; // sandbox 
-        private readonly string _gRPCHost = "https://invest-public-api.tinkoff.ru:443"; // prod  as of v1.40 should be tbank.ru but doesn't work due to SSL certificate issue
+        private readonly string _gRPCHost = "https://invest-public-api.tbank.ru:443"; // prod
+        private static readonly Lazy<X509Certificate2[]> _tInvestCertificates = new Lazy<X509Certificate2[]>(LoadTInvestCertificates);
         private Metadata _gRpcMetadata;
+
         private GrpcChannel _channel;
         private CancellationTokenSource _cancellationTokenSource;
         private WebProxy _proxy;
@@ -1815,6 +2105,36 @@ namespace OsEngine.Market.Servers.TInvest
             SendLogMessage($"User stream limits: {limits}", LogMessageType.User);
         }
 
+        private static X509Certificate2[] LoadTInvestCertificates()
+        {
+            var assembly = typeof(TInvestServer).Assembly;
+
+            string[] resourceNames = new[]
+            {
+                "OsEngine.Market.Servers.TInvest.Certificates.russian_trusted_root_ca.cer",
+                "OsEngine.Market.Servers.TInvest.Certificates.russian_trusted_sub_ca.cer"
+            };
+
+            var certificates = new List<X509Certificate2>(resourceNames.Length);
+
+            foreach (string resourceName in resourceNames)
+            {
+                using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        throw new InvalidOperationException($"T-Invest certificate resource not found: {resourceName}");
+                    }
+
+                    byte[] data = new byte[stream.Length];
+                    stream.ReadExactly(data, 0, data.Length);
+                    certificates.Add(X509CertificateLoader.LoadCertificate(data));
+                }
+            }
+
+            return certificates.ToArray();
+        }
+
         private void CreateStreamsConnection()
         {
             try
@@ -1823,28 +2143,49 @@ namespace OsEngine.Market.Servers.TInvest
 
                 _gRpcMetadata.Add("Authorization", $"Bearer {_accessToken}");
                 _gRpcMetadata.Add("x-app-name", "OsEngine");
-
+                
                 _cancellationTokenSource = new CancellationTokenSource();
+
+                X509Certificate2[] tInvestCertificates = _tInvestCertificates.Value;
+
+                var socketsHandler = new SocketsHttpHandler()
+                {
+                    // KeepAlive настройки
+                    KeepAlivePingDelay = TimeSpan.FromSeconds(10),
+                    KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
+                    KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
+
+                    // Прокси настройки
+                    Proxy = _proxy,
+                    UseProxy = _proxy != null,
+
+                    // Оптимизации
+                    PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+                    PooledConnectionLifetime = TimeSpan.FromHours(1),
+                    EnableMultipleHttp2Connections = true,
+
+                    // SSL настройки с доверенными корнями НУЦ Минцифры РФ
+                    SslOptions = new SslClientAuthenticationOptions
+                    {
+                        EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12
+                                            | System.Security.Authentication.SslProtocols.Tls13,
+                        CertificateChainPolicy = new X509ChainPolicy
+                        {
+                            RevocationMode = X509RevocationMode.NoCheck,
+                            TrustMode = X509ChainTrustMode.CustomRootTrust,
+                        }
+                    }
+                };
+
+                foreach (X509Certificate2 cert in tInvestCertificates)
+                {
+                    socketsHandler.SslOptions.CertificateChainPolicy.CustomTrustStore.Add(cert);
+                }
 
                 _channel = GrpcChannel.ForAddress(_gRPCHost, new GrpcChannelOptions
                 {
                     Credentials = ChannelCredentials.SecureSsl,
-                    HttpHandler = new SocketsHttpHandler()
-                    {
-                        // KeepAlive настройки
-                        KeepAlivePingDelay = TimeSpan.FromSeconds(10),
-                        KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
-                        KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
-
-                        // Прокси настройки
-                        Proxy = _proxy,
-                        UseProxy = _proxy != null,
-
-                        // Оптимизации
-                        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
-                        PooledConnectionLifetime = TimeSpan.FromHours(1),
-                        EnableMultipleHttp2Connections = true
-                    }
+                    HttpHandler = socketsHandler
                 });
 
                 _usersClient = new UsersService.UsersServiceClient(_channel);
@@ -1993,7 +2334,7 @@ namespace OsEngine.Market.Servers.TInvest
                     }
                 }
 
-                if(_myPortfolios.Count == 0)
+                if (_myPortfolios.Count == 0)
                 {
                     return false;
                 }
@@ -2008,7 +2349,7 @@ namespace OsEngine.Market.Servers.TInvest
                     _operationsStreamClient.PositionsStream(new PositionsStreamRequest { Accounts = { accountsList } },
                         headers: _gRpcMetadata, cancellationToken: _cancellationTokenSource.Token);
 
-               
+
 
                 _lastPositionsDataTime = DateTime.UtcNow;
             }
@@ -2198,7 +2539,6 @@ namespace OsEngine.Market.Servers.TInvest
         private DateTime _lastPositionsDataTime = DateTime.MinValue;
         private DateTime _lastMyOrderStateDataTime = DateTime.MinValue;
 
-
         private string _marketDataStreamLocker = "_marketDataStreamLocker";
 
         public void Subscribe(Security security)
@@ -2353,7 +2693,7 @@ namespace OsEngine.Market.Servers.TInvest
                     return;
                 }
             }
-            catch (Exception exception)
+            catch (Exception)
             {
                 if (_securityStreamMap.ContainsKey(security.NameId))
                 {
@@ -2452,7 +2792,33 @@ namespace OsEngine.Market.Servers.TInvest
                         newTrade.OpenInterest = oi.OpenInterest_;
                     }
 
+                    if(security.SecurityType == SecurityType.Bond
+                        && security.NominalCurrent != 0)
+                    {
+                        newTrade.Price = newTrade.Price / 100 * security.NominalCurrent;
+                    }
+
                     NewTradesEvent?.Invoke(newTrade);
+
+                    if(security.SecurityType == SecurityType.Futures
+                        && newTrade.Price != 0)
+                    {
+                        TinSecuritiesRisksFutures riskFutures = null;
+
+                        if (_tSecuritiesRiskFutures.TryGetValue(security.NameId, out riskFutures) == true)
+                        {
+                            decimal price = newTrade.Price / security.PriceStep * security.PriceStepCost;
+
+                            if(riskFutures.MarginBuyCoeffClient != 0)
+                            {
+                                security.MarginBuy = price * riskFutures.MarginBuyCoeffClient;
+                            }
+                            if (riskFutures.MarginSellCoeffClient != 0)
+                            {
+                                security.MarginSell = price * riskFutures.MarginSellCoeffClient;
+                            }
+                        }
+                    }
                 }
                 else if (marketData.Orderbook != null)
                 {
@@ -2463,20 +2829,52 @@ namespace OsEngine.Market.Servers.TInvest
                         return;
                     }
 
+                    bool isBondNeedToNormalization = false;
+
+                    if (security.SecurityType == SecurityType.Bond
+                     && security.NominalCurrent != 0)
+                    {
+                        isBondNeedToNormalization = true;
+                    }
+
                     MarketDepth depth = new MarketDepth();
                     depth.SecurityNameCode = security.Name;
                     depth.Time = TimeZoneInfo.ConvertTimeFromUtc(orderbook.Time.ToDateTime(), _mskTimeZone);
 
                     depth.Bids = new List<MarketDepthLevel>(orderbook.Bids.Count);
+
                     foreach (var bid in orderbook.Bids)
                     {
-                        depth.Bids.Add(new MarketDepthLevel { Price = (double)GetValue(bid.Price), Bid = (double)bid.Quantity });
+                        if(isBondNeedToNormalization)
+                        {
+                            depth.Bids.Add(new MarketDepthLevel 
+                            { Price = (double)(GetValue(bid.Price) / 100 * security.NominalCurrent),
+                                Bid = (double)bid.Quantity });
+                        }
+                        else
+                        {
+                            depth.Bids.Add(new MarketDepthLevel { Price = (double)GetValue(bid.Price), Bid = (double)bid.Quantity });
+                        }
                     }
 
                     depth.Asks = new List<MarketDepthLevel>(orderbook.Asks.Count);
                     foreach (var ask in orderbook.Asks)
                     {
-                        depth.Asks.Add(new MarketDepthLevel { Price = (double)GetValue(ask.Price), Ask = (double)ask.Quantity });
+                        if (isBondNeedToNormalization)
+                        {
+                            depth.Asks.Add(new MarketDepthLevel 
+                            { Price = (double)(GetValue(ask.Price) / 100 * security.NominalCurrent), 
+                                Ask = (double)ask.Quantity });
+                        }
+                        else
+                        {
+                            depth.Asks.Add(new MarketDepthLevel { Price = (double)GetValue(ask.Price), Ask = (double)ask.Quantity });
+                        }   
+                    }
+
+                    if (_openInterestData.TryGetValue(security.Name, out var oi))
+                    {
+                        depth.OpenInterest = oi.OpenInterest_;
                     }
 
                     if (depth.Asks.Count > 0 || depth.Bids.Count > 0)
@@ -2484,8 +2882,16 @@ namespace OsEngine.Market.Servers.TInvest
                         MarketDepthEvent?.Invoke(depth);
                     }
 
-                    security.PriceLimitHigh = GetValue(marketData.Orderbook.LimitUp);
-                    security.PriceLimitLow = GetValue(marketData.Orderbook.LimitDown);
+                    if (isBondNeedToNormalization)
+                    {
+                        security.PriceLimitHigh = GetValue(marketData.Orderbook.LimitUp) / 100 * security.NominalCurrent;
+                        security.PriceLimitLow = GetValue(marketData.Orderbook.LimitDown) / 100 * security.NominalCurrent;
+                    }
+                    else
+                    {
+                        security.PriceLimitHigh = GetValue(marketData.Orderbook.LimitUp);
+                        security.PriceLimitLow = GetValue(marketData.Orderbook.LimitDown);
+                    }
                 }
                 else if (marketData.Candle != null)
                 {
@@ -2497,10 +2903,23 @@ namespace OsEngine.Market.Servers.TInvest
                     }
 
                     Candle osCandle = new Candle();
-                    osCandle.Open = GetValue(tinvestCandle.Open);
-                    osCandle.High = GetValue(tinvestCandle.High);
-                    osCandle.Low = GetValue(tinvestCandle.Low);
-                    osCandle.Close = GetValue(tinvestCandle.Close);
+
+                    if (security.SecurityType == SecurityType.Bond
+                         && security.NominalCurrent != 0)
+                    {
+                        osCandle.Open = GetValue(tinvestCandle.Open) / 100 * security.NominalCurrent;
+                        osCandle.High = GetValue(tinvestCandle.High) / 100 * security.NominalCurrent;
+                        osCandle.Low = GetValue(tinvestCandle.Low) / 100 * security.NominalCurrent;
+                        osCandle.Close = GetValue(tinvestCandle.Close) / 100 * security.NominalCurrent;
+                    }
+                    else
+                    {
+                        osCandle.Open = GetValue(tinvestCandle.Open);
+                        osCandle.High = GetValue(tinvestCandle.High);
+                        osCandle.Low = GetValue(tinvestCandle.Low);
+                        osCandle.Close = GetValue(tinvestCandle.Close);
+                    }
+
                     osCandle.Volume = tinvestCandle.Volume;
                     osCandle.TimeStart = TimeZoneInfo.ConvertTimeFromUtc(tinvestCandle.Time.ToDateTime(), _mskTimeZone);
                     osCandle.State = CandleState.Finished;
@@ -2711,6 +3130,12 @@ namespace OsEngine.Market.Servers.TInvest
                 newTrade.OpenInterest = _openInterestData[mySec.Name].OpenInterest_;
             }
 
+            if (mySec.SecurityType == SecurityType.Bond
+               && mySec.NominalCurrent != 0)
+            {
+                newTrade.Price = newTrade.Price / 100 * mySec.NominalCurrent;
+            }
+
             NewTradesEvent?.Invoke(newTrade);
 
             CreateFakeMdByTrade(newTrade);
@@ -2811,36 +3236,7 @@ namespace OsEngine.Market.Servers.TInvest
 
                     if (portfolioResponse.Portfolio != null)
                     {
-                        Portfolio portf = _myPortfolios.Find((p) => p.Number == portfolioResponse.Portfolio.AccountId);
-
-                        if (portf == null)
-                        {
-                            continue;
-                        }
-
-                        if (portfolioResponse.Portfolio.TotalAmountPortfolio != null)
-                        {
-                            portf.ValueCurrent = GetValue(portfolioResponse.Portfolio.TotalAmountPortfolio);
-                        }
-                        else
-                        {
-                            decimal resultValue = 0;
-
-                            resultValue += GetValue(portfolioResponse.Portfolio.TotalAmountBonds);
-                            resultValue += GetValue(portfolioResponse.Portfolio.TotalAmountCurrencies);
-                            resultValue += GetValue(portfolioResponse.Portfolio.TotalAmountEtf);
-                            resultValue += GetValue(portfolioResponse.Portfolio.TotalAmountFutures);
-                            resultValue += GetValue(portfolioResponse.Portfolio.TotalAmountOptions);
-                            resultValue += GetValue(portfolioResponse.Portfolio.TotalAmountShares);
-                            resultValue += GetValue(portfolioResponse.Portfolio.TotalAmountSp);
-
-                            portf.ValueCurrent = resultValue;
-                        }
-
-                        portf.UnrealizedPnl = GetValue(portfolioResponse.Portfolio.DailyYield);
-                        UpdatePositionsInPortfolio(portfolioResponse.Portfolio);
-
-                        PortfolioEvent!(_myPortfolios);
+                        GetPortfolios();
                     }
                 }
                 catch (Exception exception)
@@ -2977,6 +3373,7 @@ namespace OsEngine.Market.Servers.TInvest
                             }
 
                             newPos.SecurityNameCode = instrument.Instrument.Ticker;
+                            newPos.SecurityNameClass = GetClassName(instrument.Instrument);
 
                             portf.SetNewPosition(newPos);
                         }
@@ -3011,6 +3408,7 @@ namespace OsEngine.Market.Servers.TInvest
                             newPos.ValueCurrent = pos.Balance / instrument.Instrument.Lot;
                             newPos.ValueBlocked = pos.Blocked / instrument.Instrument.Lot;
                             newPos.SecurityNameCode = instrument.Instrument.Ticker;
+                            newPos.SecurityNameClass = GetClassName(instrument.Instrument);
 
                             portf.SetNewPosition(newPos);
 
@@ -3046,28 +3444,9 @@ namespace OsEngine.Market.Servers.TInvest
                             newPos.ValueCurrent = pos.Balance / instrument.Instrument.Lot;
                             newPos.ValueBlocked = pos.Blocked / instrument.Instrument.Lot;
                             newPos.SecurityNameCode = instrument.Instrument.Ticker;
+                            newPos.SecurityNameClass = GetClassName(instrument.Instrument);
 
                             portf.SetNewPosition(newPos);
-                        }
-
-                        for (int i = 0; i < posData.Money.Count; i++)
-                        {
-                            PositionsMoney pos = posData.Money[i];
-
-                            if (pos.AvailableValue.Currency == "rub")
-                            {
-                                portf.ValueBlocked = GetValue(pos.BlockedValue);
-
-                                List<PositionOnBoard> posesInPortfolio = portf.PositionOnBoard;
-
-                                for (int j = 0; posesInPortfolio != null && j < posesInPortfolio.Count; j++)
-                                {
-                                    if (posesInPortfolio[j].SecurityNameCode == "rub")
-                                    {
-                                        posesInPortfolio[j].ValueBlocked = portf.ValueBlocked;
-                                    }
-                                }
-                            }
                         }
 
                         if (PortfolioEvent != null)
@@ -3290,7 +3669,15 @@ namespace OsEngine.Market.Servers.TInvest
 
                                 MyTrade trade = new MyTrade();
                                 trade.SecurityNameCode = security.Name;
+
                                 trade.Price = GetValue(orderTrade.Price);
+
+                                if (security.SecurityType == SecurityType.Bond
+                                 && security.NominalCurrent != 0)
+                                {
+                                    trade.Price = trade.Price * (security.NominalCurrent / 100);
+                                }
+
                                 trade.Volume = orderTrade.Quantity / security.Lot;
                                 trade.NumberOrderParent = order.NumberMarket;
                                 trade.NumberTrade = orderTrade.TradeId;
@@ -3440,11 +3827,19 @@ namespace OsEngine.Market.Servers.TInvest
                     sec.Name == order.SecurityNameCode);
                 }
 
+                decimal orderPrice = order.Price;
+
+                if(security.SecurityType == SecurityType.Bond
+                    && security.NominalCurrent != 0)
+                {
+                    orderPrice = order.Price / (security.NominalCurrent / 100);
+                }
+
                 PostOrderRequest request = new PostOrderRequest();
                 request.Direction = order.Side == Side.Buy ? OrderDirection.Buy : OrderDirection.Sell;
                 request.OrderType = order.TypeOrder == OrderPriceType.Limit ? OrderType.Limit : OrderType.Market; // еще есть BestPrice
                 request.Quantity = Convert.ToInt32(order.Volume);
-                request.Price = ConvertToQuotation(order.Price);
+                request.Price = ConvertToQuotation(orderPrice);
                 request.ConfirmMarginTrade = true;
 
                 if (security.SecurityType == SecurityType.Bond) // set price type to points in case security type is bond
@@ -3455,6 +3850,18 @@ namespace OsEngine.Market.Servers.TInvest
                 request.InstrumentId = security.NameId;
                 request.AccountId = order.PortfolioNumber;
                 request.TimeInForce = TimeInForceType.TimeInForceDay; // по-умолчанию сегодняшний день
+
+                if(order.TypeOrder == OrderPriceType.Limit)
+                {
+                    if(order.OrderTypeTime == OrderTypeTime.Day)
+                    {
+                        request.TimeInForce = TimeInForceType.TimeInForceDay;
+                    }
+                    else if (order.OrderTypeTime == OrderTypeTime.Specified)
+                    {
+                        request.TimeInForce = TimeInForceType.TimeInForceUnspecified;
+                    }
+                }
 
                 // генерируем новый номер ордера и добавляем его в словарь
                 Guid newUid = Guid.NewGuid();
@@ -3473,7 +3880,7 @@ namespace OsEngine.Market.Servers.TInvest
 
                 try
                 {
-                    response = _ordersClient.PostOrder(request, _gRpcMetadata);
+                    response = PostOrderPrivateLoop(request, 0, order);
                 }
                 catch (RpcException ex)
                 {
@@ -3481,6 +3888,7 @@ namespace OsEngine.Market.Servers.TInvest
 
                     if (message.Contains("Not enough assets"))
                     {
+                        CheckCrazyNotEnoughAssetsOrderSpam();
                         message = OsLocalization.Market.Label301;
                     }
                     else if (message.Contains("The price is too high"))
@@ -3490,6 +3898,10 @@ namespace OsEngine.Market.Servers.TInvest
                     else if (message.Contains("The price is outside the limits for"))
                     {
                         message = OsLocalization.Market.Label304;
+                    }
+                    else if (message.Contains("Pol`zovatel` ne najden"))
+                    {
+                        message = OsLocalization.Market.Label319;
                     }
 
                     SendLogMessage(OsLocalization.Market.Label291 +
@@ -3522,6 +3934,13 @@ namespace OsEngine.Market.Servers.TInvest
                 {
                     order.State = OrderStateType.Active;
                     order.NumberMarket = response.OrderId;
+
+                    if (_lastMyOrderStateDataTime.AddSeconds(5) < DateTime.UtcNow)
+                    {   // Сбрасываем счётчики жизни потока принимающего статусы ордеров
+                        // если он отсох, надо чтобы через 3 секунды уже переподключался.
+                        _lastMyOrderStateDataTime = DateTime.UtcNow.AddSeconds(-177);
+                        _lastTryReconnectOrdersStream = DateTime.Now.AddMinutes(-1);
+                    }
                 }
 
                 MyOrderEvent!(order);
@@ -3530,6 +3949,90 @@ namespace OsEngine.Market.Servers.TInvest
             {
                 SendLogMessage(OsLocalization.Market.Label291 + "\n" + exception, LogMessageType.Error);
             }
+        }
+
+        private void CheckCrazyNotEnoughAssetsOrderSpam()
+        {
+            // некоторые пользователи выставляют внутри дня тысячи заявок без обеспечения
+            // отключая при этом все реакции в роботах, нагружая сервера Т-Банк
+            // решение: вырубаем у них коннектор, когда за час больше 100 ошибок "Not enough assets"
+
+            if (_hourNotEnoughAssetsOrders != DateTime.Now.Hour)
+            {
+                _hourNotEnoughAssetsOrders = DateTime.Now.Hour;
+                _badOrdersCount = 0;
+            }
+
+            _badOrdersCount++;
+
+            if (_badOrdersCount > 100)
+            {
+                if (ServerStatus == ServerConnectStatus.Connect)
+                {
+                    SendLogMessage(
+                        " Сервер был отключен. Т.к. кол-во необеспеченных ордеров внутри часа больше 100\n "
+                        + "Прекратите спамить биржу, это мешает людям торговать\n "
+                        + "Пожалуйста посчитайте обеспечение и баланс. И в соответствии с этим настройте роботов. ", LogMessageType.Error);
+
+                    ServerStatus = ServerConnectStatus.Disconnect;
+                    DisconnectEvent();
+                }
+            }
+        }
+
+        private int _hourNotEnoughAssetsOrders;
+        private int _badOrdersCount;
+
+        private PostOrderResponse PostOrderPrivateLoop(PostOrderRequest request, int attemptNumber, Order order)
+        {
+            // Метод для обработки ошибок в ядре брокера, не позволяющих принять заявку с первого раза
+            // В таком случае приходит ошибка: "Internal network error"
+            // Рекомендация поддержки: Выслать тут же ещё раз, с тем же номером ордера. Сделали
+
+            attemptNumber++;
+
+            if (attemptNumber > 2)
+            {
+                throw new Exception("Internal network error. Ошибки на стороне Т-Апи. Две попытки выставить ордер не привели к успеху.");
+            }
+
+            PostOrderResponse response = null;
+
+            Metadata metaData = GetMetaData(order.SecurityNameCode);
+
+            try
+            {
+                response = _ordersClient.PostOrder(request, metaData);
+            }
+            catch (RpcException ex)
+            {
+                string message = GetGRPCErrorMessage(ex);
+
+                if (message.Contains("Internal network error"))
+                {
+                    OrderStateType orderStateType = GetOrderStatus(order);
+
+                    if (orderStateType == OrderStateType.None)
+                    {
+                        return PostOrderPrivateLoop(request, attemptNumber, order);
+                    }
+                    else
+                    { // ордер всё таки выставлен, но отчёт о нём не пришёл!
+                        throw new Exception("Internal network error. Ошибки на стороне Т-Апи. Ордер выставлен, но его номер в торговом ядре не известен. Нужно синхронизировать позиции");
+                    }
+                }
+
+                throw;
+            }
+
+            return response;
+        }
+
+        private Dictionary<string, TinSecuritiesData> _tSecurities = new Dictionary<string, TinSecuritiesData>();
+
+        private Metadata GetMetaData(string securityName)
+        {
+            return _gRpcMetadata;
         }
 
         public void ChangeOrderPrice(Order order, decimal newPrice)
@@ -3559,6 +4062,27 @@ namespace OsEngine.Market.Servers.TInvest
                         }
                     }
                 }
+
+                Security security = _securities.Where(s => _securityStreamMap.ContainsKey(s.NameId)).FirstOrDefault((sec) =>
+                 sec.Name == order.SecurityNameCode);
+
+                if (security == null)
+                {
+                    security = _pollSubscribedSecurities.Find((sec) => sec.Name == order.SecurityNameCode);
+                }
+
+                if (security == null)
+                {
+                    security = _securities.Find((sec) =>
+                    sec.Name == order.SecurityNameCode);
+                }
+
+                if (security.SecurityType == SecurityType.Bond
+                    && security.NominalCurrent != 0)
+                {
+                    newPrice = newPrice / (security.NominalCurrent / 100);
+                }
+
                 ReplaceOrderRequest request = new ReplaceOrderRequest();
                 request.AccountId = order.PortfolioNumber;
                 request.OrderId = order.NumberMarket;
@@ -3632,7 +4156,14 @@ namespace OsEngine.Market.Servers.TInvest
                         order.NumberUser = _orderNumbers[response.OrderRequestId];
                     }
 
+                    if (security.SecurityType == SecurityType.Bond
+                        && security.NominalCurrent != 0)
+                    {
+                        newPrice = newPrice / 100 * security.NominalCurrent;
+                    }
+
                     order.Price = newPrice;
+
                     order.Volume = request.Quantity;
                     order.VolumeExecute = 0;
                     order.TimeCallBack = TimeZoneInfo.ConvertTimeFromUtc(response.ResponseMetadata.ServerTime.ToDateTime(), _mskTimeZone);// convert to MSK
@@ -3695,9 +4226,11 @@ namespace OsEngine.Market.Servers.TInvest
 
                 CancelOrderResponse response = null;
 
+                Metadata metaData = GetMetaData(order.SecurityNameCode);
+
                 try
                 {
-                    response = _ordersClient.CancelOrder(request, _gRpcMetadata);
+                    response = _ordersClient.CancelOrder(request, metaData);
                 }
                 catch (RpcException ex)
                 {
@@ -3712,6 +4245,13 @@ namespace OsEngine.Market.Servers.TInvest
 
                 if (response != null)
                 {
+                    if (_lastMyOrderStateDataTime.AddSeconds(5) < DateTime.UtcNow)
+                    {   // Сбрасываем счётчики жизни потока принимающего статусы ордеров
+                        // если он отсох, надо чтобы через 3 секунды уже переподключался.
+                        _lastMyOrderStateDataTime = DateTime.UtcNow.AddSeconds(-177);
+                        _lastTryReconnectOrdersStream = DateTime.Now.AddMinutes(-1);
+                    }
+
                     return true;
                 }
                 else
@@ -3905,6 +4445,13 @@ namespace OsEngine.Market.Servers.TInvest
 
                         trade.SecurityNameCode = order.SecurityNameCode;
                         trade.Price = GetValue(stage.Price) / security.PriceStepCost * security.PriceStep;
+
+                        if (security.SecurityType == SecurityType.Bond
+                           && security.NominalCurrent != 0)
+                        {
+                            trade.Price = trade.Price * (security.NominalCurrent/100);
+                        }
+
                         trade.Volume = stage.Quantity;
                         trade.NumberOrderParent = state.OrderId;
                         trade.NumberTrade = stage.TradeId;
@@ -4299,5 +4846,19 @@ namespace OsEngine.Market.Servers.TInvest
         public DateTime LastMessageTime { get; set; }
         public string Name { get; set; } // For logging purposes
         public Task ReadingTask { get; set; }
+    }
+
+    public class TinSecuritiesData
+    {
+        public DateTime TimeOfTrade;
+
+        public int OrdersCount;
+    }
+
+    public class TinSecuritiesRisksFutures
+    {
+        public decimal MarginBuyCoeffClient;
+
+        public decimal MarginSellCoeffClient;
     }
 }

@@ -191,7 +191,7 @@ namespace OsEngine.Market.Servers
                 _needToSaveTicksDaysCountParam.ValueChange += _needToSaveTicksDaysCountParam_ValueChange;
                 ServerParameters[1].Comment = OsLocalization.Market.Label88;
 
-                CreateParameterBoolean(OsLocalization.Market.ServerParam5, true);
+                CreateParameterBoolean(OsLocalization.Market.ServerParam5, false);
                 _needToSaveCandlesParam = (ServerParameterBool)ServerParameters[ServerParameters.Count - 1];
                 _needToSaveCandlesParam.ValueChange += SaveCandleHistoryParam_ValueChange;
                 ServerParameters[2].Comment = OsLocalization.Market.Label89;
@@ -394,6 +394,14 @@ namespace OsEngine.Market.Servers
 
         private ServerParameterBool _needToCheckDataFeedOnDisconnect;
 
+        public bool IsSaveTradesInFileSys
+        {
+            get
+            {
+                return _needToSaveTicksParam.Value;
+            }
+        }
+
         /// <summary>
         /// parameter with the number of days for saving ticks
         /// </summary>
@@ -404,10 +412,26 @@ namespace OsEngine.Market.Servers
         /// </summary>
         private ServerParameterBool _needToSaveCandlesParam;
 
+        public bool IsSaveCandlesInFileSys
+        {
+            get
+            {
+                return _needToSaveCandlesParam.Value;
+            }
+        }
+
         /// <summary>
         /// number of candles for which trades should be loaded at the start of the connector
         /// </summary>
         public ServerParameterInt _needToLoadCandlesCountParam;
+
+        public int CountCandlesInFileSys
+        {
+            get
+            {
+                return _needToLoadCandlesCountParam.Value;
+            }
+        }
 
         /// <summary>
         /// whether trades should be filled with data on the best bid and ask.
@@ -1093,7 +1117,7 @@ namespace OsEngine.Market.Servers
             SendLogMessage(OsLocalization.Market.Message12, LogMessageType.System);
 
             ServerStatus = ServerConnectStatus.Disconnect;
-            
+
             if (NeedToReconnectEvent != null)
             {
                 NeedToReconnectEvent();
@@ -1192,12 +1216,19 @@ namespace OsEngine.Market.Servers
                     }
 
                     if ((ServerRealization.ServerStatus != ServerConnectStatus.Connect
-                        || ServerStatus != ServerConnectStatus.Connect) && 
+                        || ServerStatus != ServerConnectStatus.Connect) &&
                         _serverStatusNeed == ServerConnectStatus.Connect &&
                        LastStartServerTime.AddSeconds(100) < DateTime.Now)
                     {
-                        if (_nonTradePeriods.CanTradeThisTime(DateTime.Now) == false)
+                        GetNonTradePeriod();
+
+                        if (_isNonTradingPeriodNow)
                         {
+                            if (ConnectStatusChangeEvent != null)
+                            {
+                                ConnectStatusChangeEvent(_serverConnectStatus.ToString());
+                            }
+
                             LastStartServerTime = DateTime.Now;
                             SendLogMessage(OsLocalization.Market.Message104, LogMessageType.System);
                             continue;
@@ -1234,16 +1265,16 @@ namespace OsEngine.Market.Servers
 
                         LastStartServerTime = DateTime.Now;
 
-                        if(NeedToReconnectEvent != null)
+                        if (NeedToReconnectEvent != null)
                         {
                             Thread worker = new Thread(SendReconnectEvent);
                             worker.Start();
                         }
-                       
+
                         continue;
                     }
 
-                    if (ServerRealization.ServerStatus == ServerConnectStatus.Connect 
+                    if (ServerRealization.ServerStatus == ServerConnectStatus.Connect
                         && _serverStatusNeed == ServerConnectStatus.Disconnect)
                     {
                         SendLogMessage(OsLocalization.Market.Message9, LogMessageType.System);
@@ -1338,9 +1369,9 @@ namespace OsEngine.Market.Servers
                     _candleManager = null;
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                SendLogMessage(ex.ToString(),LogMessageType.Error);
+                SendLogMessage(ex.ToString(), LogMessageType.Error);
             }
         }
 
@@ -1353,7 +1384,7 @@ namespace OsEngine.Market.Servers
                     NeedToReconnectEvent();
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 SendLogMessage(ex.ToString(), LogMessageType.Error);
             }
@@ -1372,6 +1403,12 @@ namespace OsEngine.Market.Servers
                     if (IsDeleted == true)
                     {
                         return;
+                    }
+
+                    if (_ordersHub == null)
+                    {
+                        await Task.Delay(1);
+                        continue;
                     }
 
                     bool workDone = false;
@@ -1472,6 +1509,7 @@ namespace OsEngine.Market.Servers
                 catch (Exception error)
                 {
                     SendLogMessage(error.ToString(), LogMessageType.Error);
+                    await Task.Delay(2000);
                 }
             }
         }
@@ -1675,7 +1713,7 @@ namespace OsEngine.Market.Servers
                         {
                             return;
                         }
-                       
+
                         await Task.Delay(1);
                     }
                 }
@@ -1739,6 +1777,7 @@ namespace OsEngine.Market.Servers
 
                         while (_candleSeriesToSend.TryDequeue(out series))
                         {
+
                             if (NewCandleIncomeEvent != null)
                             {
                                 NewCandleIncomeEvent(series);
@@ -1882,7 +1921,7 @@ namespace OsEngine.Market.Servers
                         {
                             return;
                         }
-                   
+
                         await Task.Delay(1);
                     }
                 }
@@ -2429,7 +2468,7 @@ namespace OsEngine.Market.Servers
         /// <summary>
         /// object for accessing candle storage in the file system
         /// </summary>
-        private ServerCandleStorage _candleStorage;
+        public ServerCandleStorage _candleStorage;
 
         /// <summary>
         /// multithreaded access locker in StartThisSecurity
@@ -2577,124 +2616,6 @@ namespace OsEngine.Market.Servers
         /// </summary>
         private void _candleManager_CandleUpdateEvent(CandleSeries series)
         {
-            if (series.IsMergedByCandlesFromFile == false 
-                && series.CandleCreateMethodType == "TimeShiftCandle")
-            {
-                series.IsMergedByCandlesFromFile = true;
-            }
-
-            if (series.IsMergedByCandlesFromFile == false)
-            {
-                series.IsMergedByCandlesFromFile = true;
-
-                if (_needToSaveCandlesParam.Value == true)
-                {
-                    List<Candle> candlesStorage = _candleStorage.GetCandles(series.Specification, _needToLoadCandlesCountParam.Value);
-
-                    if(series.TimeFrameBuilder.CandleMarketDataType == CandleMarketDataType.MarketDepth)
-                    {
-                        // нужно вставками прогружать каждую свечу по отдельности. 
-                        series.CandlesAll = series.CandlesAll.Merge(candlesStorage);
-
-                        for(int i = 0; candlesStorage != null && i < candlesStorage.Count;i++)
-                        {
-                            Candle candle = candlesStorage[i];
-
-                            bool isInArray = false;
-
-                            for(int j = 0;j < series.CandlesAll.Count;j++)
-                            {
-                                if (series.CandlesAll[j].TimeStart == candle.TimeStart)
-                                {
-                                    series.CandlesAll[j] = candle;
-                                    isInArray = true;
-                                    break;
-                                }
-                                else if (j == 0
-                                   && candle.TimeStart < series.CandlesAll[j].TimeStart)
-                                {
-                                    series.CandlesAll.Insert(j, candle);
-                                    isInArray = true;
-                                    break;
-                                }
-                                else if (j != 0
-                                    && candle.TimeStart > series.CandlesAll[j-1].TimeStart
-                                    && candle.TimeStart < series.CandlesAll[j].TimeStart)
-                                {
-                                    series.CandlesAll.Insert(j, candle);
-                                    isInArray = true;
-                                    break;
-                                }
-                            }
-
-                            if(isInArray == false)
-                            {
-                                series.CandlesAll.Add(candle);
-                            }
-                        }
-
-                        if(series.CandlesAll.Count > _needToLoadCandlesCountParam.Value)
-                        {
-                            series.CandlesAll = 
-                                series.CandlesAll.GetRange(
-                                    series.CandlesAll.Count - _needToLoadCandlesCountParam.Value, 
-                                    _needToLoadCandlesCountParam.Value);
-                        }
-
-                    }
-                    else
-                    {
-                        series.CandlesAll = series.CandlesAll.Merge(candlesStorage);
-                    }
-
-                    List<Candle> candlesAll = series.CandlesAll;
-
-                    if (candlesStorage != null
-                        && candlesStorage.Count > 0
-                        && candlesAll != null)
-                    {
-                        // копируем в новый массив данные по открытому интересу
-                        for (int i = 0, j = 0; i < candlesStorage.Count && j < candlesAll.Count; i++, j++)
-                        {
-                            Candle candleStorage = candlesStorage[i];
-                            Candle candleAll = candlesAll[j];
-
-                            if (candleStorage.TimeStart == candleAll.TimeStart)
-                            {
-                                if (candleStorage.OpenInterest > candleAll.OpenInterest)
-                                {
-                                    candleAll.OpenInterest = candleStorage.OpenInterest;
-                                }
-                            }
-                            else if (candleStorage.TimeStart > candleAll.TimeStart)
-                            {
-                                i--;
-                            }
-                            else if (candleStorage.TimeStart < candleAll.TimeStart)
-                            {
-                                j--;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (series.IsMergedByTradesFromFile == false)
-            {
-                series.IsMergedByTradesFromFile = true;
-
-                if (_needToSaveTicksParam.Value == true
-                    && series.TimeFrameBuilder.SaveTradesInCandles)
-                {
-                    List<Trade> trades = GetAllTradesToSecurity(series.Security);
-
-                    if (trades != null && trades.Count > 0)
-                    {
-                        series.LoadTradesInCandles(trades);
-                    }
-                }
-            }
-
             if (_needToRemoveCandlesFromMemory.Value == true
                 && series.CandlesAll.Count > _needToLoadCandlesCountParam.Value
                 && _serverTime.Minute % 15 == 0
@@ -3005,6 +2926,14 @@ namespace OsEngine.Market.Servers
                     return null;
                 }
 
+                List<Candle> candlesFromManager = TryGetCandlesFromCandleManager(security,timeFrameBuilder,candleCount);
+
+                if(candlesFromManager != null
+                    && candlesFromManager.Count > 0)
+                {
+                    return candlesFromManager;
+                }
+
                 return ServerRealization.GetLastCandleHistory(security, timeFrameBuilder, candleCount);
             }
             catch (Exception ex)
@@ -3015,6 +2944,61 @@ namespace OsEngine.Market.Servers
 
                 return null;
             }
+        }
+
+        private List<Candle> TryGetCandlesFromCandleManager(Security security, TimeFrameBuilder timeFrameBuilder, int candleCount)
+        {
+            try
+            {
+                if (ServerStatus != ServerConnectStatus.Connect)
+                {
+                    return null;
+                }
+
+                if (ServerRealization == null)
+                {
+                    return null;
+                }
+
+                List<CandleSeries> series = _candleManager.GetSeries(timeFrameBuilder, security);
+
+                List<Candle> myCandles = new List<Candle>();
+
+                for (int i = 0; i < series.Count; i++)
+                {
+                    CandleSeries currentSeries = series[i];
+                    if (currentSeries.IsStarted == true
+                        && currentSeries.CandlesAll != null
+                        && currentSeries.CandlesAll.Count > 0)
+                    {
+                        myCandles = currentSeries.CandlesAll;
+                        break;
+                    }
+                }
+
+                if(myCandles == null 
+                    || myCandles.Count == 0)
+                {
+                    return null;
+                }
+
+                List<Candle> resultCandles = new List<Candle>();
+
+                for(int i = 0;i < myCandles.Count;i++)
+                {
+                    Candle currentCandle = myCandles[i];
+                    Candle newCandle = new Candle();
+                    newCandle.SetCandleFromString(currentCandle.StringToSave);
+                    resultCandles.Add(newCandle);
+                }
+
+                return resultCandles;
+            }
+            catch //(Exception ex)
+            {
+                /*SendLogMessage("Cash candles error: " + ex.ToString(), LogMessageType.Error);*/
+            }
+            return null;
         }
 
         /// <summary>
@@ -4666,7 +4650,7 @@ namespace OsEngine.Market.Servers
                         SendMessageConnectorConnectInAnalysisServer();
                     }
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     SendLogMessage(ex.ToString(), LogMessageType.Error);
                     await Task.Delay(5000);
@@ -4779,7 +4763,7 @@ namespace OsEngine.Market.Servers
 
                 if (!_nonTradePeriods.CanTradeThisTime(DateTime.Now))
                 {
-                    if(_isNonTradingPeriodNow != true)
+                    if (_isNonTradingPeriodNow != true)
                     {
                         _isNonTradingPeriodNow = true;
 
@@ -4810,9 +4794,9 @@ namespace OsEngine.Market.Servers
 
         public bool IsNonTradePeriod
         {
-            get 
+            get
             {
-                return _isNonTradingPeriodNow; 
+                return _isNonTradingPeriodNow;
             }
         }
 
@@ -4835,12 +4819,12 @@ namespace OsEngine.Market.Servers
         private ConcurrentQueue<SecurityLeverageData> _queueLeverage = new();
 
         private async void GetListLeverageTask()
-        {            
+        {
             while (true)
             {
                 try
                 {
-                    if(IsDeleted == true)
+                    if (IsDeleted == true)
                     {
                         return;
                     }
@@ -4888,7 +4872,7 @@ namespace OsEngine.Market.Servers
                     SendLogMessage(ex.ToString(), LogMessageType.Error);
                     await Task.Delay(5000);
                 }
-            }            
+            }
         }
 
         private void GetListLeverage()

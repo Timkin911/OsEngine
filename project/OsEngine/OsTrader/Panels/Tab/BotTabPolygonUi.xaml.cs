@@ -15,6 +15,7 @@ using OsEngine.Market;
 using System.Windows.Forms;
 using System.Threading;
 using OsEngine.Logging;
+using System.Windows.Threading;
 
 namespace OsEngine.OsTrader.Panels.Tab
 {
@@ -147,6 +148,14 @@ namespace OsEngine.OsTrader.Panels.Tab
             ButtonSec3.Click += ButtonSec3_Click;
 
             Polygon.StartPaintLog(HostLog);
+
+            if (InteractiveInstructions.PolygonPosts.AllInstructionsInClass == null
+             || InteractiveInstructions.PolygonPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPostTabPolygon.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
         }
 
         private void BotTabPolygonUi_Closed(object sender, EventArgs e)
@@ -155,11 +164,19 @@ namespace OsEngine.OsTrader.Panels.Tab
             {
                 _uiClosed = true;
 
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
                 ButtonHideShowRightPanel.Click -= ButtonHideShowRightPanel_Click;
                 ButtonBuyLimit.Click -= ButtonBuyLimit_Click;
                 ButtonSec1.Click -= ButtonSec1_Click;
                 ButtonSec2.Click -= ButtonSec2_Click;
                 ButtonSec3.Click -= ButtonSec3_Click;
+                ButtonPostTabPolygon.Click -= ButtonPostTabPolygon_Click;
 
                 TextBoxBaseCurrency.TextChanged -= TextBoxBaseCurrency_TextChanged;
                 TextBoxSeparatorToSecurities.TextChanged -= TextBoxSeparatorToSecurities_TextChanged;
@@ -209,6 +226,7 @@ namespace OsEngine.OsTrader.Panels.Tab
 
                 Polygon.StopPaintLog();
 
+                NameElement = null;
                 Polygon = null;
 
                 if (HostSequence != null)
@@ -219,9 +237,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                 if (_grid != null)
                 {
                     DataGridFactory.ClearLinks(_grid);
+                    _grid.DataError -= _grid_DataError;
                     _grid.Rows.Clear();
                     _grid.Columns.Clear();
-                    _grid.DataError -= _grid_DataError;
+                    _grid.DataSource = null;
+                    _grid.Dispose();
                     _grid = null;
                 }
 
@@ -229,10 +249,78 @@ namespace OsEngine.OsTrader.Panels.Tab
                 HostSec1.Child = null;
                 HostSec2.Child = null;
                 HostSec3.Child = null;
+
+                Closed -= BotTabPolygonUi_Closed;
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                Polygon?.SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                Polygon?.SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenTabPolygon.Opacity = 1;
+                    PostWhiteTabPolygon.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenTabPolygon.Opacity = 0;
+                    PostWhiteTabPolygon.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenTabPolygon.Opacity = 1;
+                    PostWhiteTabPolygon.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                Polygon?.SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
             }
         }
 
@@ -1097,5 +1185,20 @@ namespace OsEngine.OsTrader.Panels.Tab
 
         #endregion
 
+        #region Posts collection
+
+        private void ButtonPostTabPolygon_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.PolygonPosts.Link11.ShowLinkInBrowser();
+            }
+            catch (Exception error)
+            {
+                Polygon.SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

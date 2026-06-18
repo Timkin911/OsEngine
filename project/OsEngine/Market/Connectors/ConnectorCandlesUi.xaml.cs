@@ -1,6 +1,6 @@
 ﻿/*
- *Your rights to use the code are governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
- *Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
+*Your rights to use the code are governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
+*Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
 
 using OsEngine.Candles;
@@ -21,6 +21,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
 using System.Windows.Input;
+using System.Windows.Threading;
 using MessageBox = System.Windows.MessageBox;
 
 namespace OsEngine.Market.Connectors
@@ -28,6 +29,8 @@ namespace OsEngine.Market.Connectors
     public partial class ConnectorCandlesUi
     {
         #region Constructor
+
+        private ConnectorCandles _connectorBot;
 
         public ConnectorCandlesUi(ConnectorCandles connectorBot)
         {
@@ -131,9 +134,9 @@ namespace OsEngine.Market.Connectors
                     LoadPortfolioOnBox(true);
                 }
 
-                LoadClassOnBox();
+                //LoadClassOnBox();
 
-                LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
+                //LoadSecurityOnBox(loadExpirationStrikeComboBox: true);
 
                 ComboBoxClass.SelectionChanged += ComboBoxClass_SelectionChanged;
                 ComboBoxExpiration.SelectionChanged += ComboBoxExpirationAndStrike_SelectionChanged;
@@ -189,6 +192,13 @@ namespace OsEngine.Market.Connectors
 
                 ActivateCandlesTypesControls();
 
+                if (InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass == null
+                    || InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass.Count == 0)
+                {
+                    ButtonPostConnectorCandles.Visibility = Visibility.Visible;
+                }
+
+                StartButtonBlinkAnimation();
             }
             catch (Exception error)
             {
@@ -200,8 +210,6 @@ namespace OsEngine.Market.Connectors
             this.Activate();
             this.Focus();
         }
-
-        private ConnectorCandles _connectorBot;
 
         private void ConnectorCandlesUi_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
@@ -230,6 +238,7 @@ namespace OsEngine.Market.Connectors
                 ComboBoxExpiration.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
                 ComboBoxStrike.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
                 ComboBoxTypeServer.SelectionChanged -= ComboBoxTypeServer_SelectionChanged;
+                ComboBoxCandleMarketDataType.SelectionChanged -= ComboBoxCandleMarketDataType_SelectionChanged;
                 ComboBoxCandleCreateMethodType.SelectionChanged -= ComboBoxCandleCreateMethodType_SelectionChanged;
                 CheckBoxSaveTradeArrayInCandle.Click -= CheckBoxSaveTradeArrayInCandle_Click;
                 TextBoxSearchSecurity.TextChanged -= TextBoxSearchSecurity_TextChanged;
@@ -243,6 +252,15 @@ namespace OsEngine.Market.Connectors
 
                 DeleteGridSecurities();
                 DeleteCandleRealizationGrid();
+
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                Closing -= ConnectorCandlesUi_Closing;
             }
             catch
             {
@@ -253,14 +271,74 @@ namespace OsEngine.Market.Connectors
             {
                 _connectorBot = null;
                 _selectedSeries = null;
-                _series.Clear();
                 _series = null;
-                _searchResults.Clear();
                 _searchResults = null;
             }
             catch
             {
                 // ignore
+            }
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    PostGreenConnectorCandles.Opacity = 1;
+                    PostWhiteConnectorCandles.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenConnectorCandles.Opacity = 0;
+                    PostWhiteConnectorCandles.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenConnectorCandles.Opacity = 1;
+                    PostWhiteConnectorCandles.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
             }
         }
 
@@ -792,6 +870,14 @@ namespace OsEngine.Market.Connectors
                     return;
                 }
 
+                if (classSec == "All")
+                {
+                    return;
+                }
+
+                ComboBoxExpiration.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
+                ComboBoxStrike.SelectionChanged -= ComboBoxExpirationAndStrike_SelectionChanged;
+
                 SortedSet<DateTime> sortedExpirations = new SortedSet<DateTime>();
                 SortedSet<decimal> sortedStrikes = new SortedSet<decimal>();
 
@@ -842,6 +928,9 @@ namespace OsEngine.Market.Connectors
                 {
                     ComboBoxStrike.Items.Add(strike.ToString());
                 }
+
+                ComboBoxExpiration.SelectionChanged += ComboBoxExpirationAndStrike_SelectionChanged;
+                ComboBoxStrike.SelectionChanged += ComboBoxExpirationAndStrike_SelectionChanged;
             }
             catch (Exception error)
             {
@@ -1057,9 +1146,17 @@ namespace OsEngine.Market.Connectors
 
         private void DeleteGridSecurities()
         {
+            if (_gridSecurities == null)
+            {
+                return;
+            }
             DataGridFactory.ClearLinks(_gridSecurities);
             _gridSecurities.CellClick -= _gridSecurities_CellClick;
             _gridSecurities.DataError -= _gridSecurities_DataError;
+            _gridSecurities.Rows.Clear();
+            _gridSecurities.Columns.Clear();
+            _gridSecurities.DataSource = null;
+            _gridSecurities.Dispose();
             _gridSecurities = null;
             SecurityTable.Child = null;
         }
@@ -1701,9 +1798,17 @@ namespace OsEngine.Market.Connectors
 
         private void DeleteCandleRealizationGrid()
         {
+            if (_candlesRealizationGrid == null)
+            {
+                return;
+            }
             DataGridFactory.ClearLinks(_candlesRealizationGrid);
             _candlesRealizationGrid.CellEndEdit -= _candlesRealizationGrid_CellEndEdit;
             _candlesRealizationGrid.DataError -= _candlesRealizationGrid_DataError;
+            _candlesRealizationGrid.Rows.Clear();
+            _candlesRealizationGrid.Columns.Clear();
+            _candlesRealizationGrid.DataSource = null;
+            _candlesRealizationGrid.Dispose();
             _candlesRealizationGrid = null;
             HostCandleSeriesParameters.Child = null;
         }
@@ -1846,7 +1951,7 @@ namespace OsEngine.Market.Connectors
                     box.Items.Add(TimeFrame.Sec2.ToString());
                     box.Items.Add(TimeFrame.Sec1.ToString());
 
-                    ComboBoxCandleMarketDataType.SelectedItem = CandleMarketDataType.Tick;
+                    ComboBoxCandleMarketDataType.SelectedItem = CandleMarketDataType.Tick.ToString();
                     ComboBoxCandleMarketDataType.IsEnabled = true;
                 }
                 else
@@ -1883,10 +1988,10 @@ namespace OsEngine.Market.Connectors
                         }
                     }
 
-                    ComboBoxCandleCreateMethodType.SelectedItem = CandleCreateMethodType.Simple;
+                    ComboBoxCandleCreateMethodType.SelectedItem = CandleCreateMethodType.Simple.ToString();
                     ComboBoxCandleCreateMethodType.IsEnabled = false;
 
-                    ComboBoxCandleMarketDataType.SelectedItem = CandleMarketDataType.Tick;
+                    ComboBoxCandleMarketDataType.SelectedItem = CandleMarketDataType.Tick.ToString();
                     ComboBoxCandleMarketDataType.IsEnabled = false;
                 }
             }
@@ -2072,6 +2177,22 @@ namespace OsEngine.Market.Connectors
 
         #endregion
 
+        #region Posts collection
+
+        private void ButtonPostConnectorCandles_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.BotStationLightPosts.Link29.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
+
         #region Logging
 
         private void SendNewLogMessage(string message, LogMessageType type)
@@ -2085,6 +2206,5 @@ namespace OsEngine.Market.Connectors
         public event Action<string, LogMessageType> LogMessageEvent;
 
         #endregion
-
     }
 }

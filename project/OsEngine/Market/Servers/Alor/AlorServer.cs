@@ -17,6 +17,7 @@ using System.Net;
 using System.Threading;
 using OsEngine.Entity.WebSocketOsEngine;
 using System.Linq;
+using OsEngine.Market.Servers.Bybit.Entities;
 
 namespace OsEngine.Market.Servers.Alor
 {
@@ -460,6 +461,8 @@ namespace OsEngine.Market.Servers.Alor
                     else if (item.type.StartsWith("Календарный спред"))
                     {
                         newSecurity.NameClass = "Futures spread";
+                        newSecurity.MarginBuy = item.marginbuy.ToDecimal();
+                        newSecurity.MarginSell = item.marginsell.ToDecimal();
                     }
                     else if (newSecurity.SecurityType == SecurityType.Futures)
                     {
@@ -534,6 +537,11 @@ namespace OsEngine.Market.Servers.Alor
                         }
                     }
 
+                    if(newSecurity.SecurityType == SecurityType.Bond)
+                    {
+
+                    }
+
                     if(string.IsNullOrEmpty(item.priceMax) == false)
                     {
                         newSecurity.PriceLimitHigh = item.priceMax.ToDecimal();
@@ -576,7 +584,8 @@ namespace OsEngine.Market.Servers.Alor
             {
                 return SecurityType.Fund;
             }
-            else if(security.description.Contains("Индекс"))
+            else if(security.description != null 
+                && security.description.Contains("Индекс"))
             {
                 return SecurityType.Index;
             }
@@ -764,6 +773,15 @@ namespace OsEngine.Market.Servers.Alor
 
             List<Candle> candles = GetCandleDataToSecurity(security, timeFrameBuilder, startTime, endTime, startTime);
         
+            for(int i = 1; candles != null && i < candles.Count;i++)
+            {
+                if (candles[i].TimeStart == candles[i-1].TimeStart)
+                {
+                    candles.RemoveAt(i);
+                    i--;
+                }
+            }
+
             while(candles.Count > candleCount)
             {
                 candles.RemoveAt(0);
@@ -1690,6 +1708,8 @@ namespace OsEngine.Market.Servers.Alor
 
         private ConcurrentQueue<string> WebSocketPortfolioMessage = new ConcurrentQueue<string>();
 
+        private Dictionary<string, OpenInterestValue> _openInterestData = new Dictionary<string, OpenInterestValue>(); // save open interest data to use later in trade updates
+
         private void DataMessageReader()
         {
             Thread.Sleep(1000);
@@ -1770,6 +1790,20 @@ namespace OsEngine.Market.Servers.Alor
             if(string.IsNullOrEmpty(baseMessage.oi) == false)
             {
                 trade.OpenInterest = baseMessage.oi.ToDecimal();
+
+                OpenInterestValue saveOiValue = null;
+
+                if (_openInterestData.TryGetValue(baseMessage.symbol, out saveOiValue) == true)
+                {
+                    saveOiValue.ValueOi = baseMessage.oi.ToDecimal();
+                }
+                else
+                {
+                    saveOiValue = new OpenInterestValue();
+                    saveOiValue.SecurityName = baseMessage.symbol;
+                    saveOiValue.ValueOi = trade.OpenInterest;
+                    _openInterestData.Add(baseMessage.symbol, saveOiValue);
+                }
             }
 
             if (baseMessage.side == "sell")
@@ -1867,6 +1901,11 @@ namespace OsEngine.Market.Servers.Alor
             }
 
             _lastMdTime = depth.Time;
+
+            if (_openInterestData.TryGetValue(secName, out OpenInterestValue saveOiValue) == true)
+            {
+                depth.OpenInterest = saveOiValue.ValueOi;
+            }
 
             if (MarketDepthEvent != null)
             {
@@ -2486,7 +2525,8 @@ namespace OsEngine.Market.Servers.Alor
                     if(response.Content != null)
                     {
                         SendLogMessage("Fail reasons: "
-                      + response.Content, LogMessageType.Error);
+                      + response.Content 
+                      + "\n Security: " + order.SecurityNameCode, LogMessageType.Error);
                     }
 
                     order.State = OrderStateType.Fail;
@@ -2524,15 +2564,7 @@ namespace OsEngine.Market.Servers.Alor
             requestObj.instrument.symbol = order.SecurityNameCode;
             requestObj.user = new User();
             requestObj.user.portfolio = order.PortfolioNumber.Split('_')[0];
-
-            if (order.LimitsMakerOnly == true)
-            {
-                requestObj.timeInForce = "bookorcancel";
-            }
-            else
-            {
-                requestObj.timeInForce = "goodtillcancelled";
-            }
+            requestObj.timeInForce = ConvertOrderLifeTime(order.OrderTypeTime, order.LimitsMakerOnly);
 
             return requestObj;
         }
@@ -2558,6 +2590,26 @@ namespace OsEngine.Market.Servers.Alor
             requestObj.user.portfolio = order.PortfolioNumber.Split('_')[0];
 
             return requestObj;
+        }
+
+        private string ConvertOrderLifeTime(OrderTypeTime orderTypeTime, bool limitsMakerOnly)
+        {
+            if (limitsMakerOnly)
+            {
+                return "bookorcancel";
+            }
+
+            if (orderTypeTime == OrderTypeTime.Day)
+            {
+                return "oneday";
+            }
+
+            if (orderTypeTime == OrderTypeTime.GTC)
+            {
+                return "goodtillcancelled";
+            }
+
+            return "goodtillcancelled";
         }
 
         List<AlorChangePriceOrder> _changePriceOrders = new List<AlorChangePriceOrder>();
@@ -3197,6 +3249,12 @@ namespace OsEngine.Market.Servers.Alor
             {
                 hour += 1;
             }
+
+            if(hour >= 24)
+            {
+                hour = 23;
+            }
+
             int minute = Convert.ToInt32(time.Substring(3, 2));
             int second = Convert.ToInt32(time.Substring(6, 2));
             int ms = Convert.ToInt32(time.Substring(10, 3));
@@ -3254,6 +3312,13 @@ namespace OsEngine.Market.Servers.Alor
        public string Security;
 
        public string Portfolio;
+    }
+
+    public class OpenInterestValue
+    {
+        public string SecurityName;
+
+        public decimal ValueOi;
     }
 
     public enum AlorSubType

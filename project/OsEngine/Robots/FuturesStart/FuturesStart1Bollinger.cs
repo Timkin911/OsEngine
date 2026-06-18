@@ -3,6 +3,7 @@
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
 
+using OsEngine.Candles.Series;
 using OsEngine.Entity;
 using OsEngine.Indicators;
 using OsEngine.Language;
@@ -557,7 +558,18 @@ namespace OsEngine.Robots.FuturesStart
                 return;
             }
 
-            List<Position> futuresPositions = futuresSource.PositionsOpenAll;
+            if(this.StartProgram == StartProgram.IsOsTrader)
+            {
+                DateTime lastPairTradeTime = GetLastEntryLogicTime(baseSource.Security.Name);
+
+                if(lastPairTradeTime.AddMinutes(1) > DateTime.Now)
+                { // если по этой паре в реале уже был вход в логику, за последнюю минуту
+                    return;
+                }
+                SetLastLogicEntryTime(baseSource.Security.Name, DateTime.Now);
+            }
+
+            List <Position> futuresPositions = futuresSource.PositionsOpenAll;
 
             if(futuresPositions.Count > 0)
             { // вход в логику закрытия позиции
@@ -599,7 +611,12 @@ namespace OsEngine.Robots.FuturesStart
             {
                 Security sec = futures.Tabs[i].Security;
 
-                if(sec.Expiration == DateTime.MinValue)
+                if (sec == null)
+                {
+                    continue;
+                }
+
+                if (sec.Expiration == DateTime.MinValue)
                 {
                     continue;
                 }
@@ -642,6 +659,16 @@ namespace OsEngine.Robots.FuturesStart
             // 2 проверяем условия 
 
             decimal futuresLastPrice = futuresCandles[^1].Close;
+
+            if(this.StartProgram == StartProgram.IsOsTrader)
+            { // если у нас реальные торги, берём цену из стакана
+                futuresLastPrice = futuresSource.PriceCenterMarketDepth;
+
+                if(futuresLastPrice == 0)
+                {
+                    return;
+                }
+            }
 
             if(_regime.ValueString != "OnlyShort"
                 && futuresLastPrice > futuresBollinger.DataSeries[0].Last)   // фьючерс выше верхнего боллинджера
@@ -709,7 +736,6 @@ namespace OsEngine.Robots.FuturesStart
                 return;
             }
 
-            decimal baseLastPrice = baseCandles[^1].Close;
             decimal futuresLastPrice = futuresCandles[^1].Close;
 
             bool needToExit = false;
@@ -844,6 +870,38 @@ namespace OsEngine.Robots.FuturesStart
             return volume;
         }
 
+        private List<LastTradeTimeValue> _entryLogicByBaseSecurityInReal = new List<LastTradeTimeValue>();
+
+        private void SetLastLogicEntryTime(string securityBase, DateTime time)
+        {
+            for (int i = 0; i < _entryLogicByBaseSecurityInReal.Count; i++)
+            {
+                if (_entryLogicByBaseSecurityInReal[i].SecurityName == securityBase)
+                {
+                    _entryLogicByBaseSecurityInReal[i].Time = time;
+                    return;
+                }
+            }
+
+            LastTradeTimeValue newValue = new LastTradeTimeValue();
+            newValue.SecurityName = securityBase;
+            newValue.Time = time;
+            _entryLogicByBaseSecurityInReal.Add(newValue);
+        }
+
+        private DateTime GetLastEntryLogicTime(string securityBase)
+        {
+            for(int i = 0;i < _entryLogicByBaseSecurityInReal.Count;i++)
+            {
+                if (_entryLogicByBaseSecurityInReal[i].SecurityName == securityBase)
+                {
+                    return _entryLogicByBaseSecurityInReal[i].Time;
+                }
+            }
+
+            return DateTime.MinValue;
+        }
+
         #endregion
 
         #region Contango values
@@ -852,6 +910,11 @@ namespace OsEngine.Robots.FuturesStart
 
         private void SetContangoValues(BotTabSimple baseSource, BotTabSimple futuresSource)
         {
+            if(baseSource.PriceBestAsk == 0)
+            {
+                return;
+            }
+
             ContangoValue value = null;
 
             for(int i = 0;i < _contangoValues.Count;i++)
@@ -1242,6 +1305,10 @@ namespace OsEngine.Robots.FuturesStart
             tabFutures.ServerType = server.ServerType;
             tabFutures.ServerName = server.ServerNameAndPrefix;
 
+            tabFutures.CandleCreateMethodType = CandleCreateMethodType.Simple.ToString();
+            ((Simple)tabFutures.CandleSeriesRealization).TimeFrame = TimeFrame.Min15;
+            ((Simple)tabFutures.CandleSeriesRealization).TimeFrameParameter.ValueString = TimeFrame.Min15.ToString();
+
             List<ActivatedSecurity> securitiesToScreener = new List<ActivatedSecurity>();
 
             for (int i = 0;i < futuresSecurity.Count;i++)
@@ -1261,6 +1328,7 @@ namespace OsEngine.Robots.FuturesStart
                 }
             }
 
+            tabFutures.SaveSettings();
             tabFutures.NeedToReloadTabs = true;
         }
 
@@ -1275,6 +1343,14 @@ namespace OsEngine.Robots.FuturesStart
         public decimal ContangoPercent;
 
         public DateTime LastTimeUpdate;
+
+    }
+
+    public class LastTradeTimeValue
+    {
+        public string SecurityName;
+
+        public DateTime Time;
 
     }
 }

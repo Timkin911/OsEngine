@@ -59,6 +59,14 @@ namespace OsEngine.Language
             "Eng:Create position_" +
             "Ru:Создать позицию_");
 
+        public string PositionMenuItem14 => OsLocalization.ConvertToLocString(
+           "Eng:Add to selected_" +
+           "Ru:Докупить в выбранную_");
+
+        public string PositionMenuItem15 => OsLocalization.ConvertToLocString(
+        "Eng:Save all to folder_" +
+        "Ru:Сохранить всё в папку_");
+
         public string TitleJournalUi => OsLocalization.ConvertToLocString(
             "Eng:Journal_" +
             "Ru:Журнал_");
@@ -163,8 +171,17 @@ namespace OsEngine.Language
          "Eng:A B S O L U T E_" +
          "Ru:А Б С О Л Ю Т_");
 
+        public string Label26 => OsLocalization.ConvertToLocString(
+         "Eng:First, select a benchmark_" +
+         "Ru:Сначала выберите бенчмарк_");
 
+        public string Label27 => OsLocalization.ConvertToLocString(
+         "Eng:Update benchmark data? Old data will be deleted and reloaded_" +
+         "Ru:Обновить данные бенчмарка? Старые данные будут удалены и загружены заново_");
 
+        public string Label28 => OsLocalization.ConvertToLocString(
+       "Eng:Folder for saving files with bot positions_" +
+       "Ru:Папка для сохранения файлов с позициями ботов_");
 
         public string TabItem1 => OsLocalization.ConvertToLocString(
             "Eng:Equity_" +
@@ -293,6 +310,10 @@ namespace OsEngine.Language
         public string Message5 => OsLocalization.ConvertToLocString(
              "Eng:Are you sure you want to close all positions at market?_" +
              "Ru:Вы уверены что хотите закрыть все позиции по маркету?_");
+
+        public string Message6 => OsLocalization.ConvertToLocString(
+           "Eng:Files with bot positions have been successfully saved to the folder_" +
+           "Ru:Файлы с позициями ботов успешно сохранены в папку_");
 
         public string TabItemSecurities => OsLocalization.ConvertToLocString(
             "Eng:Securities_" +

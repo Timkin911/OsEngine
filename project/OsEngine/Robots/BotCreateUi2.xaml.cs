@@ -17,6 +17,7 @@ using System.Windows.Controls;
 using System.Windows.Forms;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace OsEngine.Robots
 {
@@ -118,15 +119,88 @@ namespace OsEngine.Robots
             ButtonRightInSearchResults.Click += ButtonRightInSearchResults_Click;
             ButtonLeftInSearchResults.Click += ButtonLeftInSearchResults_Click;
 
+            if (InteractiveInstructions.TesterLightPosts.AllInstructionsInClass == null
+            || InteractiveInstructions.TesterLightPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonRobots.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
+        }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenRobots.Opacity = 1;
+                    PostWhiteRobots.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenRobots.Opacity = 0;
+                    PostWhiteRobots.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenRobots.Opacity = 1;
+                    PostWhiteRobots.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+            }
         }
 
         private void TextBoxName_TextChanged(object sender, TextChangedEventArgs e)
         {
             try
             {
-                if (TextBoxName.Text.Length > 20)
+                if (TextBoxName.Text.Length > 50)
                 {
-                    TextBoxName.Text = TextBoxName.Text.Substring(0, 20);
+                    TextBoxName.Text = TextBoxName.Text.Substring(0, 50);
                 }
             }
             catch
@@ -147,6 +221,16 @@ namespace OsEngine.Robots
                 _botsIncluded = null;
                 _botsFromScript = null;
                 _lastLoadDescriptions = null;
+                _names = null;
+
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                ComboBoxLocation.SelectionChanged -= ComboBoxLocation_SelectionChanged;
 
                 if (HostBots != null)
                 {
@@ -157,8 +241,11 @@ namespace OsEngine.Robots
                 {
                     _grid.CellClick -= _grid_CellClick;
                     _grid.DataError -= _grid_DataError;
-                    _grid.Rows.Clear();
                     DataGridFactory.ClearLinks(_grid);
+                    _grid.Rows.Clear();
+                    _grid.Columns.Clear();
+                    _grid.DataSource = null;
+                    _grid.Dispose();
                     _grid = null;
                 }
 
@@ -169,6 +256,14 @@ namespace OsEngine.Robots
                 ButtonRightInSearchResults.Click -= ButtonRightInSearchResults_Click;
                 ButtonLeftInSearchResults.Click -= ButtonLeftInSearchResults_Click;
                 TextBoxName.TextChanged -= TextBoxName_TextChanged;
+
+                _searchResults?.Clear();
+                _searchResults = null;
+
+                _awaitUiBotsInfoLoading = null;
+                _descriptionsFromBotFactoryLast = null;
+
+                Closed -= BotCreateUi2_Closed;
             }
             catch (Exception ex)
             {
@@ -1459,6 +1554,22 @@ namespace OsEngine.Robots
             CustomMessageBoxUi ui = new CustomMessageBoxUi(OsLocalization.Trader.Label302);
             ui.ShowDialog();
         }
+
+        #region Posts collection
+
+        private void ButtonRobots_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.TesterLightPosts.Link11.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 
     public class BotDescription

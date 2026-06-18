@@ -18,7 +18,7 @@ namespace OsEngine.OsTrader.RiskManager
     /// </summary>
     public class RiskManager
     {
-        // static part with work flow 
+        #region Static part with work flow 
 
         public static Task Watcher;
 
@@ -83,7 +83,9 @@ namespace OsEngine.OsTrader.RiskManager
             }
         }
 
-        // service
+        #endregion
+
+        #region Service
 
         /// <summary>
         /// Constructor
@@ -95,8 +97,8 @@ namespace OsEngine.OsTrader.RiskManager
             _startProgram = startProgram;
             _name = nameBot + "RiskManager";
             MaxDrowDownToDayPersent = 1;
-            
-            if(_startProgram != StartProgram.IsOsOptimizer)
+
+            if (_startProgram != StartProgram.IsOsOptimizer)
             {
                 Load();
 
@@ -131,7 +133,7 @@ namespace OsEngine.OsTrader.RiskManager
         /// <summary>
         /// Is the manager included
         /// </summary>
-        public bool IsActiv;
+        public bool IsActive;
 
         /// <summary>
         /// Clear previously loaded jorunals
@@ -179,7 +181,7 @@ namespace OsEngine.OsTrader.RiskManager
                 using (StreamReader reader = new StreamReader(@"Engine\" + _name + @".txt"))
                 {
                     MaxDrowDownToDayPersent = Convert.ToDecimal(reader.ReadLine());
-                    IsActiv = Convert.ToBoolean(reader.ReadLine());
+                    IsActive = Convert.ToBoolean(reader.ReadLine());
                     Enum.TryParse(reader.ReadLine(), false, out ReactionType);
 
                     reader.Close();
@@ -201,7 +203,7 @@ namespace OsEngine.OsTrader.RiskManager
                 using (StreamWriter writer = new StreamWriter(@"Engine\" + _name + @".txt", false))
                 {
                     writer.WriteLine(MaxDrowDownToDayPersent);
-                    writer.WriteLine(IsActiv);
+                    writer.WriteLine(IsActive);
                     writer.WriteLine(ReactionType);
 
                     writer.Close();
@@ -263,7 +265,7 @@ namespace OsEngine.OsTrader.RiskManager
         {
             try
             {
-                if (!IsActiv)
+                if (!IsActive)
                 {
                     return;
                 }
@@ -289,7 +291,7 @@ namespace OsEngine.OsTrader.RiskManager
 
                 if (profit < -Math.Abs(MaxDrowDownToDayPersent))
                 {
-                    IsActiv = false;
+                    IsActive = false;
 
                     if (RiskManagerAlarmEvent != null)
                     {
@@ -303,7 +305,9 @@ namespace OsEngine.OsTrader.RiskManager
             }
         }
 
-        // logging
+        #endregion
+
+        #region logging
 
         /// <summary>
         /// Send new message
@@ -330,6 +334,7 @@ namespace OsEngine.OsTrader.RiskManager
         /// </summary>
         public event Action<RiskManagerReactionType> RiskManagerAlarmEvent;
 
+        #endregion
     }
 
     /// <summary>

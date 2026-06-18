@@ -90,6 +90,8 @@ using OsEngine.Market.Servers.GateIoData;
 using OsEngine.Market.Servers.BitGetData;
 using OsEngine.Market.Servers.MetaTrader5;
 using OsEngine.Market.Servers.QscalpMarketDepth;
+using OsEngine.Market.Servers.TData;
+using OsEngine.Market.Servers.BitGetUnified;
 
 namespace OsEngine.Market
 {
@@ -279,6 +281,34 @@ namespace OsEngine.Market
             }
         }
 
+        public static void TesterStarted()
+        {
+            if (ServerMasterActivateInTesterRegimeEvent != null)
+            {
+                ServerMasterActivateInTesterRegimeEvent();
+            }
+        }
+
+        public static void RealStarted()
+        {
+            if (ServerMasterActivateInTesterRegimeEvent != null)
+            {
+                ServerMasterActivateInTesterRegimeEvent();
+            }
+        }
+
+        public static void OptimizerStarted()
+        {
+            if (ServerMasterActivateInOptimizerRegimeEvent != null)
+            {
+                ServerMasterActivateInOptimizerRegimeEvent();
+            }
+        }
+
+        public static event Action ServerMasterActivateInTesterRegimeEvent;
+
+        public static event Action ServerMasterActivateInOptimizerRegimeEvent;
+
         #endregion
 
         #region Creating and storing servers
@@ -352,6 +382,7 @@ namespace OsEngine.Market
                 serverTypes.Add(ServerType.TelegramNews);
                 serverTypes.Add(ServerType.BinanceData);
                 serverTypes.Add(ServerType.AscendexSpot);
+                serverTypes.Add(ServerType.BitGetUnified);
 
                 // а теперь сортируем в зависимости от предпочтений пользователя
 
@@ -482,6 +513,7 @@ namespace OsEngine.Market
                 serverTypes.Add(ServerType.BitGetData);
                 serverTypes.Add(ServerType.MetaTrader5);
                 serverTypes.Add(ServerType.QscalpMarketDepth);
+                serverTypes.Add(ServerType.TDataHistory);
 
                 return serverTypes;
             }
@@ -618,6 +650,14 @@ namespace OsEngine.Market
 
                     SaveMostPopularServers(type);
 
+                    if (type == ServerType.BitGetUnified)
+                    {
+                        newServer = new BitGetUnifiedServer();
+                    }
+                    if (type == ServerType.TDataHistory)
+                    {
+                        newServer = new TDataServer();
+                    }
                     if (type == ServerType.QscalpMarketDepth)
                     {
                         newServer = new QscalpMarketDepthServer();
@@ -1670,6 +1710,14 @@ namespace OsEngine.Market
                 {
                     serverPermission = new QscalpMarketDepthServerPermission();
                 }
+                else if (type == ServerType.TDataHistory)
+                {
+                    serverPermission = new TDataServerPermission();
+                }
+                else if (type == ServerType.BitGetUnified)
+                {
+                    serverPermission = new BitGetUnifiedServerPermission();
+                }
 
                 if (serverPermission != null)
                 {
@@ -2032,9 +2080,19 @@ namespace OsEngine.Market
             }
         }
 
+        public static void ShowMatrixManagerDialog()
+        {
+            if (ShowMatrixManagerDialogEvent != null)
+            {
+                ShowMatrixManagerDialogEvent();
+            }
+        }
+
         public static event Action ShowApiDialogEvent;
 
         public static event Action ShowClientManagerDialogEvent;
+
+        public static event Action ShowMatrixManagerDialogEvent;
 
         #endregion
 
@@ -2478,6 +2536,18 @@ namespace OsEngine.Market
         /// downloading historical depths
         /// скачивание историческихстаканов в формате qsh
         /// </summary>
-        QscalpMarketDepth
+        QscalpMarketDepth,
+
+        /// <summary>
+        /// downloading historical data from T-Invest archives
+        /// скачивание исторических данных из архивов T-Invest
+        /// </summary>
+        TDataHistory,
+
+        /// <summary>
+        /// Unified API for exchange BitGet (spot and futures)
+        /// Унифицированный API для биржи BitGet (спот и фьючерсы)
+        /// </summary>
+        BitGetUnified
     }
 }

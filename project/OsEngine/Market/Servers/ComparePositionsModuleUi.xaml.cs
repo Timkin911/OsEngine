@@ -11,6 +11,8 @@ using System.Windows.Controls;
 using System.Windows.Forms;
 using OsEngine.Entity;
 using System.Threading;
+using System.Windows.Threading;
+using OsEngine.Instructions;
 
 namespace OsEngine.Market.Servers
 {
@@ -73,6 +75,18 @@ namespace OsEngine.Market.Servers
 
             RePaintGrids();
 
+            if (InteractiveInstructions.PositionComparisonPosts.AllInstructionsInClass == null
+            || InteractiveInstructions.PositionComparisonPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPositionComparison.Visibility = Visibility.Hidden;
+            }
+            else
+            {
+                ButtonPositionComparison.Click += ButtonPositionComparison_Click;
+            }
+
+            StartButtonBlinkAnimation();
+
             Thread worker = new Thread(RePainterThread);
             worker.Start();
         }
@@ -88,20 +102,100 @@ namespace OsEngine.Market.Servers
                     GuiClosed(PortfolioName);
                 }
 
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+
+                TextBoxTimeDelaySeconds.TextChanged -= TextBoxTimeDelaySeconds_TextChanged;
+                CheckBoxAutoLogMessageOnError.Click -= CheckBoxAutoLogMessageOnError_Click;
+                ComboBoxVerificationPeriod.SelectionChanged -= ComboBoxVerificationPeriod_SelectionChanged;
+                ButtonPositionComparison.Click -= ButtonPositionComparison_Click;
+
+                if (_instructionsUi != null)
+                {
+                    _instructionsUi.Closed -= _instructionsUi_Closed;
+                    _instructionsUi = null;
+                }
+
+                DeleteGrid();
+
                 _comparePositionsModule = null;
+                PortfolioName = null;
 
-                DataGridFactory.ClearLinks(_grid);
-                _grid.CellClick -= _grid_CellClick;
-                _grid.DataError -= _grid_DataError;
-                _grid = null;
-                Host.Child = null;
-
+                Closed -= ComparePositionsModuleUi_Closed;
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _isGreenVisible = true;
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    GreenCollectionPositionComparison.Opacity = 1;
+                    WhiteCollectionPositionComparison.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    GreenCollectionPositionComparison.Opacity = 0;
+                    WhiteCollectionPositionComparison.Opacity = 1;
+                }
+                else
+                {
+                    GreenCollectionPositionComparison.Opacity = 1;
+                    WhiteCollectionPositionComparison.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                }
+            }
+        }
+
+       
 
         private void TextBoxTimeDelaySeconds_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -187,7 +281,7 @@ namespace OsEngine.Market.Servers
 
         #region Grid
 
-        DataGridView _grid;
+        private DataGridView _grid;
 
         public void CreateTable()
         {
@@ -288,6 +382,24 @@ namespace OsEngine.Market.Servers
         private void _grid_DataError(object sender, DataGridViewDataErrorEventArgs e)
         {
             _comparePositionsModule.Server.Log.ProcessMessage(e.ToString(), Logging.LogMessageType.Error);
+        }
+
+        private void DeleteGrid()
+        {
+            if (_grid == null)
+            {
+                return;
+            }
+
+            Host.Child = null;
+            DataGridFactory.ClearLinks(_grid);
+            _grid.CellClick -= _grid_CellClick;
+            _grid.DataError -= _grid_DataError;
+            _grid.Rows.Clear();
+            _grid.Columns.Clear();
+            _grid.DataSource = null;
+            _grid.Dispose();
+            _grid = null;
         }
 
         private void RePainterThread()
@@ -556,5 +668,49 @@ namespace OsEngine.Market.Servers
 
         #endregion
 
+        #region Posts collection
+
+        private InstructionsUi _instructionsUi;
+
+        private void ButtonPositionComparison_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_instructionsUi == null)
+                {
+                    _instructionsUi = new InstructionsUi(
+                        InteractiveInstructions.PositionComparisonPosts.AllInstructionsInClass, InteractiveInstructions.PositionComparisonPosts.AllInstructionsInClassDescription);
+                    _instructionsUi.Show();
+                    _instructionsUi.Closed += _instructionsUi_Closed;
+                }
+                else
+                {
+                    if (_instructionsUi.WindowState == WindowState.Minimized)
+                    {
+                        _instructionsUi.WindowState = WindowState.Normal;
+                    }
+                    _instructionsUi.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _instructionsUi_Closed(object sender, EventArgs e)
+        {
+            try
+            {
+                _instructionsUi.Closed -= _instructionsUi_Closed;
+                _instructionsUi = null;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }

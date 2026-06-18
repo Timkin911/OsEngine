@@ -5,11 +5,13 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using OsEngine.Entity;
 using OsEngine.Journal.Internal;
 using OsEngine.OsTrader.Panels;
 using OsEngine.OsTrader.Panels.Tab;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace OsEngine.OsOptimizer
 {
@@ -84,6 +86,11 @@ namespace OsEngine.OsOptimizer
             {
                 return true;
             }
+            else if (sortType == SortBotsType.ProfitPositionPercent &&
+                     rep1.ProfitPositionPercent < rep2.ProfitPositionPercent)
+            {
+                return true;
+            }
             else if (sortType == SortBotsType.MaxDrawDawn &&
                      rep1.MaxDrawDawn < rep2.MaxDrawDawn)
             {
@@ -95,7 +102,12 @@ namespace OsEngine.OsOptimizer
                 return true;
             }
             else if (sortType == SortBotsType.AverageProfitPercent &&
-                     rep1.AverageProfitPercentOneContract < rep2.AverageProfitPercentOneContract)
+                      rep1.AverageProfitPercentOneContract < rep2.AverageProfitPercentOneContract)
+            {
+                return true;
+            }
+            else if (sortType == SortBotsType.AverageTime &&
+                rep1.AverageTimeInPositionTimeSpan < rep2.AverageTimeInPositionTimeSpan)
             {
                 return true;
             }
@@ -327,6 +339,7 @@ namespace OsEngine.OsOptimizer
 
                 tab.SecurityName = tabsSimple[i].Security.Name;
                 tab.PositionsCount = positions.Count;
+                tab.ProfitPositionPercent = PositionStatisticGenerator.GetProfitDialPercent(posesArray);
                 tab.TotalProfit = PositionStatisticGenerator.GetAllProfitInAbsolute(posesArray, false);
                 tab.TotalProfitPercent = PositionStatisticGenerator.GetAllProfitPercent(posesArray, false);
                 tab.MaxDrawDawn = PositionStatisticGenerator.GetMaxDownPercent(posesArray);
@@ -339,6 +352,7 @@ namespace OsEngine.OsOptimizer
                 tab.Recovery = PositionStatisticGenerator.GetRecovery(posesArray);
                 tab.PayOffRatio = PositionStatisticGenerator.GetPayOffRatio(posesArray);
                 tab.SharpRatio = PositionStatisticGenerator.GetSharpRatio(posesArray, 7);
+                tab.AverageTimeInPosition = PositionStatisticGenerator.GetAverageTimeOnPoses(posesArray);
                 tab.TabType = tabsSimple[i].GetType().Name;
             }
 
@@ -352,6 +366,7 @@ namespace OsEngine.OsOptimizer
             if (TabsReports.Count == 1)
             {
                 PositionsCount = TabsReports[0].PositionsCount;
+                ProfitPositionPercent = TabsReports[0].ProfitPositionPercent;
                 TotalProfit = TabsReports[0].TotalProfit;
                 TotalProfitPercent = TabsReports[0].TotalProfitPercent;
                 MaxDrawDawn = TabsReports[0].MaxDrawDawn;
@@ -362,6 +377,7 @@ namespace OsEngine.OsOptimizer
                 Recovery = TabsReports[0].Recovery;
                 PayOffRatio = TabsReports[0].PayOffRatio;
                 SharpRatio = TabsReports[0].SharpRatio;
+                AverageTimeInPosition = TabsReports[0].AverageTimeInPosition;
             }
             else
             {
@@ -370,6 +386,7 @@ namespace OsEngine.OsOptimizer
                 Position[] posesArray = allPositionsForAllTabs.ToArray();
 
                 PositionsCount = allPositionsForAllTabs.Count;
+                ProfitPositionPercent = PositionStatisticGenerator.GetProfitDialPercent(posesArray);
                 TotalProfit = PositionStatisticGenerator.GetAllProfitInAbsolute(posesArray, false);
                 TotalProfitPercent = PositionStatisticGenerator.GetAllProfitPercent(posesArray, false);
                 MaxDrawDawn = PositionStatisticGenerator.GetMaxDownPercent(posesArray);
@@ -379,10 +396,13 @@ namespace OsEngine.OsOptimizer
                 Recovery = PositionStatisticGenerator.GetRecovery(posesArray);
                 PayOffRatio = PositionStatisticGenerator.GetPayOffRatio(posesArray);
                 SharpRatio = PositionStatisticGenerator.GetSharpRatio(posesArray, 7);
+                AverageTimeInPosition = PositionStatisticGenerator.GetAverageTimeOnPoses(posesArray);
             }
         }
 
         public int PositionsCount;
+
+        public decimal ProfitPositionPercent;
 
         public decimal TotalProfit;
 
@@ -402,13 +422,60 @@ namespace OsEngine.OsOptimizer
 
         public decimal SharpRatio;
 
+        public string AverageTimeInPosition;
+
+        public TimeSpan AverageTimeInPositionTimeSpan
+        {
+            get
+            {
+                if(_averageTimeInPosition != TimeSpan.Zero)
+                {
+                    return _averageTimeInPosition;
+                }
+                if(string.IsNullOrEmpty(AverageTimeInPosition))
+                {
+                    return TimeSpan.Zero;
+                }
+                /*
+                                result =
+                     "H " + Convert.ToInt32(allTime.TotalHours)
+                     + " M " + Convert.ToInt32(allTime.Minutes)
+                     + " S " + Convert.ToInt32(allTime.Seconds);*/
+
+                string resultCut = AverageTimeInPosition.Replace("H ", "").Replace(" M ", ",").Replace(" S ", ",");
+                string[] time = resultCut.Split(',');
+
+                int totalHours = Convert.ToInt32(time[0]);
+                int totalDays = 0;
+
+                while (totalHours >= 24)
+                {
+                    totalHours -= 24;
+                    totalDays++;
+                }
+
+                if (time.Length > 1)
+                {
+                    _averageTimeInPosition = new TimeSpan(totalDays, totalHours, Convert.ToInt32(time[1]), Convert.ToInt32(time[2]));
+                }
+                else
+                {
+                    _averageTimeInPosition = new TimeSpan(0, 0, 0, 1);
+                }
+
+                return _averageTimeInPosition;
+
+            }
+        }
+        private TimeSpan _averageTimeInPosition;
+
         public StringBuilder GetSaveString()
         {
             StringBuilder result = new StringBuilder();
 
             // Сохраняем основное
             result.Append(BotName + "@");
-            result.Append(PositionsCount + "@");
+            result.Append(PositionsCount + "_" + ProfitPositionPercent + "@");
             result.Append(TotalProfit + "@");
             result.Append(MaxDrawDawn + "@");
             result.Append(AverageProfit + "@");
@@ -417,7 +484,7 @@ namespace OsEngine.OsOptimizer
             result.Append(PayOffRatio + "@");
             result.Append(Recovery + "@");
             result.Append(TotalProfitPercent + "@");
-            result.Append(SharpRatio + "@");
+            result.Append(SharpRatio + "_" + AverageTimeInPosition + "@");
 
             // сохраняем параметры в строковом представлении
             StringBuilder parameters = new StringBuilder();
@@ -448,7 +515,13 @@ namespace OsEngine.OsOptimizer
             string[] str = saveStr.Split('@');
 
             BotName = str[0];
-            PositionsCount = Convert.ToInt32(str[1]);
+            PositionsCount = Convert.ToInt32(str[1].Split('_')[0]);
+
+            if(str[1].Split('_').Length > 1)
+            {
+                ProfitPositionPercent = str[1].Split('_')[1].ToDecimal();
+            }
+
             TotalProfit = str[2].ToDecimal();
             MaxDrawDawn = str[3].ToDecimal();
             AverageProfit = str[4].ToDecimal();
@@ -457,7 +530,12 @@ namespace OsEngine.OsOptimizer
             PayOffRatio = str[7].ToDecimal();
             Recovery = str[8].ToDecimal();
             TotalProfitPercent = str[9].ToDecimal();
-            SharpRatio = str[10].ToDecimal();
+            SharpRatio = str[10].Split('_')[0].ToDecimal();
+
+            if (str[10].Split('_').Length > 1)
+            {
+                AverageTimeInPosition = str[10].Split('_')[1];
+            }
 
             string[] param = str[11].Split('&');
 
@@ -485,6 +563,8 @@ namespace OsEngine.OsOptimizer
 
         public int PositionsCount;
 
+        public decimal ProfitPositionPercent;
+
         public decimal TotalProfit;
 
         public decimal TotalProfitPercent;
@@ -503,6 +583,8 @@ namespace OsEngine.OsOptimizer
 
         public decimal SharpRatio;
 
+        public string AverageTimeInPosition;
+
         public string GetSaveString()
         {
             string result = "";
@@ -519,7 +601,9 @@ namespace OsEngine.OsOptimizer
             result += Recovery + "*";
             result += TotalProfitPercent + "*";
             result += SharpRatio + "*";
-
+            result += ProfitPositionPercent + "*";
+            result += AverageTimeInPosition + "*";
+            
             return result;
         }
 
@@ -544,7 +628,16 @@ namespace OsEngine.OsOptimizer
                 return;
             }
 
-            SharpRatio = save[11].ToDecimal();
+            try
+            {
+                SharpRatio = save[11].ToDecimal();
+                ProfitPositionPercent = save[12].ToDecimal();
+                AverageTimeInPosition = save[13];
+            }
+            catch
+            {
+                // ignore
+            }
         }
     }
 }

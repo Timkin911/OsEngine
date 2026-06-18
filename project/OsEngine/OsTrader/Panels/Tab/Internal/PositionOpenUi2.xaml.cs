@@ -1,9 +1,14 @@
-﻿using OsEngine.Entity;
+﻿/*
+ * Your rights to use code governed by this license http://o-s-a.net/doc/license_simple_engine.pdf
+ * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
+*/
+
+using OsEngine.Entity;
 using OsEngine.Language;
 using OsEngine.Layout;
-using OsEngine.Market;
 using System;
 using System.Windows;
+using System.Windows.Threading;
 
 /*
  * Your rights to use code governed by this license http://o-s-a.net/doc/license_simple_engine.pdf
@@ -96,6 +101,74 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
             GlobalGUILayout.Listen(this, "mD_" + Tab.TabName);
 
             SetNowTimeInControlsFakeOpenPos();
+
+            if (InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass == null
+                || InteractiveInstructions.BotStationLightPosts.AllInstructionsInClass.Count == 0)
+            {
+                ButtonPostPositionOpen.Visibility = Visibility.Visible;
+            }
+
+            StartButtonBlinkAnimation();
+        }
+
+        private void StartButtonBlinkAnimation()
+        {
+            try
+            {
+                _blinkTimer = new DispatcherTimer();
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += _blinkTimer_Tick;
+                _blinkTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                Tab.SetNewLogMessage(ex.Message.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void _blinkTimer_Tick(object sender, EventArgs e)
+        {
+            if (_blinkTimer == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                    PostGreenPositionOpen.Opacity = 1;
+                    PostWhitePositionOpen.Opacity = 0;
+                    return;
+                }
+
+                if (_isGreenVisible)
+                {
+                    PostGreenPositionOpen.Opacity = 0;
+                    PostWhitePositionOpen.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenPositionOpen.Opacity = 1;
+                    PostWhitePositionOpen.Opacity = 0;
+                }
+
+                _isGreenVisible = !_isGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                Tab.SetNewLogMessage(ex.Message.ToString(), Logging.LogMessageType.Error);
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
+            }
         }
 
         private void Tab_EmulatorIsOnChangeStateEvent(bool value)
@@ -131,14 +204,24 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
 
         public BotTabSimple Tab;
 
+        private DispatcherTimer _blinkTimer;
+        private int _blinkCount;
+        private bool _isGreenVisible = true;
+
         private void PositionOpenUi2_Closed(object sender, EventArgs e)
         {
             try
             {
-                CheckBoxIsEmulator.Click -= CheckBoxIsEmulator_Click;
-                Closed -= PositionOpenUi2_Closed;
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Stop();
+                    _blinkTimer.Tick -= _blinkTimer_Tick;
+                    _blinkTimer = null;
+                }
 
-                if(Tab != null)
+                CheckBoxIsEmulator.Click -= CheckBoxIsEmulator_Click;
+
+                if (Tab != null)
                 {
                     Tab.MarketDepthUpdateEvent -= Tab_MarketDepthUpdateEvent;
                     Tab.BestBidAskChangeEvent -= Tab_BestBidAskChangeEvent;
@@ -147,17 +230,29 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
                     Tab = null;
                 }
 
-                if(_marketDepthPainter != null)
+                ButtonBuy.Click -= ButtonBuy_Click;
+                ButtonSell.Click -= ButtonSell_Click;
+                ButtonFakeTimeOpenNow.Click -= ButtonFakeTimeOpenNow_Click;
+                ButtonPostPositionOpen.Click -= ButtonPostPositionOpen_Click;
+
+                if (_marketDepthPainter != null)
                 {
                     _marketDepthPainter.UserClickOnMDAndSelectPriceEvent -= _marketDepthPainter_UserClickOnMDAndSelectPriceEvent;
                     _marketDepthPainter.StopPaint();
                     _marketDepthPainter.Delete();
                     _marketDepthPainter = null;
                 }
+
+                if (WinFormsHostMarketDepth != null)
+                {
+                    WinFormsHostMarketDepth.Child = null;
+                }
+
+                Closed -= PositionOpenUi2_Closed;
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                Tab?.SetNewLogMessage(ex.Message.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -165,7 +260,7 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
         {
             _marketDepthPainter = new MarketDepthPainter(Tab.TabName + "OpenPosGui", Tab.Connector);
             _marketDepthPainter.ProcessMarketDepth(Tab.MarketDepth);
-            _marketDepthPainter.StartPaint(WinFormsHostMarketDepth, null, null );
+            _marketDepthPainter.StartPaint(WinFormsHostMarketDepth, null, null);
             _marketDepthPainter.UserClickOnMDAndSelectPriceEvent += _marketDepthPainter_UserClickOnMDAndSelectPriceEvent;
         }
 
@@ -489,5 +584,21 @@ namespace OsEngine.OsTrader.Panels.Tab.Internal
 
             Tab.SellAtFake(volume, price, timeOpen);
         }
+
+        #region Posts collection
+
+        private void ButtonPostPositionOpen_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                InteractiveInstructions.BotStationLightPosts.Link30.ShowLinkInBrowser();
+            }
+            catch (Exception ex)
+            {
+                Tab.SetNewLogMessage(ex.Message.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        #endregion
     }
 }
