@@ -12,12 +12,10 @@
       }
     ],
     "configProperties": {
-      "System.GC.Server": false,
+      "System.GC.Server": true,
       "System.GC.Concurrent": true,
-      "System.GC.DynamicAdaptationMode": 1,
-      "System.GC.ConserveMemory": 9,
-      "System.GC.DATAS.TargetTCP": 0.05,
-      "System.GC.HeapHardLimitPercent": 40,
+      "System.GC.DynamicAdaptationMode": 0,
+      "System.GC.ConserveMemory": 0,
       "System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization": false,
       "CSWINRT_USE_WINDOWS_UI_XAML_PROJECTIONS": false
     }
