@@ -1,4 +1,4 @@
-﻿/* 
+/* 
  Версия 1.3
  */
 
@@ -372,238 +372,254 @@ namespace OsEngine.Robots
 
         private void CopyPortfolioLogic()
         {
-            if (_tabToTrade1.Tabs[0].IsReadyToTrade == false)
+            try
             {
-                _tabToTrade1.Tabs[0].SetNewLogMessage("Connection not ready to trade", Logging.LogMessageType.System);
-                return;
-            }
-
-            bool isTradingActive = IsTradingActive(_tabToTrade1.Tabs[0]);
-            if (isTradingActive == false)
-            {
-                //_tabToTrade1.Tabs[0].SetNewLogMessage("There are currently no trades going on", Logging.LogMessageType.System);
-                return;
-            }
-
-            if (_tabToTrade1.Tabs.Count == 0)
-            {
-                SendNewLogMessage("Не выбраны инструменты", Logging.LogMessageType.Error);
-                return;
-            }
-
-            Portfolio myPortfolio = _tabToTrade2.Portfolio;
-            if (myPortfolio == null)
-            {
-                SendNewLogMessage("Portfolio 1 Error", Logging.LogMessageType.Error);
-                return;
-            }
-
-
-            // Анализируем все позиции исходного портфеля
-            List<PositionOnBoard> positionOnBoard = myPortfolio.GetPositionOnBoard();
-            List<Position> posesAll = _tabToTrade1.PositionsOpenAll;
-            BotTabSimple tTab = null;
-            int[] flag = new int[posesAll.Count];
-
-            MirrorPortfolio mirrorPortfolio = new MirrorPortfolio();
-
-            for (int i = 0; i < positionOnBoard.Count; i++)
-            {
-                if (positionOnBoard[i].SecurityNameCode == _tradeAssetInPortfolio.ValueString)
+                if (_tabToTrade1.Tabs.Count == 0)
                 {
-                    mirrorPortfolio.myTradeAssetEdit(positionOnBoard[i].SecurityNameCode, 1, positionOnBoard[i].ValueCurrent);
+                    SendNewLogMessage("Не выбраны инструменты", Logging.LogMessageType.Error);
+                    return;
                 }
-                else if (positionOnBoard[i].SecurityNameCode == _moneyFundInPortfolio.ValueString)
-                {
-                    string boardSecName = positionOnBoard[i].SecurityNameCode;
-                    if (_repMoneyFund == "On") { boardSecName = _repMoneyFundNew; }
 
-                    int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == boardSecName);
+                if (_tabToTrade1.Tabs[0].IsReadyToTrade == false)
+                {
+                    _tabToTrade1.Tabs[0].SetNewLogMessage("Connection not ready to trade", Logging.LogMessageType.System);
+                    return;
+                }
+
+                bool isTradingActive = IsTradingActive(_tabToTrade1.Tabs[0]);
+                if (isTradingActive == false)
+                {
+                    //_tabToTrade1.Tabs[0].SetNewLogMessage("There are currently no trades going on", Logging.LogMessageType.System);
+                    return;
+                }
+
+                if (_tabToTrade2.IsReadyToTrade == false)
+                {
+                    SendNewLogMessage("Connection 2 not ready to trade", Logging.LogMessageType.System);
+                    return;
+                }
+
+                Portfolio myPortfolio = _tabToTrade2.Portfolio;
+                if (myPortfolio == null)
+                {
+                    SendNewLogMessage("Portfolio 1 Error", Logging.LogMessageType.Error);
+                    return;
+                }
+
+                List<PositionOnBoard> positionOnBoard = myPortfolio.GetPositionOnBoard();
+                if (positionOnBoard == null)
+                {
+                    SendNewLogMessage("Не удалось получить позиции портфеля-источника", Logging.LogMessageType.Error);
+                    return;
+                }
+
+
+                // Анализируем все позиции исходного портфеля
+                List<Position> posesAll = _tabToTrade1.PositionsOpenAll;
+                BotTabSimple tTab = null;
+                int[] flag = new int[posesAll.Count];
+
+                MirrorPortfolio mirrorPortfolio = new MirrorPortfolio();
+
+                for (int i = 0; i < positionOnBoard.Count; i++)
+                {
+                    if (positionOnBoard[i].SecurityNameCode == _tradeAssetInPortfolio.ValueString)
+                    {
+                        mirrorPortfolio.myTradeAssetEdit(positionOnBoard[i].SecurityNameCode, 1, positionOnBoard[i].ValueCurrent);
+                    }
+                    else if (positionOnBoard[i].SecurityNameCode == _moneyFundInPortfolio.ValueString)
+                    {
+                        string boardSecName = positionOnBoard[i].SecurityNameCode;
+                        if (_repMoneyFund == "On") { boardSecName = _repMoneyFundNew; }
+
+                        int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == boardSecName);
+                        if (tIndex == -1)
+                        {
+                            SendNewLogMessage("Отсутствует настройка для " + boardSecName + " панель сделок", Logging.LogMessageType.Error);
+                            return;
+                        }
+                        tTab = _tabToTrade1.Tabs[tIndex];
+
+                        decimal secPrice = GetLastPrice(tTab);
+
+                        tIndex = posesAll.FindIndex(pos => pos.SecurityName == boardSecName);
+                        decimal tPoseCurrent = 0;
+                        Position tPos = null;
+                        if (tIndex != -1)
+                        {
+                            tPoseCurrent = posesAll[tIndex].OpenVolume;
+                            flag[tIndex] = 2;
+                            tPos = posesAll[tIndex];
+                        }
+
+                        if (_repMoneyFund == "On")
+                        {
+                            mirrorPortfolio.myMoneyFundEdit(boardSecName, secPrice, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff), tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff * _koeff.ValueDecimal), tTab, tPos, positionOnBoard[i].SecurityNameCode, _repMoneyFundKoeff, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked);
+                        }
+                        else
+                        {
+                            mirrorPortfolio.myMoneyFundEdit(positionOnBoard[i].SecurityNameCode, secPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
+                        }
+                    }
+                    else
+                    {
+                        int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == positionOnBoard[i].SecurityNameCode);
+                        if (tIndex == -1)
+                        {
+                            SendNewLogMessage("Отсутствует настройка для " + positionOnBoard[i].SecurityNameCode, Logging.LogMessageType.Error);
+
+                            //Здесь пробуем добавить новый tab для отсутствующей бумаги
+                            try
+                            {
+                                // Проверка 1: сервер брокера должен быть включен
+                                List<AServer> servers = ServerMaster.GetAServers();
+                                if (servers == null
+                                    || servers.Count == 0)
+                                {
+                                    SendNewLogMessage("Сначала подключите коннектор к Брокеру", Logging.LogMessageType.Error);
+                                    return;
+                                }
+
+                                int sIndex = servers.FindIndex(s => s.ServerType == _tabToTrade1.ServerType);
+                                if (sIndex == -1)
+                                {
+                                    SendNewLogMessage("Проблема с коннектором скринера", Logging.LogMessageType.Error);
+                                    return;
+                                }
+
+                                // Проверка 2: фьючерсная площадка и спот, должны быть подключены к коннектору
+                                AServer myServer = servers[sIndex];
+                                List<Entity.Security> securitiesAll = myServer.Securities;
+                                
+                                if (securitiesAll == null || securitiesAll.Count == 0)
+                                {
+                                    SendNewLogMessage("В коннекторе не найдены бумаги. Возможно он не подключен", Logging.LogMessageType.Error);
+                                    return;
+                                }
+
+                                // Добавляем бумагу
+                                Entity.Security newSec = securitiesAll.Find(s => s.Name == positionOnBoard[i].SecurityNameCode);
+                                if (newSec == null) { return; }
+
+                                ActivatedSecurity sec = new ActivatedSecurity();
+                                sec.SecurityClass = newSec.NameClass;
+                                sec.SecurityName = newSec.Name;
+                                sec.IsOn = true;
+
+                                _tabToTrade1.SecuritiesNames.Add(sec);
+                                _tabToTrade1.NeedToReloadTabs = true;
+                                SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
+                                continue;
+                            }
+                            catch (Exception error)
+                            {
+                                SendNewLogMessage("Ошибка при добавлении " + positionOnBoard[i].SecurityNameCode + " " + error.ToString(), LogMessageType.Error);
+                                return;
+                            }
+                            //
+                        
+                        }
+                        tTab = _tabToTrade1.Tabs[tIndex];
+
+                        decimal lastPrice = GetLastPrice(tTab);
+
+                        tIndex = posesAll.FindIndex(pos => pos.SecurityName == positionOnBoard[i].SecurityNameCode);
+                        decimal tPoseCurrent = 0;
+                        Position tPos = null;
+                        if (tIndex != -1)
+                        {
+                            if (posesAll[tIndex].Direction == Side.Buy)
+                            {
+                                tPoseCurrent = posesAll[tIndex].OpenVolume;
+                            }
+                            else
+                            {
+                                tPoseCurrent = -posesAll[tIndex].OpenVolume;
+                            }
+
+                            flag[tIndex] = 1;
+                            tPos = posesAll[tIndex];
+                        }
+
+                        mirrorPortfolio.AddPosition(positionOnBoard[i].SecurityNameCode, lastPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
+                    }
+                }
+
+                // Пройдем по всем открытым позициям портфеля-зеркала и дополним позициями, которых нет в исходном портфеле
+                for (int i = 0; i < posesAll.Count; i++)
+                {
+                    if (flag[i] != 0) { continue; }
+
+                    int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == posesAll[i].SecurityName);
                     if (tIndex == -1)
                     {
-                        SendNewLogMessage("Отсутствует настройка для " + boardSecName + " панель сделок", Logging.LogMessageType.Error);
+                        SendNewLogMessage("Отсутствует настройка для " + posesAll[i].SecurityName, Logging.LogMessageType.Error);
                         return;
                     }
                     tTab = _tabToTrade1.Tabs[tIndex];
 
-                    decimal secPrice = 0;
-                    if (tTab.PriceCenterMarketDepth != 0)
-                    {
-                        secPrice = tTab.PriceCenterMarketDepth;
-                    }
-                    else
-                    {
-                        secPrice = tTab.CandlesAll[tTab.CandlesAll.Count - 1].Close;
-                    }
 
-                    tIndex = posesAll.FindIndex(pos => pos.SecurityName == boardSecName);
-                    decimal tPoseCurrent = 0;
-                    Position tPos = null;
-                    if (tIndex != -1)
-                    {
-                        tPoseCurrent = posesAll[tIndex].OpenVolume;
-                        flag[tIndex] = 2;
-                        tPos = posesAll[tIndex];
-                    }
+                    decimal lastPrice = GetLastPrice(tTab);
 
-                    if (_repMoneyFund == "On")
-                    {
-                        mirrorPortfolio.myMoneyFundEdit(boardSecName, secPrice, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff), tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff * _koeff.ValueDecimal), tTab, tPos, positionOnBoard[i].SecurityNameCode, _repMoneyFundKoeff, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked);
-                    }
-                    else
-                    {
-                        mirrorPortfolio.myMoneyFundEdit(positionOnBoard[i].SecurityNameCode, secPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
-                    }
+                    mirrorPortfolio.AddPosition(posesAll[i].SecurityName, lastPrice, 0, posesAll[i].OpenVolume, 0, tTab, posesAll[i]);
+
                 }
-                else
+
+                string tInfo = "";
+
+                Boolean repMoneyFund = false;
+                if (_repMoneyFund == "On") { repMoneyFund = true; }
+
+
+                if (_onlyInfo == "On")
                 {
-                    int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == positionOnBoard[i].SecurityNameCode);
-                    if (tIndex == -1)
-                    {
-                        SendNewLogMessage("Отсутствует настройка для " + positionOnBoard[i].SecurityNameCode, Logging.LogMessageType.Error);
+                    tInfo = mirrorPortfolio.CorrectPortfolio(true, true, repMoneyFund);
 
-                        //Здесь пробуем добавить новый tab для отсутствующей бумаги
-                        try
-                        {
-                            // Проверка 1: сервер брокера должен быть включен
-                            List<AServer> servers = ServerMaster.GetAServers();
-                            if (servers == null
-                                || servers.Count == 0)
-                            {
-                                SendNewLogMessage("Сначала подключите коннектор к Брокеру", Logging.LogMessageType.Error);
-                                return;
-                            }
-
-                            int sIndex = servers.FindIndex(s => s.ServerType == _tabToTrade1.ServerType);
-                            if (sIndex == -1)
-                            {
-                                SendNewLogMessage("Проблема с коннектором скринера", Logging.LogMessageType.Error);
-                                return;
-                            }
-
-                            // Проверка 2: фьючерсная площадка и спот, должны быть подключены к коннектору
-                            AServer myServer = servers[sIndex];
-                            List<Entity.Security> securitiesAll = myServer.Securities;
-                                
-                            if (securitiesAll == null || securitiesAll.Count == 0)
-                            {
-                                SendNewLogMessage("В коннекторе не найдены бумаги. Возможно он не подключен", Logging.LogMessageType.Error);
-                                return;
-                            }
-
-                            // Добавляем бумагу
-                            Entity.Security newSec = securitiesAll.Find(s => s.Name == positionOnBoard[i].SecurityNameCode);
-                            if (newSec == null) { return; }
-
-                            ActivatedSecurity sec = new ActivatedSecurity();
-                            sec.SecurityClass = newSec.NameClass;
-                            sec.SecurityName = newSec.Name;
-                            sec.IsOn = true;
-
-                            _tabToTrade1.SecuritiesNames.Add(sec);
-                            _tabToTrade1.NeedToReloadTabs = true;
-                            SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
-                            continue;
-                        }
-                        catch (Exception error)
-                        {
-                            SendNewLogMessage("Ошибка при добавлении " + positionOnBoard[i].SecurityNameCode + " " + error.ToString(), LogMessageType.Error);
-                            return;
-                        }
-                        //
-                        
-                    }
-                    tTab = _tabToTrade1.Tabs[tIndex];
-
-                    decimal lastPrice = 0;
-                    if (tTab.PriceCenterMarketDepth != 0)
-                    {
-                        lastPrice = tTab.PriceCenterMarketDepth;
-                    }
-                    else
-                    {
-                        lastPrice = tTab.CandlesAll[tTab.CandlesAll.Count - 1].Close;
-                    }
-
-                    tIndex = posesAll.FindIndex(pos => pos.SecurityName == positionOnBoard[i].SecurityNameCode);
-                    decimal tPoseCurrent = 0;
-                    Position tPos = null;
-                    if (tIndex != -1)
-                    {
-                        if (posesAll[tIndex].Direction == Side.Buy)
-                        {
-                            tPoseCurrent = posesAll[tIndex].OpenVolume;
-                        }
-                        else
-                        {
-                            tPoseCurrent = -posesAll[tIndex].OpenVolume;
-                        }
-
-                        flag[tIndex] = 1;
-                        tPos = posesAll[tIndex];
-                    }
-
-                    mirrorPortfolio.AddPosition(positionOnBoard[i].SecurityNameCode, lastPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
                 }
-            }
-
-            // Пройдем по всем открытым позициям портфеля-зеркала и дополним позициями, которых нет в исходном портфеле
-            for (int i = 0; i < posesAll.Count; i++)
-            {
-                if (flag[i] != 0) { continue; }
-
-                int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == posesAll[i].SecurityName);
-                if (tIndex == -1)
+                else if (_onlyInfo == "Off" && _changeMoneyFund == "On")
                 {
-                    SendNewLogMessage("Отсутствует настройка для " + positionOnBoard[i].SecurityNameCode, Logging.LogMessageType.Error);
-                    return;
+                    tInfo = mirrorPortfolio.CorrectPortfolio(false, true, repMoneyFund);
+
                 }
-                tTab = _tabToTrade1.Tabs[tIndex];
 
-
-                decimal lastPrice = 0;
-                if (tTab.PriceCenterMarketDepth != 0)
+                else if (_onlyInfo == "Off" && _changeMoneyFund == "Off")
                 {
-                    lastPrice = tTab.PriceCenterMarketDepth;
-                }
-                else
-                {
-                    lastPrice = tTab.CandlesAll[tTab.CandlesAll.Count - 1].Close;
+                    tInfo = mirrorPortfolio.CorrectPortfolio(false, false, repMoneyFund);
+
                 }
 
-                mirrorPortfolio.AddPosition(posesAll[i].SecurityName, lastPrice, 0, posesAll[i].OpenVolume, 0, tTab, posesAll[i]);
 
+                if (tInfo != "") { SendNewLogMessage(tInfo, Logging.LogMessageType.Error); }
+
+                // Определяем необхдимые изменения по портфелю
             }
-
-            string tInfo = "";
-
-            Boolean repMoneyFund = false;
-            if (_repMoneyFund == "On") { repMoneyFund = true; }
-
-
-            if (_onlyInfo == "On")
+            catch (Exception error)
             {
-                tInfo = mirrorPortfolio.CorrectPortfolio(true, true, repMoneyFund);
-
+                SendNewLogMessage("Ошибка в CopyPortfolioLogic: " + error.ToString(), LogMessageType.Error);
             }
-            else if (_onlyInfo == "Off" && _changeMoneyFund == "On")
-            {
-                tInfo = mirrorPortfolio.CorrectPortfolio(false, true, repMoneyFund);
-
-            }
-
-            else if (_onlyInfo == "Off" && _changeMoneyFund == "Off")
-            {
-                tInfo = mirrorPortfolio.CorrectPortfolio(false, false, repMoneyFund);
-
-            }
-
-
-            if (tInfo != "") { SendNewLogMessage(tInfo, Logging.LogMessageType.Error); }
-
-            // Определяем необхдимые изменения по портфелю
         }
 
+
+        private decimal GetLastPrice(BotTabSimple tab)
+        {
+            if (tab == null)
+            {
+                return 0;
+            }
+
+            if (tab.PriceCenterMarketDepth != 0)
+            {
+                return tab.PriceCenterMarketDepth;
+            }
+
+            if (tab.CandlesAll == null || tab.CandlesAll.Count == 0)
+            {
+                SendNewLogMessage("Нет свечных данных для " + tab.Security.Name, Logging.LogMessageType.Error);
+                return 0;
+            }
+
+            return tab.CandlesAll[tab.CandlesAll.Count - 1].Close;
+        }
 
         #region Checks
         public bool IsTradingActive(BotTabSimple tab)
