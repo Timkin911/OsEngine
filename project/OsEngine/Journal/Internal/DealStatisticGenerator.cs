@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Your rights to use code governed by this license http://o-s-a.net/doc/license_simple_engine.pdf
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
@@ -119,6 +119,25 @@ namespace OsEngine.Journal.Internal
 
         #region Profit
 
+        public static bool IsServiceDeal(Position deal)
+        {
+            // сделки роботов-помощников и синтетические позиции тестера (маржа, налоги)
+            // в статистику торговли не включаем
+            if (deal.NameBotClass == "TaxPayer"
+                || deal.NameBotClass == "PayOfMarginBot")
+            {
+                return true;
+            }
+
+            if (deal.SecurityName == "Taxes"
+                || deal.SecurityName == "Margin")
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         public static decimal GetAllProfitInAbsolute(Position[] deals, bool ignoreTax)
         {
             decimal profit = 0;
@@ -127,8 +146,7 @@ namespace OsEngine.Journal.Internal
             {
                 if (ignoreTax == true)
                 {
-                    if (deals[i].NameBotClass == "TaxPayer"
-                     || deals[i].NameBotClass == "PayOfMarginBot")
+                    if (IsServiceDeal(deals[i]))
                     {
                         continue;
                     }
@@ -150,25 +168,20 @@ namespace OsEngine.Journal.Internal
             decimal start = 0;
             int i = 0;
 
-            while (start == 0)
+            while (start == 0 && i < deals.Length)
             {
-                if(ignoreTax == true)
+                if (ignoreTax == true
+                    && IsServiceDeal(deals[i]))
                 {
-                    if (deals[i].NameBotClass == "TaxPayer"
-                     || deals[i].NameBotClass == "PayOfMarginBot")
-                    {
-                        continue;
-                    }
+                    // сервисную сделку пропускаем со сдвигом индекса,
+                    // иначе цикл не завершится никогда
+                    i++;
+                    continue;
                 }
 
                 start = deals[i].PortfolioValueOnOpenPosition;
 
                 i++;
-
-                if (i >= deals.Length)
-                {
-                    break;
-                }
             }
 
             if (start == 0)
@@ -193,8 +206,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -219,8 +231,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     divider--;
                     continue;
@@ -268,8 +279,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -307,8 +317,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -335,8 +344,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -375,8 +383,7 @@ namespace OsEngine.Journal.Internal
           
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                    || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -393,8 +400,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                   || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -468,8 +474,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -496,8 +501,7 @@ namespace OsEngine.Journal.Internal
 
             for(int i = 0;i < deals.Length;i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -515,8 +519,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -545,8 +548,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -574,8 +576,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -604,8 +605,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -635,8 +635,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -668,8 +667,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -696,8 +694,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -715,8 +712,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -741,8 +737,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -765,8 +760,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -797,8 +791,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -831,8 +824,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 } 
@@ -868,8 +860,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                    || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -1001,8 +992,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -1021,8 +1011,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                   || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -1052,8 +1041,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }
@@ -1115,8 +1103,7 @@ namespace OsEngine.Journal.Internal
 
             for (int i = 0; i < deals.Length; i++)
             {
-                if (deals[i].NameBotClass == "TaxPayer"
-                 || deals[i].NameBotClass == "PayOfMarginBot")
+                if (IsServiceDeal(deals[i]))
                 {
                     continue;
                 }

@@ -501,6 +501,11 @@ namespace OsEngine.Robots.Helpers
                             continue;
                         }
 
+                        if (IsDividendPosition(curJournal.CloseAllPositions[i2]))
+                        {
+                            continue;
+                        }
+
                         if (IsCommodityFuture(curJournal.CloseAllPositions[i2]))
                         {
                             profitBotCommodity += curJournal.CloseAllPositions[i2].ProfitPortfolioAbs;
@@ -523,7 +528,7 @@ namespace OsEngine.Robots.Helpers
 
             if (profitCommodity > 0)
             {
-                TaxDeal(taxBot, year, profitCommodity, "Taxes Commodity Futures");
+                TaxDeal(taxBot, year, profitCommodity, "Taxes");
             }
             else if (_fullLogIsOn.ValueBool == true)
             {
@@ -622,6 +627,23 @@ namespace OsEngine.Robots.Helpers
             }
         }
 
+        private bool IsDividendPosition(Position position)
+        {
+            if (position == null)
+            {
+                return false;
+            }
+
+            string securityName = position.SecurityName;
+
+            if (string.IsNullOrWhiteSpace(securityName))
+            {
+                return false;
+            }
+
+            return securityName.EndsWith("_divs");
+        }
+
         private bool IsCommodityFuture(Position position)
         {
             if (position == null)
@@ -686,11 +708,5 @@ namespace OsEngine.Robots.Helpers
         }
 
         #endregion
-    }
-
-    public class ListTablePeriods
-    {
-        public int Year;
-        public decimal Rate;
     }
 }

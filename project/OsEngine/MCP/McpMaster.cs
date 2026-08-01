@@ -19,6 +19,8 @@ using OsEngine.Logging;
 using OsEngine.Market;
 using OsEngine.MCP.Json;
 using OsEngine.MCP.Modules;
+using OsEngine.OsData;
+using OsEngine.OsOptimizer;
 using OsEngine.PrimeSettings;
 
 namespace OsEngine.MCP
@@ -53,12 +55,23 @@ namespace OsEngine.MCP
         private readonly WikiRobotsApi _wikiRobotsApi;
         private readonly WikiIndicatorsApi _wikiIndicatorsApi;
         private readonly WikiSecuritiesApi _wikiSecuritiesApi;
+        private readonly WikiDividendsApi _wikiDividendsApi;
+        private readonly OsDataApi _osDataApi;
+        private readonly TesterApi _testerApi;
+        private readonly RobotsApi _robotsApi;
+        private readonly SystemLoadApi _systemLoadApi;
+        private readonly ComparePositionsApi _comparePositionsApi;
+        private readonly ProxyApi _proxyApi;
+        private readonly OptimizerApi _optimizerApi;
         private readonly McpProtocolApi _protocolApi;
 
         private readonly Func<McpTerminalStatus> _getTerminalStatus;
-        private readonly Action<StartProgram> _launchTerminal;
+        private readonly Action<string> _launchTerminal;
         private readonly Action _stopTerminal;
         private readonly Action _killTerminal;
+        private readonly Action<string> _openMode;
+
+        private OsDataMaster _osDataMaster;
 
         /// <summary>
         /// Standard OsEngine log for MCP events and requests.
@@ -74,9 +87,10 @@ namespace OsEngine.MCP
             string apiKey,
             Action restartHost = null,
             Func<McpTerminalStatus> getTerminalStatus = null,
-            Action<StartProgram> launchTerminal = null,
+            Action<string> launchTerminal = null,
             Action stopTerminal = null,
-            Action killTerminal = null)
+            Action killTerminal = null,
+            Action<string> openMode = null)
         {
             _port = port;
             _apiKey = apiKey;
@@ -84,6 +98,7 @@ namespace OsEngine.MCP
             _launchTerminal = launchTerminal;
             _stopTerminal = stopTerminal;
             _killTerminal = killTerminal;
+            _openMode = openMode;
 
             Log = new Log("MCP", StartProgram.IsMainWindow);
 
@@ -94,7 +109,8 @@ namespace OsEngine.MCP
                 () => GetTerminalStatusSafe(),
                 _launchTerminal,
                 _stopTerminal,
-                _killTerminal);
+                _killTerminal,
+                _openMode);
             _terminalApi.NewLogMessageEvent += TerminalApi_NewLogMessageEvent;
 
             _logsApi = new LogsApi(Log);
@@ -121,6 +137,30 @@ namespace OsEngine.MCP
             _wikiSecuritiesApi = new WikiSecuritiesApi();
             _wikiSecuritiesApi.NewLogMessageEvent += WikiSecuritiesApi_NewLogMessageEvent;
 
+            _wikiDividendsApi = new WikiDividendsApi();
+            _wikiDividendsApi.NewLogMessageEvent += WikiDividendsApi_NewLogMessageEvent;
+
+            _osDataApi = new OsDataApi(publishEvent, () => _osDataMaster);
+            _osDataApi.NewLogMessageEvent += OsDataApi_NewLogMessageEvent;
+
+            _testerApi = new TesterApi(publishEvent);
+            _testerApi.NewLogMessageEvent += TesterApi_NewLogMessageEvent;
+
+            _robotsApi = new RobotsApi(publishEvent);
+            _robotsApi.NewLogMessageEvent += RobotsApi_NewLogMessageEvent;
+
+            _systemLoadApi = new SystemLoadApi();
+            _systemLoadApi.NewLogMessageEvent += SystemLoadApi_NewLogMessageEvent;
+
+            _comparePositionsApi = new ComparePositionsApi();
+            _comparePositionsApi.NewLogMessageEvent += ComparePositionsApi_NewLogMessageEvent;
+
+            _proxyApi = new ProxyApi();
+            _proxyApi.NewLogMessageEvent += ProxyApi_NewLogMessageEvent;
+
+            _optimizerApi = new OptimizerApi(publishEvent);
+            _optimizerApi.NewLogMessageEvent += OptimizerApi_NewLogMessageEvent;
+
             _protocolApi = new McpProtocolApi(request => ExecuteTool(request));
             _protocolApi.NewLogMessageEvent += ProtocolApi_NewLogMessageEvent;
 
@@ -133,6 +173,14 @@ namespace OsEngine.MCP
             _protocolApi.RegisterToolProvider(_wikiRobotsApi);
             _protocolApi.RegisterToolProvider(_wikiIndicatorsApi);
             _protocolApi.RegisterToolProvider(_wikiSecuritiesApi);
+            _protocolApi.RegisterToolProvider(_wikiDividendsApi);
+            _protocolApi.RegisterToolProvider(_osDataApi);
+            _protocolApi.RegisterToolProvider(_testerApi);
+            _protocolApi.RegisterToolProvider(_robotsApi);
+            _protocolApi.RegisterToolProvider(_systemLoadApi);
+            _protocolApi.RegisterToolProvider(_comparePositionsApi);
+            _protocolApi.RegisterToolProvider(_proxyApi);
+            _protocolApi.RegisterToolProvider(_optimizerApi);
         }
 
         #endregion
@@ -191,7 +239,7 @@ namespace OsEngine.MCP
 
                 lock (_sseClientsLocker)
                 {
-                    foreach (var client in _sseClients)
+                    foreach (SseClient client in _sseClients)
                     {
                         try
                         {
@@ -215,7 +263,7 @@ namespace OsEngine.MCP
 
         private void SendEventToClient(SseClient client, string eventName, object payload)
         {
-            var message = new McpEvent
+            McpEvent message = new McpEvent
             {
                 Event = eventName,
                 Timestamp = DateTime.Now,
@@ -289,6 +337,46 @@ namespace OsEngine.MCP
             Log.ProcessMessage(message, type);
         }
 
+        private void WikiDividendsApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
+        private void OsDataApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
+        private void TesterApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
+        private void RobotsApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
+        private void SystemLoadApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
+        private void ComparePositionsApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
+        private void ProxyApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
+        private void OptimizerApi_NewLogMessageEvent(string message, LogMessageType type)
+        {
+            Log.ProcessMessage(message, type);
+        }
+
         private void ProtocolApi_NewLogMessageEvent(string message, LogMessageType type)
         {
             Log.ProcessMessage(message, type);
@@ -296,7 +384,7 @@ namespace OsEngine.MCP
 
         public void SendEvent(string eventName, object payload)
         {
-            var message = new McpEvent
+            McpEvent message = new McpEvent
             {
                 Event = eventName,
                 Timestamp = DateTime.Now,
@@ -311,7 +399,7 @@ namespace OsEngine.MCP
             {
                 for (int i = _sseClients.Count - 1; i >= 0; i--)
                 {
-                    var client = _sseClients[i];
+                    SseClient client = _sseClients[i];
                     try
                     {
                         client.Response.OutputStream.Write(bytes, 0, bytes.Length);
@@ -343,6 +431,21 @@ namespace OsEngine.MCP
             _terminalApi?.SendTerminalModeChanged(mode);
         }
 
+        public void SetOsDataMaster(OsDataMaster master)
+        {
+            _osDataApi?.DetachFromMaster();
+            _osDataMaster = master;
+            _osDataApi?.AttachToMaster();
+        }
+
+        public void SetOptimizerMaster(OptimizerMaster master)
+        {
+            _optimizerMaster = master;
+            _optimizerApi?.AttachToMaster(master);
+        }
+
+        private OptimizerMaster _optimizerMaster;
+
         #endregion
 
         #region Private methods
@@ -353,7 +456,7 @@ namespace OsEngine.MCP
             {
                 try
                 {
-                    var context = await _listener.GetContextAsync();
+                    HttpListenerContext context = await _listener.GetContextAsync();
                     _ = Task.Run(() => ProcessRequest(context), token);
                 }
                 catch (Exception error)
@@ -402,6 +505,13 @@ namespace OsEngine.MCP
                 {
                     string ip = request.RemoteEndPoint?.Address?.ToString();
                     Log.ProcessMessage($"[FullLog] Request {request.HttpMethod} {path} from {ip}", LogMessageType.System);
+                }
+
+                if (!IsIpAllowed(request))
+                {
+                    SendError(response, 403, "Forbidden: IP not allowed");
+                    LogRequest(request, response, path);
+                    return;
                 }
 
                 if (!IsAuthorized(request))
@@ -474,10 +584,62 @@ namespace OsEngine.MCP
             return apiKey == _apiKey;
         }
 
+        private bool IsIpAllowed(HttpListenerRequest request)
+        {
+            List<McpAllowedIp> allowedIps = McpSettings.AllowedIps;
+            if (allowedIps == null || allowedIps.Count == 0)
+            {
+                return false;
+            }
+
+            IPAddress remoteAddress = request.RemoteEndPoint?.Address;
+            if (remoteAddress == null)
+            {
+                return false;
+            }
+
+            int remotePort = request.RemoteEndPoint.Port;
+
+            foreach (McpAllowedIp allowed in allowedIps)
+            {
+                if (string.IsNullOrWhiteSpace(allowed.Ip))
+                {
+                    continue;
+                }
+
+                if (!IPAddress.TryParse(allowed.Ip, out IPAddress allowedAddress))
+                {
+                    continue;
+                }
+
+                bool addressMatch = remoteAddress.Equals(allowedAddress)
+                    || remoteAddress.MapToIPv6().Equals(allowedAddress.MapToIPv6());
+
+                if (!addressMatch)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(allowed.Port)
+                    || string.Equals(allowed.Port, "any", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (int.TryParse(allowed.Port, out int allowedPort)
+                    && allowedPort == remotePort)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void ProcessJsonRpc(HttpListenerRequest request, HttpListenerResponse response)
         {
             string body;
-            using (var reader = new StreamReader(request.InputStream, Encoding.UTF8))
+            using (StreamReader reader = new StreamReader(request.InputStream, Encoding.UTF8))
             {
                 body = reader.ReadToEnd();
             }
@@ -491,7 +653,7 @@ namespace OsEngine.MCP
 
             try
             {
-                var rpcRequest = JsonSerializer.Deserialize<McpJsonRpcRequest>(body);
+                McpJsonRpcRequest rpcRequest = JsonSerializer.Deserialize<McpJsonRpcRequest>(body);
 
                 if (rpcRequest == null)
                 {
@@ -538,7 +700,7 @@ namespace OsEngine.MCP
 
             if (McpSettings.IsFullLogEnabled)
             {
-                var logOptions = new JsonSerializerOptions
+                JsonSerializerOptions logOptions = new JsonSerializerOptions
                 {
                     Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
                 };
@@ -551,7 +713,7 @@ namespace OsEngine.MCP
 
         private McpJsonRpcResponse HandleMethod(McpJsonRpcRequest request)
         {
-            var response = new McpJsonRpcResponse
+            McpJsonRpcResponse response = new McpJsonRpcResponse
             {
                 JsonRpc = "2.0",
                 Id = request.Id
@@ -590,7 +752,7 @@ namespace OsEngine.MCP
 
         private McpJsonRpcResponse ExecuteTool(McpJsonRpcRequest request)
         {
-            var response = new McpJsonRpcResponse
+            McpJsonRpcResponse response = new McpJsonRpcResponse
             {
                 JsonRpc = "2.0",
                 Id = request.Id
@@ -608,6 +770,7 @@ namespace OsEngine.MCP
                     case "terminal_launch":
                     case "terminal_stop":
                     case "terminal_kill":
+                    case "terminal_open_mode":
                         response = _terminalApi.Handle(request);
                         break;
 
@@ -665,12 +828,129 @@ namespace OsEngine.MCP
                         response = _wikiSecuritiesApi.Handle(request);
                         break;
 
+                    case "wiki_dividends_get_history":
+                    case "wiki_dividends_get_future":
+                    case "wiki_dividends_get_past":
+                    case "wiki_dividends_search_by_date":
+                        response = _wikiDividendsApi.Handle(request);
+                        break;
+
+                    case "data_get_sets":
+                    case "data_create_set":
+                    case "data_delete_set":
+                    case "data_set_settings_get":
+                    case "data_set_settings_set":
+                    case "data_set_securities_get":
+                    case "data_set_securities_add":
+                    case "data_set_securities_remove":
+                    case "data_set_on":
+                    case "data_set_off":
+                    case "data_get_set_status":
+                    case "data_get_security_status":
+                        response = _osDataApi.Handle(request);
+                        break;
+
+                    case "bot_get_list":
+                    case "bot_create":
+                    case "bot_delete":
+                    case "bot_get_params":
+                    case "bot_set_params":
+                    case "bot_get_sources":
+                    case "bot_get_config_tab_simple":
+                    case "bot_set_config_tab_simple":
+                    case "bot_get_config_tab_screener":
+                    case "bot_set_config_tab_screener":
+                        response = _robotsApi.Handle(request);
+                        break;
+
+                    case "tester_data_get_config":
+                    case "tester_data_get_available_sets":
+                    case "tester_get_securities":
+                    case "tester_data_set_config":
+                    case "tester_execution_get_config":
+                    case "tester_execution_set_config":
+                    case "tester_portfolio_get_config":
+                    case "tester_portfolio_set_config":
+                    case "tester_start":
+                    case "tester_pause":
+                    case "tester_fast_forward":
+                    case "tester_step_forward":
+                    case "tester_stop":
+                    case "tester_get_status":
+                        response = _testerApi.Handle(request);
+                        break;
+
+                    case "system_load_get_current":
+                    case "system_load_get_history":
+                    case "system_load_get_settings":
+                    case "system_load_set_settings":
+                        response = _systemLoadApi.Handle(request);
+                        break;
+
+                    case "compare_positions_get":
+                    case "compare_positions_get_settings":
+                    case "compare_positions_set_settings":
+                    case "compare_positions_set_ignored":
+                    case "compare_positions_sync_all":
+                    case "compare_positions_sync_this":
+                        response = _comparePositionsApi.Handle(request);
+                        break;
+
+                    case "proxy_get_list":
+                    case "proxy_create":
+                    case "proxy_delete":
+                    case "proxy_get_settings":
+                    case "proxy_set_settings":
+                    case "proxy_get_status":
+                    case "proxy_ping":
+                        response = _proxyApi.Handle(request);
+                        break;
+
+                    case "optimizer_data_get_config":
+                    case "optimizer_data_set_config":
+                    case "optimizer_data_get_status":
+                    case "optimizer_dividends_get_config":
+                    case "optimizer_dividends_set_config":
+                    case "optimizer_bot_get":
+                    case "optimizer_bot_set":
+                    case "optimizer_bot_tab_get_config":
+                    case "optimizer_bot_tab_set_config":
+                    case "optimizer_trade_settings_get":
+                    case "optimizer_trade_settings_set":
+                    case "optimizer_position_support_get":
+                    case "optimizer_position_support_set":
+                    case "optimizer_phases_get":
+                    case "optimizer_phases_set":
+                    case "optimizer_filters_get":
+                    case "optimizer_filters_set":
+                    case "optimizer_params_get":
+                    case "optimizer_params_set":
+                    case "optimizer_params_reset":
+                    case "optimizer_get_pass_count":
+                    case "optimizer_get_threads":
+                    case "optimizer_set_threads":
+                    case "optimizer_start":
+                    case "optimizer_stop":
+                    case "optimizer_get_status":
+                    case "optimizer_get_report":
+                    case "optimizer_save_report":
+                    case "optimizer_load_report":
+                        response = _optimizerApi.Handle(request);
+                        break;
+
                     default:
-                        response.Error = new McpJsonRpcError
+                        if (request.Method != null && request.Method.StartsWith("bot_"))
                         {
-                            Code = -32601,
-                            Message = $"Tool '{request.Method}' not found"
-                        };
+                            response = _robotsApi.Handle(request);
+                        }
+                        else
+                        {
+                            response.Error = new McpJsonRpcError
+                            {
+                                Code = -32601,
+                                Message = $"Tool '{request.Method}' not found"
+                            };
+                        }
                         break;
                 }
             }
@@ -711,7 +991,7 @@ namespace OsEngine.MCP
             response.StatusCode = 200;
             response.OutputStream.Flush();
 
-            var client = new SseClient { Response = response };
+            SseClient client = new SseClient { Response = response };
 
             lock (_sseClientsLocker)
             {

@@ -543,7 +543,7 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesTotalRam.Color = Color.Green;
             seriesTotalRam.YAxisType = AxisType.Secondary;
             seriesTotalRam.ChartArea = "ChartAreaSystemValues";
-            seriesTotalRam.ShadowOffset = 2;
+            seriesTotalRam.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartRam.Series.Add(seriesTotalRam);
 
             // 3 series free ram
@@ -553,7 +553,7 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesFreeRam.Color = Color.Red;
             seriesFreeRam.YAxisType = AxisType.Secondary;
             seriesFreeRam.ChartArea = "ChartAreaSystemValues";
-            seriesFreeRam.ShadowOffset = 2;
+            seriesFreeRam.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartRam.Series.Add(seriesFreeRam);
 
             // 4 chart area my values
@@ -573,24 +573,25 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesMyRam.YAxisType = AxisType.Secondary;
             seriesMyRam.Color = Color.DarkOrange;
             seriesMyRam.ChartArea = "ChartAreaMyValues";
-            seriesMyRam.ShadowOffset = 2;
+            seriesMyRam.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartRam.Series.Add(seriesMyRam);
 
             // 6 colors
 
-            _chartRam.BackColor = Color.FromArgb(-15395563);
+            _chartRam.BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
 
             for (int i = 0; _chartRam.ChartAreas != null && i < _chartRam.ChartAreas.Count; i++)
             {
-                _chartRam.ChartAreas[i].BackColor = Color.FromArgb(-15395563);
-                _chartRam.ChartAreas[i].BorderColor = Color.FromArgb(-16701360);
-                _chartRam.ChartAreas[i].CursorY.LineColor = Color.DimGray;
-                _chartRam.ChartAreas[i].CursorX.LineColor = Color.DimGray;
-                _chartRam.ChartAreas[i].AxisX.TitleForeColor = Color.DimGray;
+                _chartRam.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
+                _chartRam.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("ChartBorderColor");
+                _chartRam.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartRam.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartRam.ChartAreas[i].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
 
                 foreach (var axe in _chartRam.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.DimGray;
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
         }
@@ -692,7 +693,7 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesTotalCpu.Color = Color.Green;
             seriesTotalCpu.YAxisType = AxisType.Secondary;
             seriesTotalCpu.ChartArea = "ChartAreaSystemValues";
-            seriesTotalCpu.ShadowOffset = 2;
+            seriesTotalCpu.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartCpu.Series.Add(seriesTotalCpu);
 
             // 3 series osEngine cpu
@@ -703,22 +704,23 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesOsEngineCpu.Color = Color.Red;
             seriesOsEngineCpu.YAxisType = AxisType.Secondary;
             seriesOsEngineCpu.ChartArea = "ChartAreaSystemValues";
-            seriesOsEngineCpu.ShadowOffset = 2;
+            seriesOsEngineCpu.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartCpu.Series.Add(seriesOsEngineCpu);
 
-            _chartCpu.BackColor = Color.FromArgb(-15395563);
+            _chartCpu.BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
 
             for (int i = 0; _chartCpu.ChartAreas != null && i < _chartCpu.ChartAreas.Count; i++)
             {
-                _chartCpu.ChartAreas[i].BackColor = Color.FromArgb(-15395563);
-                _chartCpu.ChartAreas[i].BorderColor = Color.FromArgb(-16701360);
-                _chartCpu.ChartAreas[i].CursorY.LineColor = Color.DimGray;
-                _chartCpu.ChartAreas[i].CursorX.LineColor = Color.DimGray;
-                _chartCpu.ChartAreas[i].AxisX.TitleForeColor = Color.DimGray;
+                _chartCpu.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
+                _chartCpu.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("ChartBorderColor");
+                _chartCpu.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartCpu.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartCpu.ChartAreas[i].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
 
                 foreach (var axe in _chartCpu.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.DimGray;
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
         }
@@ -829,7 +831,7 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesTotalCpu.Color = Color.DarkOrange;
             seriesTotalCpu.YAxisType = AxisType.Secondary;
             seriesTotalCpu.ChartArea = "ChartAreaSystemValues";
-            seriesTotalCpu.ShadowOffset = 2;
+            seriesTotalCpu.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartEcq.Series.Add(seriesTotalCpu);
 
             // 3 series bid ask
@@ -840,22 +842,23 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesOsEngineCpu.Color = Color.Red;
             seriesOsEngineCpu.YAxisType = AxisType.Secondary;
             seriesOsEngineCpu.ChartArea = "ChartAreaSystemValues";
-            seriesOsEngineCpu.ShadowOffset = 2;
+            seriesOsEngineCpu.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartEcq.Series.Add(seriesOsEngineCpu);
 
-            _chartEcq.BackColor = Color.FromArgb(-15395563);
+            _chartEcq.BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
 
             for (int i = 0; _chartEcq.ChartAreas != null && i < _chartEcq.ChartAreas.Count; i++)
             {
-                _chartEcq.ChartAreas[i].BackColor = Color.FromArgb(-15395563);
-                _chartEcq.ChartAreas[i].BorderColor = Color.FromArgb(-16701360);
-                _chartEcq.ChartAreas[i].CursorY.LineColor = Color.DimGray;
-                _chartEcq.ChartAreas[i].CursorX.LineColor = Color.DimGray;
-                _chartEcq.ChartAreas[i].AxisX.TitleForeColor = Color.DimGray;
+                _chartEcq.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
+                _chartEcq.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("ChartBorderColor");
+                _chartEcq.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartEcq.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartEcq.ChartAreas[i].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
 
                 foreach (var axe in _chartEcq.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.DimGray;
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
         }
@@ -979,22 +982,23 @@ namespace OsEngine.OsTrader.SystemAnalyze
             seriesTotalCpu.Color = Color.DarkOrange;
             seriesTotalCpu.YAxisType = AxisType.Secondary;
             seriesTotalCpu.ChartArea = "ChartAreaSystemValues";
-            seriesTotalCpu.ShadowOffset = 2;
+            seriesTotalCpu.ShadowOffset = Themes.ThemeManager.GetChartSeriesShadow();
             _chartMoq.Series.Add(seriesTotalCpu);
 
-            _chartMoq.BackColor = Color.FromArgb(-15395563);
+            _chartMoq.BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
 
             for (int i = 0; _chartMoq.ChartAreas != null && i < _chartMoq.ChartAreas.Count; i++)
             {
-                _chartMoq.ChartAreas[i].BackColor = Color.FromArgb(-15395563);
-                _chartMoq.ChartAreas[i].BorderColor = Color.FromArgb(-16701360);
-                _chartMoq.ChartAreas[i].CursorY.LineColor = Color.DimGray;
-                _chartMoq.ChartAreas[i].CursorX.LineColor = Color.DimGray;
-                _chartMoq.ChartAreas[i].AxisX.TitleForeColor = Color.DimGray;
+                _chartMoq.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("ChartBackColor");
+                _chartMoq.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("ChartBorderColor");
+                _chartMoq.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartMoq.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                _chartMoq.ChartAreas[i].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
 
                 foreach (var axe in _chartMoq.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.DimGray;
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("ChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
         }

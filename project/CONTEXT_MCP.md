@@ -35,6 +35,14 @@ OsEngine/MCP/
     WikiRobotsApi.cs        // wiki_robots_list, wiki_robot_info
     WikiIndicatorsApi.cs    // wiki_indicators_list, wiki_indicator_info
     WikiSecuritiesApi.cs    // wiki_securities_*, wiki_securities_mapping_info
+    WikiDividendsApi.cs     // wiki_dividends_get_history, wiki_dividends_get_future, wiki_dividends_get_past, wiki_dividends_search_by_date
+    OsDataApi.cs            // data_*
+    RobotsApi.cs            // bot_* (robot management in any mode with robots)
+    SystemLoadApi.cs        // system_load_* (RAM, CPU, ECQ, MOQ via SystemUsageAnalyzeMaster)
+    ComparePositionsApi.cs  // compare_positions_* (robots vs exchange positions + synchronization)
+    ProxyApi.cs             // proxy_* (proxy router: list, create, delete, settings, status, ping)
+    OptimizerApi.cs         // optimizer_* (OptimizerMaster: data, bot, params, phases, execution, report)
+    TesterApi.cs            // tester_* configuration
     McpProtocolApi.cs       // initialize, tools/list, tools/call, notifications/initialized
 ```
 
@@ -58,8 +66,24 @@ Tests/McpTestStand/OsEngine.McpApi.TestStand/
     WikiRobotsTests.cs
     WikiIndicatorsTests.cs
     WikiSecuritiesTests.cs
+    WikiDividendsTests.cs
     SseTests.cs
     ErrorTests.cs
+    DataTests.cs
+    TesterTests.cs          // tester_* and bot_* via tester mode
+    SystemLoadTests.cs      // system_load_* via BotStationLight mode
+    ComparePositionsTests.cs // compare_positions_* via BotStationLight mode
+    ProxyTests.cs           // proxy_* via BotStationLight mode
+    OptimizerTests.cs       // optimizer_* via Optimizer mode
+```
+
+По умолчанию стенд прогоняет все 19 модулей подряд. Аргумент `--module` (или `-m`) запускает только выбранные модули: номер модуля (1–19) или подстрока его имени без учёта регистра, несколько значений — через запятую. Нумерация соответствует порядку полного прогона: 1 Protocol, 2 Logs, 3 Settings, 4 Config, 5 ServerManagement, 6 ServerInstance, 7 SSE, 8 Errors, 9 WikiRobots, 10 WikiIndicators, 11 WikiSecurities, 12 WikiDividends, 13 Data, 14 Tester, 15 Terminal, 16 SystemLoad, 17 ComparePositions, 18 Proxy, 19 Optimizer. Пропущенные модули не перезапускают OsEngine и не тратят время. Если фильтр не совпал ни с одним модулем, стенд печатает нумерованный список модулей и завершается с ошибкой.
+
+```bash
+./OsEngine.McpApi.TestStand.exe                      # все модули
+./OsEngine.McpApi.TestStand.exe --module Tester      # только модуль Tester
+./OsEngine.McpApi.TestStand.exe --module 5,6         # ServerManagement и ServerInstance
+./OsEngine.McpApi.TestStand.exe --module Wiki        # все wiki_* модули
 ```
 
 ---
@@ -82,6 +106,39 @@ X-Api-Key: <ключ>
 ```
 
 По умолчанию ключ: `osengine-mcp-default-key`.
+
+### 2.2.1. Золотой путь для ИИ-агентов
+
+> Этот раздел написан, чтобы ИИ-агенты не путались при вызове API прямо из чата.
+
+1. **Хост обязательно `localhost`, а не `127.0.0.1`.**  
+   HTTP Listener OsEngine регистрирует префикс `http://localhost:6500/`. Запрос на `http://127.0.0.1:6500/...` вернёт `400 Bad Request - Invalid Hostname`.
+
+2. **Все инструменты вызываются только через `tools/call`.**  
+   Прямой вызов `terminal_get_status`, `ping` и т.п. вернёт ошибку `-32601`. В запросе обязательно должно быть поле `id`, иначе сервер посчитает запрос notification и вернёт `202 Accepted` с пустым телом.
+
+3. **Полезная нагрузка лежит в `result.Content[0].Text`.**  
+   Это вложенная JSON-строка. Её нужно распарсить отдельно. Внутри строки кавычки могут быть экранированы как `\u0022`, поэтому `grep`/`sed`/`awk` не подходят для извлечения полей.
+
+4. **Из Git Bash используйте готовый скрипт `OsEngine/bin/Debug/mcp_call.sh`.**  
+   Он формирует корректный JSON-RPC запрос (в том числе с кириллицей) и распаковывает `Content[0].Text` через PowerShell:
+
+   ```bash
+   cd OsEngine/bin/Debug
+   ./mcp_call.sh tester_get_status
+   ```
+
+5. **Если вызываете `curl` вручную, разбирайте ответ через PowerShell одной командой:**
+
+   ```bash
+   curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+     -H "Content-Type: application/json" \
+     -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_get_status","arguments":{}},"id":1}' \
+     http://localhost:6500/api/v1/mcp | powershell -Command '$r = $input | ConvertFrom-Json; $r.result.Content[0].Text | ConvertFrom-Json | ConvertTo-Json -Depth 10'
+   ```
+
+6. **Не создавайте временные `.py` / `.sh` / `.ps1` файлы.**  
+   MCP API существует для того, чтобы ИИ делал запросы к OsEngine напрямую из чата. Для повторяющихся проверок используйте `mcp_call.sh` или `curl | powershell`, а не самописные скрипты.
 
 ### 2.3. JSON-RPC endpoint: только протокольные методы
 
@@ -148,9 +205,10 @@ JSON-RPC endpoint принимает только методы MCP-проток�
 |------------|----------|
 | `ping` | Проверка доступности API |
 | `terminal_get_status` | Текущий статус терминала |
-| `terminal_launch` | Перезапуск терминала в указанном режиме. Текущий процесс OsEngine завершается, запускается новый с нужным аргументом (`-tester`, `-robots` и т.д.) |
-| `terminal_stop` | Корректная остановка терминала (закрытие `MainWindow`) |
+| `terminal_launch` | Перезапуск терминала в указанном режиме. Текущий процесс OsEngine завершается, запускается новый с нужным аргументом (`-tester`, `-testerlight`, `-robots`, `-robotslight`, `-data`, `-optimizer`, `-converter`). Режимы `robots` и `robotslight` эквивалентны `trader` / `trader_light` |
+| `terminal_stop` | Корректная остановка терминала: закрывает активное окно режима, затем `MainWindow`, и завершает процесс |
 | `terminal_kill` | Принудительное завершение процесса OsEngine |
+| `terminal_open_mode` | Открыть режим (`tester`, `testerlight`, `robots`, `robotslight`, `data`, `optimizer`, `converter`) из запущенного `MainWindow` без перезапуска процесса |
 | `log_get_emergency_log` | Последние записи emergency-лога |
 | `log_get_mcp_log` | Последние записи лога MCP |
 | `prime_settings_get` | Общие настройки терминала |
@@ -181,6 +239,90 @@ JSON-RPC endpoint принимает только методы MCP-проток�
 | `wiki_securities_alor` | Справочник бумаг Alor из `Wiki/alor_securities.md`. Поддерживает фильтр по подстроке |
 | `wiki_securities_qscalp` | Справочник бумаг QScalp из `Wiki/qscalp_securities.md`. Поддерживает фильтр по подстроке |
 | `wiki_securities_mapping_info` | Универсальный поиск бумаги по всем справочникам. Принимает `query` (имя/тикер/часть названия), опциональный `connector`, `limit` (default 50) и `exact`. Возвращает массив вариантов с metadata каждого коннектора |
+| `wiki_dividends_get_history` | Исторические дивиденды российской акции из `Wiki/Dividends/{ticker}.md`. Параметры: `ticker` (обязательный), `date` (dd.MM.yyyy, по умолчанию сегодня), `refresh`. Возвращает записи с `registry_close_date <= date` |
+| `wiki_dividends_get_future` | Ближайшая будущая запись дивидендов российской акции из `Wiki/Dividends/{ticker}.md`. Параметры: `ticker` (обязательный), `date` (dd.MM.yyyy, по умолчанию сегодня), `refresh`. Возвращает одну запись с `registry_close_date >= date` или `null` |
+| `wiki_dividends_get_past` | Ближайшая прошлая запись дивидендов российской акции из `Wiki/Dividends/{ticker}.md`. Параметры: `ticker` (обязательный), `date` (dd.MM.yyyy, по умолчанию сегодня), `refresh`. Возвращает одну запись с `registry_close_date <= date` или `null` |
+| `wiki_dividends_search_by_date` | Поиск дивидендов по конкретной дате закрытия реестра. Параметры: `ticker`, `date` (dd.MM.yyyy, обязательный), `refresh` |
+| `data_get_sets` | Список существующих сетов данных OsData |
+| `data_create_set` | Создать новый сет данных. Параметры: `name`, `source` (тип сервера), `source_name` (имя активного экземпляра), `timeframes` (массив строк), `date_from`, `date_to`. В ответе возвращает фактически активные таймфреймы сета |
+| `data_delete_set` | Удалить сет данных по имени |
+| `data_set_settings_get` | Получить настройки сета данных |
+| `data_set_settings_set` | Частично обновить настройки сета. Доступны поля: `regime`, `timeframes`, `date_from`, `date_to`, `market_depth_depth` |
+| `data_set_securities_get` | Получить список бумаг в сете данных |
+| `data_set_securities_add` | Добавить бумаги в сет данных. Бумаги валидируются по справочнику активного сервера |
+| `data_set_securities_remove` | Удалить бумаги из сета данных по именам |
+| `data_set_on` | Включить сет данных (запустить загрузку) |
+| `data_set_off` | Выключить сет данных (остановить загрузку) |
+| `data_get_set_status` | Агрегированный статус загрузки сета: `regime`, `status`, `percent_load` |
+| `data_get_security_status` | Статус загрузки конкретной бумаги и таймфрейма: `time_start`, `time_end`, `objects_count`, `percent_load`, `status` |
+| `bot_get_list` | Список загруженных роботов |
+| `bot_create` | Создать нового робота |
+| `bot_delete` | Удалить робота |
+| `bot_get_params` | Получить параметры созданного робота |
+| `bot_set_params` | Установить параметры робота |
+| `bot_get_sources` | Получить список источников (вкладок) робота |
+| `bot_get_config_tab_simple` | Получить конфигурацию вкладки `BotTabSimple` |
+| `bot_set_config_tab_simple` | Настроить вкладку `BotTabSimple` (сервер, портфель, эмулятор, комиссия, инструмент, свечи) |
+| `bot_get_config_tab_screener` | Получить конфигурацию вкладки `BotTabScreener` (сервер, портфель, таймфрейм, список бумаг, созданные вкладки) |
+| `bot_set_config_tab_screener` | Настроить вкладку `BotTabScreener` (сервер, портфель, эмулятор, таймфрейм, список бумаг). После изменения автоматически пересоздаются дочерние вкладки |
+| `bot_get_config_tab_index` | Получить конфигурацию вкладки `BotTabIndex` (сервер, портфель, таймфрейм, список бумаг, формула, глубина расчёта, авто-формула) |
+| `bot_set_config_tab_index` | Настроить вкладку `BotTabIndex` (сервер, портфель, таймфрейм, список бумаг, формула `A0+A1`, глубина расчёта, авто-формула). После изменения списка бумаг или общих настроек пересоздаются коннекторы |
+| `bot_get_position_support` | Получить настройки сопровождения позиции (`BotManualControl`) для вкладки. Поддерживаются вкладки `Simple` и `Screener` (возвращаются настройки первой внутренней вкладки), для остальных типов — ошибка с пояснением. `second_to_open`/`second_to_close` — в секундах |
+| `bot_set_position_support` | Установить настройки сопровождения позиции для вкладки (все поля опциональны). Для `Screener` применяется к первой внутренней вкладке и синхронизируется со всеми остальными |
+| `bot_grid_get` | Сетки вкладки `Simple`. Без `grid_number` — список сеток, с `grid_number` — полные настройки и линии сетки |
+| `bot_grid_create` | Создать сетку на вкладке `Simple`. Обязательные: `grid_type` (`MarketMaking`/`OpenPosition`), `first_price`, `line_count_start`, `line_step`, `start_volume`. Линии генерируются автоматически |
+| `bot_grid_set_settings` | Частичное изменение настроек сетки (prime, GridCreator, StopAndProfit, TrailingUp). Поля GridCreator меняются только при `regime = Off` |
+| `bot_grid_set_regime` | Режим сетки: `On`, `Off`, `OffAndCancelOrders`, `CloseOnly`, `CloseForced` (после закрытия позиций сам возвращается в `Off`) |
+| `bot_grid_delete` | Удалить сетку. Ошибка, если по сетке есть открытые позиции или ордера — сначала закрыть (`CloseForced`) |
+| `bot_position_get_open` | Открытые позиции источника. Для `Screener` без `security_name` — позиции всех внутренних вкладок, с `security_name` — указанной |
+| `bot_position_open_at_market` | Открыть позицию по маркету. Параметры: `bot_id`, `tab_name`, `side` (`Buy`/`Sell`), `volume`, `security_name` (обязателен для `Screener`), `is_fake` (только запись в журнал, без ордера), `price` (только с `is_fake`) |
+| `bot_position_close_at_market` | Закрыть позицию по маркету. Параметры: `bot_id`, `tab_name`, `position_number`, `volume` (по умолчанию весь), `security_name`, `is_fake`, `price` |
+| `bot_journal_get_settings` | Получить настройки журнала (группа, мультипликатор, включён) для одного или всех роботов |
+| `bot_journal_set_settings` | Установить настройки журнала для роботов |
+| `bot_journal_get_summary` | Сводка журнала: прибыль/убыток абс/%, диапазон дат, количество сделок. `bot_name` опционален (`null`/`""` — все роботы) |
+| `bot_journal_get_equity` | Кривая эквити. Параметры: `bot_name`, `chart_type` (`Absolute`, `Percent1Contract`, `DepositPercent`) |
+| `bot_journal_get_statistics` | Статистика журнала. Параметры: `bot_name`, `side` (`All`, `Long`, `Short`) |
+| `bot_journal_get_drawdown` | Кривая просадки. Параметр `bot_name` опционален |
+| `bot_journal_get_volume` | Объёмы торговли по бумагам/плечу. Параметр `bot_name` опционален |
+| `bot_journal_get_open_positions` | Открытые позиции. Параметры: `bot_name`, `limit`, `offset` |
+| `bot_journal_get_closed_positions` | Закрытые позиции. Параметры: `bot_name`, `include_failed`, `limit`, `offset` |
+| `system_load_get_current` | Последние точки загруженности системы (RAM, CPU, очередь очистки рыночных данных, очередь ордеров) + флаги сбора. Типы с выключенным сбором возвращают `null` |
+| `system_load_get_history` | История точек загруженности по типу. Параметры: `type` (`Ram`, `Cpu`, `Ecq`, `Moq`, обязательный), `limit` (по умолчанию 100, последние точки) |
+| `system_load_get_settings` | Настройки сбора загруженности по 4 типам: `collect_data_is_on`, `period` (`OneSecond`, `TenSeconds`, `Minute`), `points_max` |
+| `system_load_set_settings` | Частичное изменение настроек сбора загруженности (поля `<тип>_collect_data_is_on`, `<тип>_period`, `<тип>_points_max`) |
+| `compare_positions_get` | Свежая сверка позиций роботов с биржей по всем портфелям сервера. Параметры: `server_type`, `number` |
+| `compare_positions_get_settings` | Настройки модуля сверки: `verification_period`, `time_delay_seconds`, `portfolios_to_watch`, `ignored_securities` |
+| `compare_positions_set_settings` | Частичное изменение настроек модуля сверки |
+| `compare_positions_set_ignored` | Установить список игнорируемых бумаг модуля сверки (заменяет список целиком) |
+| `compare_positions_sync_all` | Синхронизировать весь портфель под учёт роботов: рыночные ордера по каждой расходящейся бумаге (закрыть лишнее / дооткрыть недостающее). Параметры: `server_type`, `number`, `portfolio_name` |
+| `compare_positions_sync_this` | Синхронизировать одну бумагу в портфеле. Параметры: `server_type`, `number`, `portfolio_name`, `security_name` |
+| `proxy_get_list` | Список всех прокси прокси-роутера. Пароли маскированы |
+| `proxy_create` | Создать прокси (номер назначается автоматически, дубликат отклоняется). Обязательные: `ip`, `port` (1..65535); опциональные: `is_on`, `login`, `password`, `ping_web_address` |
+| `proxy_delete` | Удалить прокси по `number` |
+| `proxy_get_settings` | Настройки прокси по `number`. Пароль маскирован |
+| `proxy_set_settings` | Частичное изменение настроек прокси: `is_on`, `ip`, `port`, `login`, `password`, `ping_web_address` |
+| `proxy_get_status` | Статус прокси: `auto_ping_last_status`, `location`, `use_connection_count` |
+| `proxy_ping` | Пропинговать прокси и вернуть обновлённый статус (на мёртвом прокси блокирует до 10 секунд) |
+| `optimizer_data_get_config` / `optimizer_data_set_config` | Источник данных оптимизатора (сет/папка, тип данных, диапазон) |
+| `optimizer_data_get_status` | Статус хранилища данных оптимизатора: загружено ли, число бумаг, диапазон, доступные сеты |
+| `optimizer_dividends_get_config` / `optimizer_dividends_set_config` | Дивиденды/маржа/налоги оптимизатора (`dividends_is_on`, `margin_regime`, `taxes_is_on`) |
+| `optimizer_bot_get` / `optimizer_bot_set` | Текущий робот оптимизации / выбор робота (создаётся сразу, `is_loaded`) |
+| `optimizer_trade_settings_get` / `optimizer_trade_settings_set` | Комиссия, тип исполнения, проскальзывания, стартовый депозит |
+| `optimizer_position_support_get` / `optimizer_position_support_set` | Общее сопровождение позиций для прогонов (`BotManualControl`) |
+| `optimizer_phases_get` / `optimizer_phases_set` | Фазы walk-forward и их пересчёт (`ReloadFazes`) |
+| `optimizer_filters_get` / `optimizer_filters_set` | Фильтры отсева между фазами (значение + вкл/выкл каждого) |
+| `optimizer_params_get` / `optimizer_params_set` / `optimizer_params_reset` | Пространство параметров: значения, диапазоны, on/off, сброс на стандартные |
+| `optimizer_get_pass_count` | Предполагаемое число прогонов (нельзя во время работы) |
+| `optimizer_get_threads` / `optimizer_set_threads` | Число потоков оптимизации (1..50) |
+| `optimizer_bot_tab_get_config` / `optimizer_bot_tab_set_config` | Вкладки робота оптимизации. Simple: бумага + таймфрейм. Screener: массив `securities` + таймфрейм одним источником (внутренние вкладки пересоздаются сразу; портфель по умолчанию `GodMode`, можно переопределить `portfolio_name`). Настроить нужно все вкладки перед `optimizer_start` |
+| `optimizer_start` / `optimizer_stop` | Запуск (ошибки готовности списком, без диалогов) / остановка |
+| `optimizer_get_status` | `is_running`, прогресс по фазе и потокам, оценка времени до конца |
+| `optimizer_get_report` | Результаты по фазам: полные параметры + метрики, `is_partial`, `sort_type`, `limit` |
+| `optimizer_save_report` / `optimizer_load_report` | Сохранение/загрузка результатов в файл |
+
+**Важно про имена бумаг в тестере и оптимизаторе.** Хранилище хранит бумаги как имена файлов данных **с расширением**: `SBER.txt`, а не `SBER`. Это видно и в диалоге хранилища оптимизатора (колонка «Бумага»). Во вкладки робота через `optimizer_bot_tab_set_config` надо передавать имя точно как в хранилище — с `.txt`. Если передать имя, которого нет в хранилище, инструмент вернёт ошибку со списком доступных имён; UI оптимизатора при перерисовке молча очищает вкладку с неизвестной бумагой.
+
+События оптимизатора по SSE: `optimizer.test.progress` (не чаще 1 раза в секунду), `optimizer.test.finished` (с флагом `is_partial`).
 
 ### 2.5. Примеры запросов
 
@@ -225,7 +367,7 @@ curl -s -H "X-Api-Key: osengine-mcp-default-key" \
 ```bash
 curl -s -H "X-Api-Key: osengine-mcp-default-key" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"terminal_launch","arguments":{"mode":"tester"}},"id":5}' \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"terminal_launch","arguments":{"mode":"data"}},"id":5}' \
   http://localhost:6500/api/v1/mcp
 ```
 
@@ -244,6 +386,15 @@ curl -s -H "X-Api-Key: osengine-mcp-default-key" \
 curl -s -H "X-Api-Key: osengine-mcp-default-key" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"terminal_kill","arguments":{}},"id":7}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (terminal_open_mode):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"terminal_open_mode","arguments":{"mode":"data"}},"id":8}' \
   http://localhost:6500/api/v1/mcp
 ```
 
@@ -589,7 +740,109 @@ curl -s -H "X-Api-Key: osengine-mcp-default-key" \
 }
 ```
 
-**notifications/initialized (notification, без `id`):**
+**tools/call (wiki_dividends_get_history):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"wiki_dividends_get_history","arguments":{"ticker":"SBER"}},"id":27}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**Пример ответа `wiki_dividends_get_history`:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "Content": [
+      {
+        "Type": "text",
+        "Text": "{\"ticker\":\"SBER\",\"date\":\"06.07.2026\",\"source\":\"https://smart-lab.ru/q/SBER/dividend/\",\"last_updated\":\"06.07.2026\",\"historical\":[{\"year\":2016,\"registry_close_date\":\"14.06.2017\",\"dividend_amount\":6,\"dividend_yield\":4.0},...],\"count\":8}"
+      }
+    ],
+    "IsError": false
+  },
+  "error": null,
+  "id": 27
+}
+```
+
+**tools/call (wiki_dividends_get_history с date):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"wiki_dividends_get_history","arguments":{"ticker":"SBER","date":"01.01.2020"}},"id":28}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (wiki_dividends_get_future):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"wiki_dividends_get_future","arguments":{"ticker":"SBER"}},"id":29}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**Пример ответа `wiki_dividends_get_future`:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "Content": [
+      {
+        "Type": "text",
+        "Text": "{\"ticker\":\"SBER\",\"date\":\"06.07.2026\",\"source\":\"https://smart-lab.ru/q/SBER/dividend/\",\"last_updated\":\"06.07.2026\",\"future\":{\"year\":2025,\"registry_close_date\":\"20.07.2026\",\"dividend_amount\":34.84,\"dividend_yield\":10.7}}"
+      }
+    ],
+    "IsError": false
+  },
+  "error": null,
+  "id": 29
+}
+```
+
+**tools/call (wiki_dividends_get_past):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"wiki_dividends_get_past","arguments":{"ticker":"SBER","date":"01.01.2025"}},"id":30}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**Пример ответа `wiki_dividends_get_past`:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "Content": [
+      {
+        "Type": "text",
+        "Text": "{\"ticker\":\"SBER\",\"date\":\"01.01.2025\",\"source\":\"https://smart-lab.ru/q/SBER/dividend/\",\"last_updated\":\"06.07.2026\",\"past\":{\"year\":2024,\"registry_close_date\":\"18.07.2024\",\"dividend_amount\":35.17,\"dividend_yield\":10.8}}"
+      }
+    ],
+    "IsError": false
+  },
+  "error": null,
+  "id": 30
+}
+```
+
+**tools/call (wiki_dividends_search_by_date):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"wiki_dividends_search_by_date","arguments":{"ticker":"SBER","date":"18.07.2025"}},"id":31}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**notifications/initialized (notification, без `id`)**:
 
 ```bash
 curl -s -o /dev/null -w "HTTP %{http_code}\n" -H "X-Api-Key: osengine-mcp-default-key" \
@@ -597,6 +850,266 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" -H "X-Api-Key: osengine-mcp-defaul
   -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' \
   http://localhost:6500/api/v1/mcp
 ```
+
+**tools/call (data_create_set):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"data_create_set","arguments":{"name":"TestSet","source":"MoexDataServer","source_name":"MoexDataServer","timeframes":["Min30"],"date_from":"2024-01-01T00:00:00","date_to":"2024-06-30T00:00:00"}},"id":27}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (data_set_securities_add):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"data_set_securities_add","arguments":{"name":"TestSet","securities":[{"name":"SBER"}]}},"id":28}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (data_set_on):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"data_set_on","arguments":{"name":"TestSet"}},"id":29}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (data_get_set_status):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"data_get_set_status","arguments":{"name":"TestSet"}},"id":30}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (tester_data_get_config):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_data_get_config","arguments":{}},"id":31}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (tester_data_get_available_sets):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_data_get_available_sets","arguments":{}},"id":32}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (tester_data_set_config):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_data_set_config","arguments":{"source_type":"Set","set_name":"McpReleaseSet","type_tester_data":"Candle","date_from":"2024-01-01T00:00:00","date_to":"2024-06-30T00:00:00","delete_trades_from_memory":true}},"id":32}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (tester_execution_get_config):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_execution_get_config","arguments":{}},"id":33}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (tester_execution_set_config):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_execution_set_config","arguments":{"slippage_to_simple_order":0,"slippage_to_stop_order":2,"order_execution_type":"Intersection","non_trade_periods":[]}},"id":34}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (tester_portfolio_get_config):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_portfolio_get_config","arguments":{}},"id":35}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (tester_portfolio_set_config):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tester_portfolio_set_config","arguments":{"start_portfolio":1000000,"portfolio_calculation_enabled":true}},"id":36}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_get_list):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_get_list","arguments":{}},"id":37}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_create):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_create","arguments":{"strategy_name":"TwoTimeFramesBot"}},"id":38}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_delete):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_delete","arguments":{"bot_id":"TwoTimeFramesBot_1"}},"id":39}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_get_params):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_get_params","arguments":{"bot_id":"TwoTimeFramesBot_1"}},"id":40}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_set_params):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_set_params","arguments":{"bot_id":"TwoTimeFramesBot_1","parameters":{"PC length":25}}},"id":41}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_get_sources):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_get_sources","arguments":{"bot_id":"TwoTimeFramesBot_1"}},"id":42}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_get_config_tab_simple):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_get_config_tab_simple","arguments":{"bot_id":"TwoTimeFramesBot_1","tab_name":"TwoTimeFramesBot_1tab0"}},"id":43}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_set_config_tab_simple):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_set_config_tab_simple","arguments":{"bot_id":"TwoTimeFramesBot_1","tab_name":"TwoTimeFramesBot_1tab0","commission_type":"Percent","commission_value":0.01,"time_frame":"Min30","save_trades_in_candles":true,"build_non_trading_candles":true}},"id":44}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_get_config_tab_screener):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_get_config_tab_screener","arguments":{"bot_id":"AlgoStart1LinearRegression_1","tab_name":"AlgoStart1LinearRegression_1tab0"}},"id":46}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_set_config_tab_screener):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_set_config_tab_screener","arguments":{"bot_id":"AlgoStart1LinearRegression_1","tab_name":"AlgoStart1LinearRegression_1tab0","server_type":"Tester","server_name":"Tester","portfolio_name":"GodMode","emulator_is_on":true,"time_frame":"Min30","securities":[{"name":"SBER","class_name":"","is_on":true},{"name":"GAZP","class_name":"","is_on":true}]}},"id":47}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_get_config_tab_index):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_get_config_tab_index","arguments":{"bot_id":"IndexArbitrageClassic_1","tab_name":"IndexArbitrageClassic_1tab0"}},"id":48}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_set_config_tab_index):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_set_config_tab_index","arguments":{"bot_id":"IndexArbitrageClassic_1","tab_name":"IndexArbitrageClassic_1tab0","server_type":"Tester","server_name":"Tester","portfolio_name":"GodMode","emulator_is_on":true,"time_frame":"Min30","user_formula":"A0+A1","calculation_depth":1000,"auto_formula":{"regime":"Off","day_of_week":"Monday","hour":10,"sec_count":2,"days_look_back":20,"sort_type":"FirstInArray","mult_type":"PriceWeighted","write_log_on_rebuild":true},"securities":[{"name":"SBER","class_name":"","is_on":true},{"name":"VTBR","class_name":"","is_on":true}]}},"id":49}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_journal_get_summary):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_journal_get_summary","arguments":{"bot_name":"ParabolicBollinger"}},"id":45}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_journal_get_equity):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_journal_get_equity","arguments":{"bot_name":"ParabolicBollinger","chart_type":"DepositPercent"}},"id":46}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_journal_get_statistics):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_journal_get_statistics","arguments":{"bot_name":"ParabolicBollinger","side":"All"}},"id":47}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+**tools/call (bot_journal_get_closed_positions):**
+
+```bash
+curl -s -H "X-Api-Key: osengine-mcp-default-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"bot_journal_get_closed_positions","arguments":{"bot_name":"ParabolicBollinger","include_failed":false,"limit":100,"offset":0}},"id":48}' \
+  http://localhost:6500/api/v1/mcp
+```
+
+### 2.5.1. Авто-формула индекса
+
+В инструментах `bot_get_config_tab_index` / `bot_set_config_tab_index` используется поле `auto_formula` — настройки автоматического перестроения формулы индекса. Все поля объекта опциональны; при `bot_set_config_tab_index` отсутствующие поля не меняют текущее значение.
+
+| Поле | Тип | Допустимые значения | Описание |
+|------|-----|---------------------|----------|
+| `regime` | string | `Off`, `OncePerHour`, `OncePerDay`, `OncePerWeek` | Режим автоперестроения формулы |
+| `day_of_week` | string | `Monday`..`Sunday` | День недели для перестроения (актуален для `OncePerWeek`) |
+| `hour` | integer | 0..23 | Час дня для перестроения |
+| `sec_count` | integer | ≥1 | Количество бумаг, отбираемых в индекс |
+| `days_look_back` | integer | ≥1 | Глубина истории в днях для отбора бумаг |
+| `sort_type` | string | `FirstInArray`, `VolumeWeighted`, `MaxVolatilityWeighted`, `MinVolatilityWeighted` | Критерий сортировки бумаг |
+| `mult_type` | string | `PriceWeighted`, `VolumeWeighted`, `EqualWeighted`, `Cointegration` | Тип взвешивания бумаг в индексе |
+| `write_log_on_rebuild` | boolean | true / false | Писать ли сообщение в лог при перестроении |
+
+> `bot_get_config_tab_index` всегда возвращает полный объект `auto_formula` с актуальными значениями, даже если авто-формула отключена (`regime: Off`).
 
 ### 2.6. SSE-события
 
@@ -637,6 +1150,8 @@ data: {"event":"terminal.mode_changed","timestamp":"2026-06-21T08:15:33","payloa
 | `server_instance.security.updated` | При обновлении списка бумаг экземпляра сервера |
 | `server_instance.portfolio.updated` | При обновлении списка портфелей экземпляра сервера |
 | `server_instance.log` | При новой записи в журнале экземпляра сервера |
+| `data_set_load_completed_event` | Когда загрузка всего сета OsData завершена |
+| `data_set_security_load_completed_event` | Когда завершена загрузка конкретной бумаги/таймфрейма в сете OsData |
 | `heartbeat` | Каждые 5 секунд |
 
 Примеры событий экземпляра сервера:
@@ -674,17 +1189,19 @@ data: {"event":"server_instance.log","timestamp":"2026-06-22T18:10:07","payload"
 |----------|-----|----------|
 | `Port` | `int` | Порт HTTP-сервера |
 | `ApiKey` | `string` | Ключ для заголовка `X-Api-Key` |
-| `IsEnabled` | `bool` | Автоматически запускать хост при старте `MainWindow` |
+| `IsEnabled` | `bool` | Автоматически запускать хост при старте `MainWindow`. **По умолчанию `false`** — API выключено до явного включения пользователем |
 | `IsFullLogEnabled` | `bool` | Логировать каждый запрос, тело, ответ и SSE-подключения |
+| `AllowedIps` | `List<{Ip,Port}>` | Белый список IP-адресов, с которых разрешён доступ. По умолчанию `127.0.0.1` и `::1`. Поле `Port` — удалённый порт клиента; значение `any` означает любой порт |
 
 Способы изменить:
 - Через окно `MCP API` (`MainWindow` → кнопка **API**).
-- Через инструмент `mcp_settings_set` (внутри `tools/call`).
-- Через CLI-аргументы при запуске `OsEngine.exe`:
-  - `-mcpPort <port>`
-  - `-mcpApiKey <key>`
+- Вручную в файле `Engine\McpSettings.txt`.
 
-При смене `Port`, `ApiKey` или `IsEnabled` инструмент `mcp_settings_set` возвращает `RestartRequired: true` — для применения нужно перезапустить хост (кнопка **Restart** в UI или повторный вызов настройки с последующим перезапуском).
+При смене `Port`, `ApiKey` или `IsEnabled` в UI инструмент `mcp_settings_set` возвращает `RestartRequired: true` — для применения нужно перезапустить хост (кнопка **Restart** в UI).
+
+**Первое включение MCP API возможно только через UI или вручную в файле `Engine\McpSettings.txt`.** Пока API выключено, инструмент `mcp_settings_set` недоступен.
+
+**IP-фильтрация.** Перед проверкой API-ключа сервер проверяет удалённый IP-адрес клиента по списку `AllowedIps`. Если IP не найден в белом списке, запрос возвращает `403 Forbidden`. Редактирование списка доступно на вкладке **Supports ip`s** окна `MCP API` и через `mcp_settings_set` (изменение не требует перезапуска хоста).
 
 ---
 
@@ -711,7 +1228,11 @@ Tests/McpTestStand/OsEngine.McpApi.TestStand/
 | Wiki Securities | `wiki_securities_moex_iss`, `wiki_securities_tinvest`, `wiki_securities_alor`, `wiki_securities_qscalp`, `wiki_securities_mapping_info` |
 | SSE | подключение к `/api/v1/events`, события `terminal.launched` и `heartbeat` |
 | Errors | HTTP 401, `-32601`, неизвестный инструмент, невалидные параметры |
-| Terminal | `ping`, `terminal_get_status`, `terminal_launch`, `terminal_stop`, `terminal_kill` |
+| Terminal | `ping`, `terminal_get_status`, `terminal_launch`, `terminal_stop`, `terminal_kill`, `terminal_open_mode` |
+| Data | `data_get_sets`, `data_create_set`, `data_delete_set`, `data_set_settings_get`, `data_set_settings_set`, `data_set_securities_get`, `data_set_securities_add`, `data_set_securities_remove`, `data_set_on`, `data_set_off`, `data_get_set_status`, `data_get_security_status` |
+| Robot | `bot_get_list`, `bot_create`, `bot_delete`, `bot_get_params`, `bot_set_params`, `bot_get_sources`, `bot_get_config_tab_simple`, `bot_set_config_tab_simple`, `bot_get_config_tab_screener`, `bot_set_config_tab_screener`, `bot_get_config_tab_index`, `bot_set_config_tab_index` |
+| Journal | `bot_journal_get_settings`, `bot_journal_set_settings`, `bot_journal_get_summary`, `bot_journal_get_equity`, `bot_journal_get_statistics`, `bot_journal_get_drawdown`, `bot_journal_get_volume`, `bot_journal_get_open_positions`, `bot_journal_get_closed_positions` |
+| Tester | `tester_data_get_config`, `tester_data_get_available_sets`, `tester_data_set_config`, `tester_execution_get_config`, `tester_execution_set_config`, `tester_portfolio_get_config`, `tester_portfolio_set_config`, `tester_start`, `tester_pause`, `tester_stop`, `tester_fast_forward`, `tester_step_forward`, `tester_get_status` |
 
 ### Запуск
 
@@ -719,6 +1240,10 @@ Tests/McpTestStand/OsEngine.McpApi.TestStand/
 cd Tests/McpTestStand/OsEngine.McpApi.TestStand/bin/Debug/net10.0
 ./OsEngine.McpApi.TestStand.exe
 ```
+
+> **Важно:** стенд запускать только с **явного разрешения пользователя**.
+>
+> Стенд работает в foreground. При запуске из Kimi Shell он создаёт собственное видимое консольное окно, а вывод дублируется в это окно, в исходный stdout и в лог-файл `mcp-test-stand-yyyyMMdd-HHmmss.log` рядом с `.exe`. Запрещено использовать `run_in_background=true`. Длительность прогона — около 4 минут; дожидаться завершения через `TaskOutput(block=true)` или автоматическое уведомление.
 
 ### Аргументы командной строки
 
@@ -770,10 +1295,17 @@ SSE:               1/1 passed
 ERRORS:            4/4 passed
 WIKI_ROBOTS:       6/6 passed
 WIKI_INDICATORS:   7/7 passed
-WIKI_SECURITIES:   8/8 passed
-TERMINAL:          5/5 passed
+WIKI_SECURITIES:  12/12 passed
+WIKI_DIVIDENDS:   12/12 passed
+DATA:             16/16 passed
+TESTER:           37/37 passed
+TERMINAL:         13/13 passed
+SYSTEMLOAD:        4/4 passed
+COMPAREPOSITIONS:  5/5 passed
+PROXY:             8/8 passed
+OPTIMIZER:        19/19 passed
 
-Total: 51/51 passed in 35.6s
+Total: 164/164 passed in 338.6s
 ```
 
 Если стенд запущен двойным кликом из проводника, окно консоли остаётся открытым до нажатия клавиши.
@@ -817,7 +1349,7 @@ Total: 51/51 passed in 35.6s
 - запускает `OsEngine.exe` отдельно от текущей консоли.
 
 ```bash
-cd /f/OsEngine/project/OsEngine/bin/Debug
+cd OsEngine/bin/Debug
 ./osEngineStarter.exe
 ```
 
@@ -830,7 +1362,7 @@ cd /f/OsEngine/project/OsEngine/bin/Debug
 При повторном запуске, когда `OsEngine.exe` уже работает из той же директории:
 
 ```
-OsEngine is already running from F:\OsEngine\project\OsEngine\bin\Debug
+OsEngine is already running from <путь к папке>\OsEngine\bin\Debug
 ```
 
 #### Почему не `./OsEngine.exe`
@@ -842,7 +1374,7 @@ OsEngine is already running from F:\OsEngine\project\OsEngine\bin\Debug
 Если запуск нужен из собственного C#-кода, используйте `ProcessStartInfo` с явным `WorkingDirectory`:
 
 ```csharp
-string exePath = @"F:\OsEngine\project\OsEngine\bin\Debug\OsEngine.exe";
+string exePath = @"<путь к OsEngine>\OsEngine\bin\Debug\OsEngine.exe";
 
 Process.Start(new ProcessStartInfo(exePath)
 {
@@ -874,7 +1406,7 @@ Process.Start(new ProcessStartInfo(exePath)
   ```
   Или используйте инструмент `terminal_get_status` из клиента.
 
-- **Если нужно перезапустить OsEngine в другом режиме** (`-tester`, `-robots`, `-robotslight`) или запустить свежую сборку после `dotnet build` — тогда предыдущий процесс нужно корректно завершить:
+- **Если нужно перезапустить OsEngine в другом режиме** (`-tester`, `-testerlight`, `-robots`, `-robotslight`, `-data`, `-optimizer`, `-converter`) или запустить свежую сборку после `dotnet build` — тогда предыдущий процесс нужно корректно завершить:
   1. Сначала попробовать `terminal_stop` через MCP API.
   2. Дождаться полного завершения (в диспетчере задач не должно остаться `OsEngine.exe`).
   3. Если процесс завис и не реагирует — принудительно завершить: `taskkill /F /IM OsEngine.exe`.

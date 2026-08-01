@@ -1852,6 +1852,14 @@ namespace OsEngine.Language
             "Eng:Token_" +
             "Ru:Token_");
 
+        public string ServerParamTokenDescription => OsLocalization.ConvertToLocString(
+            "Eng:Access token for T-Invest API. Issued in the T-Invest personal account in the API section. Full access token is required for trading._" +
+            "Ru:Токен доступа к API Т-Инвест. Выдаётся в личном кабинете Т-Инвест в разделе API. Для торговли нужен токен с полным доступом._");
+
+        public string ServerParamBCSTokenDescription => OsLocalization.ConvertToLocString(
+      "Eng:Access token for BCS API. It is issued in the personal account of the BCS broker in the account menu. You need a token for trading and reading data._" +
+      "Ru:Токен доступа к API БКС. Выдаётся в личном кабинете брокера БКС в меню счета. Нужен токен для торговли и чтения данных._");
+
         public string Memo => OsLocalization.ConvertToLocString(
             "Eng:Memo_" +
             "Ru:Memo_");
@@ -1960,6 +1968,42 @@ namespace OsEngine.Language
             "Eng:Other_" +
             "Ru:Другое_");
 
+        public string UseStockDescription => OsLocalization.ConvertToLocString(
+            "Eng:Load stocks into the securities list and allow trading them._" +
+            "Ru:Загружать акции в список бумаг и разрешить торговлю ими._");
+
+        public string UseFuturesDescription => OsLocalization.ConvertToLocString(
+            "Eng:Load futures into the securities list and allow trading them._" +
+            "Ru:Загружать фьючерсы в список бумаг и разрешить торговлю ими._");
+
+        public string UseBondsDescription => OsLocalization.ConvertToLocString(
+          "Eng:Load futures into the securities list and allow trading them._" +
+          "Ru:Загружать облигации в список бумаг и разрешить торговлю ими._");
+
+        public string UseCurrencyDescription => OsLocalization.ConvertToLocString(
+           "Eng:Load futures into the securities list and allow trading them._" +
+           "Ru:Загружать вылюты в список бумаг и разрешить торговлю ими._");
+
+        public string UseFundsDescription => OsLocalization.ConvertToLocString(
+           "Eng:Load futures into the securities list and allow trading them._" +
+           "Ru:Загружать фонды в список бумаг и разрешить торговлю ими._");
+
+        public string UseOptionsDescription => OsLocalization.ConvertToLocString(
+            "Eng:Load options into the securities list and allow trading them. Currently options trading is not available via T-Invest API._" +
+            "Ru:Загружать опционы в список бумаг и разрешить торговлю ими. В настоящее время торговля опционами через API Т-Инвест недоступна._");
+
+        public string UseOtherDescription => OsLocalization.ConvertToLocString(
+            "Eng:Load bonds, ETFs and indicative instruments into the securities list and allow trading them._" +
+            "Ru:Загружать облигации, ETF и индикативные инструменты в список бумаг и разрешить торговлю ими._");
+
+        public string UseOtherDescription2 => OsLocalization.ConvertToLocString(
+          "Eng:Load others available  instruments into the securities list and allow trading them._" +
+          "Ru:Загружать другие доступные инструменты в список бумаг и разрешить торговлю ими._");
+
+        public string SetDepthLevelsDescription => OsLocalization.ConvertToLocString(
+     "Eng:Set the number of Bid levels and Ask levels to be fed into depth._" +
+     "Ru:Установка количества уровней Bid и уровней Ask, которые будут подаваться в стакан._");
+               
         public string FullLogConnector => OsLocalization.ConvertToLocString(
             "Eng:Full logging of user's orders and trades_" +
             "Ru:Полное логирование ордеров и трейдов пользователя_");
@@ -1992,6 +2036,18 @@ namespace OsEngine.Language
             "Eng:Ignore morning auction trades_" +
             "Ru:Игнорировать сделки утреннего аукциона_");
 
+        public string IgnoreMorningAuctionTradesDescription => OsLocalization.ConvertToLocString(
+            "Eng:When enabled, ignores trades before 7.00 MSK (stocks) and 9.00 MSK (futures), the morning opening auction prints. They often gap from the previous close and create false signals in candles built from the trade feed._" +
+            "Ru:Если включено, игнорируются сделки до 7.00 МСК (акции) и до 9.00 МСК (фьючерсы), принты утреннего аукциона открытия. Они часто идут с гэпом относительно закрытия и дают ложные сигналы в свечах, построенных по ленте сделок._");
+
+        public string FilterOutDealerData => OsLocalization.ConvertToLocString(
+            "Eng:Filter out T-Invest dealer (OTC) data_" +
+            "Ru:Отфильтровать дилерские (внебирж.) данные Т-Инвест_");
+
+        public string FilterOutDealerDataDescription => OsLocalization.ConvertToLocString(
+            "Eng:When enabled, the connector excludes data from T-Invest internal liquidity (dealer quotes and trades, including broker-initiated weekend trading). Candles, trade feed, order book and last prices come from the exchange only. MOEX-initiated weekend sessions are kept. Disable if you trade via T-Invest internal liquidity and need this data._" +
+            "Ru:Если включено, коннектор отсекает данные внутренней ликвидности Т-Инвест (дилерские котировки и сделки, включая инициированные брокером торги выходного дня). Свечи, лента сделок, стакан и последние цены берутся только с биржи. Выходные сессии, инициированные MOEX, сохраняются. Выключите, если торгуете через внутреннюю ликвидность Т-Инвест и эти данные вам нужны._");
+
         public string AuthorizationCode => OsLocalization.ConvertToLocString(
             "Eng:Authorization code_" +
             "Ru:Код авторизации_");
@@ -2015,5 +2071,125 @@ namespace OsEngine.Language
         public string LabelIgnorSec => OsLocalization.ConvertToLocString(
          "Eng: Ignored securities _" +
          "Ru: Игнорируемые инструменты _");
+
+        public string Label325 => OsLocalization.ConvertToLocString(
+         "Eng:Synchronization_" +
+         "Ru:Синхронизация_");
+
+        public string Label326 => OsLocalization.ConvertToLocString(
+         "Eng:Instrument_" +
+         "Ru:Инструмент_");
+
+        public string Label327 => OsLocalization.ConvertToLocString(
+         "Eng:Copy journal_" +
+         "Ru:Копи-журнал_");
+
+        public string Label328 => OsLocalization.ConvertToLocString(
+         "Eng:Slave portfolio_" +
+         "Ru:Ведомый портфель_");
+
+        public string Label329 => OsLocalization.ConvertToLocString(
+         "Eng:Difference_" +
+         "Ru:Разница_");
+
+        public string Label330 => OsLocalization.ConvertToLocString(
+         "Eng:Synchronize_" +
+         "Ru:Синхронизировать_");
+
+        public string Label331 => OsLocalization.ConvertToLocString(
+         "Eng:Position synchronization aligns the volume of the instrument between the copy journal and the real slave portfolio. If the difference is non-zero, click the Sync button in the row - a market order for the difference will be sent._" +
+         "Ru:Синхронизация позиций выравнивает объём по инструменту между копи-журналом и реальным ведомым портфелем. Если разница не нулевая, нажмите кнопку Sync в строке — будет отправлен рыночный ордер на разницу._");
+
+        public string Label332 => OsLocalization.ConvertToLocString(
+         "Eng:Dividends_" +
+         "Ru:Дивиденды_");
+
+        public string Label333 => OsLocalization.ConvertToLocString(
+         "Eng:Security_" +
+         "Ru:Бумага_");
+
+        public string Label334 => OsLocalization.ConvertToLocString(
+         "Eng:Date_" +
+         "Ru:Дата_");
+
+        public string Label335 => OsLocalization.ConvertToLocString(
+         "Eng:Sum_" +
+         "Ru:Сумма_");
+
+        public string Label336 => OsLocalization.ConvertToLocString(
+         "Eng:Bot_" +
+         "Ru:Робот_");
+
+        public string Label337 => OsLocalization.ConvertToLocString(
+         "Eng:Open data base_" +
+         "Ru:Открыть базу данных_");
+
+        public string Label338 => OsLocalization.ConvertToLocString(
+         "Eng:Update data base_" +
+         "Ru:Обновить базу данных_");
+
+        public string Label339 => OsLocalization.ConvertToLocString(
+         "Eng:Updating dividend data can take 5 minutes or more and requires a stable internet connection. Continue?_" +
+         "Ru:Обновление данных по дивидендам может занять 5 и более минут и требует стабильного интернета. Продолжить?_");
+
+        public string Label340 => OsLocalization.ConvertToLocString(
+         "Eng:Updating dividend data. Please wait..._" +
+         "Ru:Обновление данных по дивидендам. Пожалуйста, подождите..._");
+
+        public string LabelPaymentDate => OsLocalization.ConvertToLocString(
+         "Eng:Payment date_" +
+         "Ru:Дата выплаты_");
+
+        public string LabelTabItemDividends => OsLocalization.ConvertToLocString(
+         "Eng: Dividends _" +
+         "Ru: Дивиденды _");
+
+        public string LabelDividendsIsOn => OsLocalization.ConvertToLocString(
+         "Eng:Is On_" +
+         "Ru:Включено_");
+
+        public string LabelAccrualsAndCharges => OsLocalization.ConvertToLocString(
+         "Eng:Accruals & Charges_" +
+         "Ru:Начисления и списания_");
+
+        public string LabelTabItemMargin => OsLocalization.ConvertToLocString(
+         "Eng: Margin _" +
+         "Ru: Маржа _");
+
+        public string LabelTabItemTaxes => OsLocalization.ConvertToLocString(
+         "Eng: Taxes _" +
+         "Ru: Налоги _");
+
+        public string LabelMarginRegime => OsLocalization.ConvertToLocString(
+         "Eng:Regime_" +
+         "Ru:Режим_");
+
+        public string LabelChargeDate => OsLocalization.ConvertToLocString(
+         "Eng:Charge date_" +
+         "Ru:Дата списания_");
+
+        public string LabelComment => OsLocalization.ConvertToLocString(
+         "Eng:Comment_" +
+         "Ru:Комментарий_");
+
+        public string LabelHelpDividends => OsLocalization.ConvertToLocString(
+         "Eng:Dividends are credited to positions held open on the T-1 date, the last day to receive the payment. Money is credited to the virtual portfolio with a delay of 7 calendar days, net of 13 percent income tax. A synthetic position with the divs suffix is added to the robot journal._" +
+         "Ru:Дивиденды начисляются на позиции, открытые на дату Т-1 — последний день для получения выплаты. Деньги зачисляются на виртуальный портфель с задержкой 7 календарных дней за вычетом налога 13 процентов. В журнал робота добавляется синтетическая позиция с суффиксом divs._");
+
+        public string LabelHelpMargin => OsLocalization.ConvertToLocString(
+         "Eng:A margin fee is charged daily for borrowed funds. The loan is the full volume of short positions plus the long volume exceeding the deposit. Futures are counted with a coefficient of 0.2 in both directions. Rates are set in the tables. Summ mode is a tiered daily fee, Percent mode is an annual rate._" +
+         "Ru:Маржинальная плата списывается ежедневно за заёмные средства. Заём — это весь объём шортов плюс объём лонгов сверх депозита. Фьючерсы учитываются с коэффициентом 0.2 в обоих направлениях. Тарифы задаются в таблицах. Режим Summ — ступенчатая плата в день, Percent — годовая ставка._");
+
+        public string LabelHelpTaxes => OsLocalization.ConvertToLocString(
+         "Eng:Once a year a tax is charged on the profit of closed positions. Dividend payments and tax positions are excluded from the base, margin fees reduce it. The rate is set for each year in the table. Commodity futures are taxed separately._" +
+         "Ru:Раз в год списывается налог с прибыли закрытых позиций. Дивидендные выплаты и позиции налога исключаются из базы, расходы на маржу её уменьшают. Ставка задаётся для каждого года в таблице. Товарные фьючерсы облагаются отдельно._");
+
+        public string LabelAcceptRemoveClearing => OsLocalization.ConvertToLocString(
+         "Eng:Are you sure you want to remove the clearing?_" +
+         "Ru:Вы уверены, что хотите удалить время отзыва ордеров?_");
+
+        public string LabelAcceptRemoveNonTradePeriod => OsLocalization.ConvertToLocString(
+         "Eng:Are you sure you want to remove the non trade period?_" +
+         "Ru:Вы уверены, что хотите удалить неторговый период?_");
     }
 }

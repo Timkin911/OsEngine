@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Your rights to use code governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
@@ -17,6 +17,11 @@ namespace OsEngine.OsData
     {
         private OsDataMasterPainter _osDataMaster;
 
+        /// <summary>
+        /// Underlying OsData master for MCP API integration.
+        /// </summary>
+        public OsDataMaster Master { get; private set; }
+
         public OsDataUi()
         {
             InitializeComponent();
@@ -24,10 +29,11 @@ namespace OsEngine.OsData
             LabelSetNameValue.Content = "";
             LabelTimeStartValue.Content = "";
             Layout.StickyBorders.Listen(this);
+            Layout.StartupLocation.Start_FitHeightToWorkArea(this);
 
-            OsDataMaster master = new OsDataMaster();
+            Master = new OsDataMaster();
 
-            _osDataMaster = new OsDataMasterPainter(master,
+            _osDataMaster = new OsDataMasterPainter(Master,
                 ChartHostPanel, HostLog, HostSource,
                 HostSet, LabelSetNameValue, LabelTimeStartValue,
                 LabelTimeEndValue, ProgressBarLoadProgress, TextBoxSearchSource);
@@ -65,13 +71,23 @@ namespace OsEngine.OsData
         {
             try
             {
-                AcceptDialogUi ui = new AcceptDialogUi(OsLocalization.Data.Label27);
-                ui.ShowDialog();
+                bool isProgrammaticClose = false;
 
-                if (ui.UserAcceptAction == false)
+                if (Application.Current.MainWindow is MainWindow mainWindow)
                 {
-                    e.Cancel = true;
-                    return;
+                    isProgrammaticClose = mainWindow.IsProgrammaticClose;
+                }
+
+                if (!isProgrammaticClose)
+                {
+                    AcceptDialogUi ui = new AcceptDialogUi(OsLocalization.Data.Label27);
+                    ui.ShowDialog();
+
+                    if (ui.UserAcceptAction == false)
+                    {
+                        e.Cancel = true;
+                        return;
+                    }
                 }
 
                 if (_osDataMaster != null)

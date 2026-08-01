@@ -1894,10 +1894,10 @@ namespace OsEngine.OsTrader.Panels.Tab
 
                     if (_previousActiveRow < SecuritiesDataGrid.Rows.Count)
                     {
-                        SecuritiesDataGrid.Rows[_previousActiveRow].DefaultCellStyle.ForeColor = System.Drawing.Color.FromArgb(154, 156, 158);
+                        SecuritiesDataGrid.Rows[_previousActiveRow].DefaultCellStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("GridTextColor");
                     }
 
-                    SecuritiesDataGrid.Rows[tabRow].DefaultCellStyle.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
+                    SecuritiesDataGrid.Rows[tabRow].DefaultCellStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("GridSelectionForeColor");
                     _previousActiveRow = tabRow;
                 }
             }
@@ -2544,7 +2544,7 @@ namespace OsEngine.OsTrader.Panels.Tab
             second.ManualPositionSupport.SecondToCloseIsOn = control.SecondToCloseIsOn;
             second.ManualPositionSupport.SecondToOpenIsOn = control.SecondToOpenIsOn;
             second.ManualPositionSupport.SetbackToCloseIsOn = control.SetbackToCloseIsOn;
-            second.ManualPositionSupport.SetbackToClosePosition = control.SetbackToOpenPosition;
+            second.ManualPositionSupport.SetbackToClosePosition = control.SetbackToClosePosition;
             second.ManualPositionSupport.SetbackToOpenIsOn = control.SetbackToOpenIsOn;
             second.ManualPositionSupport.SetbackToOpenPosition = control.SetbackToOpenPosition;
             second.ManualPositionSupport.StopDistance = control.StopDistance;
@@ -2553,6 +2553,7 @@ namespace OsEngine.OsTrader.Panels.Tab
             second.ManualPositionSupport.TypeDoubleExitOrder = control.TypeDoubleExitOrder;
             second.ManualPositionSupport.ValuesType = control.ValuesType;
             second.ManualPositionSupport.OrderTypeTime = control.OrderTypeTime;
+            second.ManualPositionSupport.LimitsMakerOnly = control.LimitsMakerOnly;
             second.ManualPositionSupport.Save();
         }
 

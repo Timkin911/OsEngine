@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Your rights to use code governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
@@ -291,8 +291,8 @@ namespace OsEngine.Robots
             _grid.ScrollBars = ScrollBars.Vertical;
 
             DataGridViewTextBoxCell cell0 = new DataGridViewTextBoxCell();
-            _grid.DefaultCellStyle.SelectionBackColor = System.Drawing.Color.Black;
-            _grid.DefaultCellStyle.SelectionForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
+            _grid.DefaultCellStyle.SelectionBackColor = Themes.ThemeManager.GetColorWinForms("GridSelectionBackColor");
+            _grid.DefaultCellStyle.SelectionForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
 
             cell0.Style = _grid.DefaultCellStyle;
 
@@ -301,6 +301,7 @@ namespace OsEngine.Robots
             colum1.HeaderText = "#";
             colum1.ReadOnly = true;
             colum1.Width = 30;
+            colum1.SortMode = DataGridViewColumnSortMode.NotSortable;
             _grid.Columns.Add(colum1);
 
             DataGridViewColumn colum2 = new DataGridViewColumn();
@@ -308,6 +309,7 @@ namespace OsEngine.Robots
             colum2.HeaderText = OsLocalization.Trader.Label60;
             colum2.ReadOnly = true;
             colum2.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colum2.SortMode = DataGridViewColumnSortMode.NotSortable;
 
             _grid.Columns.Add(colum2);
 
@@ -315,6 +317,7 @@ namespace OsEngine.Robots
             colum3.CellTemplate = cell0;
             colum3.HeaderText = OsLocalization.Trader.Label295;
             colum3.Width = 110;
+            colum3.SortMode = DataGridViewColumnSortMode.NotSortable;
 
             _grid.Columns.Add(colum3);
 
@@ -323,6 +326,7 @@ namespace OsEngine.Robots
             colum4.HeaderText = OsLocalization.Trader.Label296;
             colum4.ReadOnly = true;
             colum4.Width = 90;
+            colum4.SortMode = DataGridViewColumnSortMode.NotSortable;
 
             _grid.Columns.Add(colum4);
 
@@ -331,6 +335,7 @@ namespace OsEngine.Robots
             colum5.HeaderText = OsLocalization.Trader.Label298;
             colum5.ReadOnly = true;
             colum5.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            colum5.SortMode = DataGridViewColumnSortMode.NotSortable;
 
             _grid.Columns.Add(colum5);
 
@@ -339,6 +344,7 @@ namespace OsEngine.Robots
             colum6.HeaderText = OsLocalization.Trader.Label297;
             colum6.ReadOnly = true;
             colum6.Width = 90;
+            colum6.SortMode = DataGridViewColumnSortMode.NotSortable;
 
             _grid.Columns.Add(colum6);
 
@@ -616,24 +622,24 @@ namespace OsEngine.Robots
         {
             try
             {
-                System.Drawing.Color baseColor = System.Drawing.Color.FromArgb(154, 156, 158);
+                System.Drawing.Color baseColor = Themes.ThemeManager.GetColorWinForms("GridTextColor");
 
                 for (int i = 0; i < _grid.Rows.Count; i++)
                 {
                     if (_grid.Rows[i].Selected)
                     {
-                        _grid.Rows[i].Cells[0].Style.ForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[0].Style.SelectionForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[1].Style.ForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[1].Style.SelectionForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[2].Style.ForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[2].Style.SelectionForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[3].Style.ForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[3].Style.SelectionForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[4].Style.ForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[4].Style.SelectionForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[5].Style.ForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
-                        _grid.Rows[i].Cells[5].Style.SelectionForeColor = System.Drawing.Color.FromArgb(255, 85, 0);
+                        _grid.Rows[i].Cells[0].Style.ForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[0].Style.SelectionForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[1].Style.ForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[1].Style.SelectionForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[2].Style.ForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[2].Style.SelectionForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[3].Style.ForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[3].Style.SelectionForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[4].Style.ForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[4].Style.SelectionForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[5].Style.ForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
+                        _grid.Rows[i].Cells[5].Style.SelectionForeColor = Themes.ThemeManager.GetColorWinForms("ColorForeground");
                     }
                     else
                     {
@@ -760,6 +766,18 @@ namespace OsEngine.Robots
                 }
 
             }
+
+            sortDescription.Sort((a, b) =>
+            {
+                int locationComparison = a.Location.CompareTo(b.Location);
+
+                if (locationComparison != 0)
+                {
+                    return locationComparison;
+                }
+
+                return string.Compare(a.ClassName, b.ClassName, StringComparison.OrdinalIgnoreCase);
+            });
 
             return sortDescription;
         }

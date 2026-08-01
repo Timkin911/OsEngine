@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <Target Name="CopyDividendsUpdaterToOsEngineBin" AfterTargets="Build">
+    <PropertyGroup>
+      <OsEngineBinDir>$(ProjectDir)..\..\OsEngine\bin\Debug\</OsEngineBinDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <UpdaterArtifacts Include="$(TargetDir)$(TargetName).exe" />
+      <UpdaterArtifacts Include="$(TargetDir)$(TargetName).dll" />
+      <UpdaterArtifacts Include="$(TargetDir)$(TargetName).runtimeconfig.json" />
+      <UpdaterArtifacts Include="$(TargetDir)$(TargetName).deps.json" />
+      <UpdaterArtifacts Include="$(TargetDir)$(TargetName).pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(UpdaterArtifacts)" DestinationFolder="$(OsEngineBinDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

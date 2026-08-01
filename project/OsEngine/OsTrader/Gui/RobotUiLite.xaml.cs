@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Your rights to use code governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
@@ -22,6 +22,7 @@ namespace OsEngine.OsTrader.Gui
         {
             InitializeComponent();
             OsEngine.Layout.StickyBorders.Listen(this);
+            OsEngine.Layout.StartupLocation.Start_FitHeightToWorkArea(this);
             ServerMaster.SetHostTable(HostPortfolios, HostActiveOrders, HostHistoricalOrders, StartUiToPainter.IsOsTraderLight, 
                 ComboBoxQuantityPerPageActive, BackButtonActiveList, NextButtonActiveList, ComboBoxQuantityPerPageHistorical, 
                 BackButtonHistoricalList, NextButtonHistoricalList);
@@ -92,6 +93,16 @@ namespace OsEngine.OsTrader.Gui
         {
             try
             {
+                if (Application.Current.MainWindow is MainWindow mainWindow
+                    && mainWindow.IsProgrammaticClose)
+                {
+                    _painterServer.Dispose();
+                    _painterServer = null;
+                    _painter = null;
+                    _strategyKeeper.StopPaint();
+                    return;
+                }
+
                 AcceptDialogUi ui = new AcceptDialogUi(OsLocalization.Trader.Label48);
                 ui.ShowDialog();
 
@@ -355,6 +366,12 @@ namespace OsEngine.OsTrader.Gui
 
         private void RobotsUiLightUnblock_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (Application.Current.MainWindow is MainWindow mainWindow
+                && mainWindow.IsProgrammaticClose)
+            {
+                return;
+            }
+
             if (BlockMaster.IsBlocked == true)
             {
                 ServerMaster.SendNewLogMessage("User block interface. Unblock it. ", Logging.LogMessageType.Error);

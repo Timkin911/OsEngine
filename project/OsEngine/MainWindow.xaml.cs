@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Your rights to use code governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
@@ -64,6 +64,11 @@ namespace OsEngine
             TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
 
             this.Closing += MainWindow_Closing;
+
+            RePaintThemeImages();
+            Themes.ThemeManager.ThemeChangedEvent += MainWindow_ThemeChangedEvent;
+
+            ButtonTheme.Click += ButtonTheme_Click;
 
             try
             {
@@ -332,6 +337,16 @@ namespace OsEngine
 
         private string _mcpApiKey = McpSettings.ApiKey;
 
+        private Window _activeModeWindow;
+
+        private bool _isProgrammaticClose;
+
+        /// <summary>
+        /// Indicates that the terminal is being closed programmatically (e.g. via MCP terminal_stop).
+        /// Mode windows can use this flag to skip user confirmation dialogs.
+        /// </summary>
+        public bool IsProgrammaticClose => _isProgrammaticClose;
+
         private void StartMcpHost()
         {
             try
@@ -351,7 +366,8 @@ namespace OsEngine
                     GetTerminalStatusForMcp,
                     LaunchTerminalProgram,
                     StopTerminalProgram,
-                    KillTerminalProgram);
+                    KillTerminalProgram,
+                    OpenModeForMcp);
 
                 if (McpSettings.IsEnabled)
                 {
@@ -378,7 +394,7 @@ namespace OsEngine
             }
         }
 
-        private void LaunchTerminalProgram(StartProgram mode)
+        private void LaunchTerminalProgram(string mode)
         {
             try
             {
@@ -403,18 +419,24 @@ namespace OsEngine
             }
         }
 
-        private string GetLaunchArguments(StartProgram mode)
+        private string GetLaunchArguments(string mode)
         {
-            switch (mode)
+            switch (mode?.ToLowerInvariant())
             {
-                case StartProgram.IsTester:
+                case "tester":
                     return "-tester";
-                case StartProgram.IsOsTrader:
+                case "testerlight":
+                    return "-testerlight";
+                case "robots":
                     return "-robots";
-                case StartProgram.IsOsData:
-                case StartProgram.IsOsOptimizer:
-                case StartProgram.IsOsConverter:
-                case StartProgram.IsMainWindow:
+                case "robotslight":
+                    return "-robotslight";
+                case "data":
+                    return "-data";
+                case "optimizer":
+                    return "-optimizer";
+                case "converter":
+                    return "-converter";
                 default:
                     return string.Empty;
             }
@@ -426,11 +448,11 @@ namespace OsEngine
             {
                 if (Dispatcher.CheckAccess())
                 {
-                    Close();
+                    StopTerminalProgramInternal();
                 }
                 else
                 {
-                    Dispatcher.Invoke(Close);
+                    Dispatcher.Invoke(StopTerminalProgramInternal);
                 }
             }
             catch (Exception ex)
@@ -439,11 +461,91 @@ namespace OsEngine
             }
         }
 
+        private void StopTerminalProgramInternal()
+        {
+            _isProgrammaticClose = true;
+            ProccesIsWorked = false;
+
+            try
+            {
+                _activeModeWindow?.Close();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+
+            Close();
+        }
+
         private void KillTerminalProgram()
         {
             try
             {
                 Process.GetCurrentProcess().Kill();
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void OpenModeForMcp(string mode)
+        {
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    OpenMode(mode);
+                }
+                else
+                {
+                    Dispatcher.Invoke(() => OpenMode(mode));
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void OpenMode(string mode)
+        {
+            try
+            {
+                if (_startProgram != StartProgram.IsMainWindow)
+                {
+                    ServerMaster.SendNewLogMessage("terminal_open_mode is available only from MainWindow", Logging.LogMessageType.Error);
+                    return;
+                }
+
+                switch (mode?.ToLowerInvariant())
+                {
+                    case "tester":
+                        ButtonTesterCandleOne_Click(null, null);
+                        break;
+                    case "testerlight":
+                        ButtonTesterLight_Click(null, null);
+                        break;
+                    case "robots":
+                        ButtonRobotCandleOne_Click(null, null);
+                        break;
+                    case "robotslight":
+                        ButtonRobotLight_Click(null, null);
+                        break;
+                    case "data":
+                        ButtonData_Click(null, null);
+                        break;
+                    case "optimizer":
+                        ButtonOptimizer_Click(null, null);
+                        break;
+                    case "converter":
+                        ButtonConverter_Click(null, null);
+                        break;
+                    default:
+                        ServerMaster.SendNewLogMessage($"Unknown mode for terminal_open_mode: {mode}", Logging.LogMessageType.Error);
+                        break;
+                }
             }
             catch (Exception ex)
             {
@@ -793,7 +895,9 @@ namespace OsEngine
                 Hide();
                 _mcpMaster?.SendTerminalModeChanged(_startProgram);
                 TesterUi candleOneUi = new TesterUi();
+                _activeModeWindow = candleOneUi;
                 candleOneUi.ShowDialog();
+                _activeModeWindow = null;
                 Close();
                 ProccesIsWorked = false;
                 Thread.Sleep(5000);
@@ -814,7 +918,9 @@ namespace OsEngine
                 Hide();
                 _mcpMaster?.SendTerminalModeChanged(_startProgram);
                 TesterUiLite candleOneUi = new TesterUiLite();
+                _activeModeWindow = candleOneUi;
                 candleOneUi.ShowDialog();
+                _activeModeWindow = null;
                 Close();
                 ProccesIsWorked = false;
                 Thread.Sleep(5000);
@@ -835,7 +941,9 @@ namespace OsEngine
                 Hide();
                 _mcpMaster?.SendTerminalModeChanged(_startProgram);
                 RobotUi candleOneUi = new RobotUi();
+                _activeModeWindow = candleOneUi;
                 candleOneUi.ShowDialog();
+                _activeModeWindow = null;
                 Close();
                 ProccesIsWorked = false;
                 Thread.Sleep(5000);
@@ -856,7 +964,9 @@ namespace OsEngine
                 Hide();
                 _mcpMaster?.SendTerminalModeChanged(_startProgram);
                 RobotUiLite candleOneUi = new RobotUiLite();
+                _activeModeWindow = candleOneUi;
                 candleOneUi.ShowDialog();
+                _activeModeWindow = null;
                 Close();
                 ProccesIsWorked = false;
                 Thread.Sleep(5000);
@@ -876,7 +986,11 @@ namespace OsEngine
                 Hide();
                 _mcpMaster?.SendTerminalModeChanged(_startProgram);
                 OsDataUi ui = new OsDataUi();
+                _activeModeWindow = ui;
+                _mcpMaster?.SetOsDataMaster(ui.Master);
                 ui.ShowDialog();
+                _activeModeWindow = null;
+                _mcpMaster?.SetOsDataMaster(null);
                 Close();
                 ProccesIsWorked = false;
                 Thread.Sleep(5000);
@@ -896,7 +1010,9 @@ namespace OsEngine
                 Hide();
                 _mcpMaster?.SendTerminalModeChanged(_startProgram);
                 OsConverterUi ui = new OsConverterUi();
+                _activeModeWindow = ui;
                 ui.ShowDialog();
+                _activeModeWindow = null;
                 Close();
                 ProccesIsWorked = false;
                 Thread.Sleep(10000);
@@ -917,7 +1033,11 @@ namespace OsEngine
                 Hide();
                 _mcpMaster?.SendTerminalModeChanged(_startProgram);
                 OptimizerUi ui = new OptimizerUi();
+                _activeModeWindow = ui;
+                _mcpMaster?.SetOptimizerMaster(ui.Master);
                 ui.ShowDialog();
+                _activeModeWindow = null;
+                _mcpMaster?.SetOptimizerMaster(null);
                 Close();
                 ProccesIsWorked = false;
                 Thread.Sleep(10000);
@@ -1008,6 +1128,22 @@ namespace OsEngine
                 else if (Array.Exists(args, a => a.Equals("-robotslight")))
                 {
                     ButtonRobotLight_Click(this, default);
+                }
+                else if (Array.Exists(args, a => a.Equals("-testerlight")))
+                {
+                    ButtonTesterLight_Click(this, default);
+                }
+                else if (Array.Exists(args, a => a.Equals("-data")))
+                {
+                    ButtonData_Click(this, default);
+                }
+                else if (Array.Exists(args, a => a.Equals("-optimizer")))
+                {
+                    ButtonOptimizer_Click(this, default);
+                }
+                else if (Array.Exists(args, a => a.Equals("-converter")))
+                {
+                    ButtonConverter_Click(this, default);
                 }
                 else if (Array.Exists(args, a => a.Equals("-error")) && PrimeSettingsMaster.RebootTradeUiLight)
                 {
@@ -1214,7 +1350,8 @@ namespace OsEngine
         {
             OsLocalization.OsLocalType newType;
 
-            if (ButtonLocal_Ru.Background.ToString() == "#FFFF5500")
+            if (ButtonLocal_Ru.Background is System.Windows.Media.SolidColorBrush ruBrush
+                && ruBrush.Color == Themes.ThemeManager.GetColor("ControlForeground"))
             {
                 return;
             }
@@ -1224,8 +1361,8 @@ namespace OsEngine
                 OsLocalization.CurLocalization = newType;
                 Thread.CurrentThread.CurrentCulture = OsLocalization.CurCulture;
 
-                ButtonLocal_Ru.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#ff5500");
-                ButtonLocal_Eng.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#FF111217");
+                ButtonLocal_Ru.Background = Themes.ThemeManager.GetBrush("ControlForeground");
+                ButtonLocal_Eng.Background = Themes.ThemeManager.GetBrush("ControlBackgroundNormal");
                 GifT.Position = TimeSpan.Zero;
                 GifT.Play();
             }
@@ -1240,8 +1377,8 @@ namespace OsEngine
                 OsLocalization.CurLocalization = newType;
                 Thread.CurrentThread.CurrentCulture = OsLocalization.CurCulture;
 
-                ButtonLocal_Eng.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#ff5500");
-                ButtonLocal_Ru.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#FF111217");
+                ButtonLocal_Eng.Background = Themes.ThemeManager.GetBrush("ControlForeground");
+                ButtonLocal_Ru.Background = Themes.ThemeManager.GetBrush("ControlBackgroundNormal");
             }
         }
 
@@ -1249,11 +1386,84 @@ namespace OsEngine
         {
             if (OsLocalization.CurLocalization == OsLocalization.OsLocalType.Ru)
             {
-                ButtonLocal_Ru.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#ff5500");
+                ButtonLocal_Ru.Background = Themes.ThemeManager.GetBrush("ControlForeground");
+                ButtonLocal_Eng.Background = Themes.ThemeManager.GetBrush("ControlBackgroundNormal");
             }
             else
             {
-                ButtonLocal_Eng.Background = (SolidColorBrush)new BrushConverter().ConvertFrom("#ff5500");
+                ButtonLocal_Eng.Background = Themes.ThemeManager.GetBrush("ControlForeground");
+                ButtonLocal_Ru.Background = Themes.ThemeManager.GetBrush("ControlBackgroundNormal");
+            }
+        }
+
+        private void MainWindow_ThemeChangedEvent()
+        {
+            try
+            {
+                RePaintThemeImages();
+                ChangeButtonCommits();
+                ReloadFlagButton();
+            }
+            catch (Exception error)
+            {
+                ServerMaster.SendNewLogMessage(error.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        /// <summary>
+        /// установить картинки главного меню под текущую тему
+        /// </summary>
+        private void RePaintThemeImages()
+        {
+            try
+            {
+                string theme = Themes.ThemeManager.CurrentTheme;
+
+                // у пользовательской темы может не быть своих картинок — откат на DarkOrange
+                Uri probe = new Uri("pack://application:,,,/Images/MainWIndow/Themes/" + theme + "/gear.png");
+
+                try
+                {
+                    System.Windows.Resources.StreamResourceInfo stream = Application.GetResourceStream(probe);
+
+                    if (stream != null)
+                    {
+                        stream.Stream.Dispose();
+                    }
+                    else
+                    {
+                        theme = Themes.ThemeManager.DefaultTheme;
+                    }
+                }
+                catch
+                {
+                    theme = Themes.ThemeManager.DefaultTheme;
+                }
+
+                string themeFolder = "pack://application:,,,/Images/MainWIndow/Themes/"
+                    + theme + "/";
+
+                ImageData.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(themeFolder + "test.png"));
+                ImageTests.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(themeFolder + "data.png"));
+                ImageTrading.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(themeFolder + "trading.png"));
+                ImageGear.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri(themeFolder + "gear.png"));
+            }
+            catch (Exception error)
+            {
+                ServerMaster.SendNewLogMessage(error.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void ButtonTheme_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Themes.ThemeSelectUi ui = new Themes.ThemeSelectUi();
+                ui.ShowDialog();
+            }
+            catch (Exception error)
+            {
+                ServerMaster.SendNewLogMessage(error.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -1445,13 +1655,13 @@ namespace OsEngine
             try
             {
                 string buttCont = OsLocalization.MainWindow.NewCommits;
-                SolidColorBrush foreground = new((Color)ColorConverter.ConvertFromString("#FFEEEFFF"));
-                SolidColorBrush background = new((Color)ColorConverter.ConvertFromString("#FF111217"));
+                SolidColorBrush foreground = Themes.ThemeManager.GetBrush("ControlForegroundWhite");
+                SolidColorBrush background = Themes.ThemeManager.GetBrush("ControlBackgroundNormal");
 
                 if (_commitsCount > 0)
                 {
                     buttCont = OsLocalization.MainWindow.NewCommits.Replace("0", _commitsCount.ToString());
-                    background = new SolidColorBrush(Color.FromRgb(255, 85, 0));
+                    background = Themes.ThemeManager.GetBrush("ControlForeground");
                     foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFF0F0F0"));
                 }
                 else if (_commitsCount < 0)

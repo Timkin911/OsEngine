@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Your rights to use code governed by this license https://github.com/AlexWan/OsEngine/blob/master/LICENSE
  * Ваши права на использование кода регулируются данной лицензией http://o-s-a.net/doc/license_simple_engine.pdf
 */
@@ -446,19 +446,20 @@ namespace OsEngine.OsOptimizer
 
             _chartRobustness.ChartAreas.Clear();
             _chartRobustness.ChartAreas.Add(area);
-            _chartRobustness.BackColor = Color.FromArgb(21, 26, 30);
-            _chartRobustness.ChartAreas[0].AxisX.TitleForeColor = Color.FromArgb(149, 159, 176);
+            _chartRobustness.BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+            _chartRobustness.ChartAreas[0].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
             for (int i = 0; _chartRobustness.ChartAreas != null && i < _chartRobustness.ChartAreas.Count; i++)
             {
-                _chartRobustness.ChartAreas[i].BackColor = Color.FromArgb(21, 26, 30);
-                _chartRobustness.ChartAreas[i].BorderColor = Color.FromArgb(17, 18, 23);
-                _chartRobustness.ChartAreas[i].CursorY.LineColor = Color.FromArgb(149, 159, 176);
-                _chartRobustness.ChartAreas[i].CursorX.LineColor = Color.FromArgb(149, 159, 176);
+                _chartRobustness.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+                _chartRobustness.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColor");
+                _chartRobustness.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                _chartRobustness.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
                 foreach (var axe in _chartRobustness.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.FromArgb(149, 159, 176);
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
 
@@ -614,23 +615,23 @@ namespace OsEngine.OsOptimizer
 
                 DataPoint point1 = new DataPoint(1, countBestTwenty);
                 point1.AxisLabel = "Best 20%";
-                point1.Color = Color.DarkGreen;
+                point1.Color = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
 
                 DataPoint point2 = new DataPoint(2, count20_40);
                 point2.AxisLabel = "20 - 40 %";
-                point2.Color = Color.DarkGreen;
+                point2.Color = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
 
                 DataPoint point3 = new DataPoint(3, count40_60);
                 point3.AxisLabel = "40 - 60 %";
-                point3.Color = Color.FromArgb(149, 159, 176);
+                point3.Color = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
                 DataPoint point4 = new DataPoint(4, count60_80);
                 point4.AxisLabel = "60 - 80 %";
-                point4.Color = Color.DarkRed;
+                point4.Color = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
 
                 DataPoint point5 = new DataPoint(5, countWorst20);
                 point5.AxisLabel = "Worst 20 %";
-                point5.Color = Color.DarkRed;
+                point5.Color = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
 
                 _chartRobustness.Series[0].Points.Add(point1);
                 _chartRobustness.Series[0].Points.Add(point2);
@@ -689,19 +690,20 @@ namespace OsEngine.OsOptimizer
 
             _chartTotalProfit.ChartAreas.Clear();
             _chartTotalProfit.ChartAreas.Add(area);
-            _chartTotalProfit.BackColor = Color.FromArgb(21, 26, 30);
-            _chartTotalProfit.ChartAreas[0].AxisX.TitleForeColor = Color.FromArgb(149, 159, 176);
+            _chartTotalProfit.BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+            _chartTotalProfit.ChartAreas[0].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
             for (int i = 0; _chartTotalProfit.ChartAreas != null && i < _chartTotalProfit.ChartAreas.Count; i++)
             {
-                _chartTotalProfit.ChartAreas[i].BackColor = Color.FromArgb(21, 26, 30);
-                _chartTotalProfit.ChartAreas[i].BorderColor = Color.FromArgb(17, 18, 23);
-                _chartTotalProfit.ChartAreas[i].CursorY.LineColor = Color.FromArgb(149, 159, 176);
-                _chartTotalProfit.ChartAreas[i].CursorX.LineColor = Color.FromArgb(149, 159, 176);
+                _chartTotalProfit.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+                _chartTotalProfit.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColor");
+                _chartTotalProfit.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                _chartTotalProfit.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
                 foreach (var axe in _chartTotalProfit.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.FromArgb(149, 159, 176);
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
 
@@ -859,15 +861,15 @@ namespace OsEngine.OsOptimizer
 
                     if (close > open)
                     {
-                        series.Points[series.Points.Count - 1].Color = Color.DarkGreen;
-                        series.Points[series.Points.Count - 1].BorderColor = Color.DarkGreen;
-                        series.Points[series.Points.Count - 1].BackSecondaryColor = Color.DarkGreen;
+                        series.Points[series.Points.Count - 1].Color = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
+                        series.Points[series.Points.Count - 1].BorderColor = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
+                        series.Points[series.Points.Count - 1].BackSecondaryColor = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
                     }
                     else
                     {
-                        series.Points[series.Points.Count - 1].Color = Color.DarkRed;
-                        series.Points[series.Points.Count - 1].BorderColor = Color.DarkRed;
-                        series.Points[series.Points.Count - 1].BackSecondaryColor = Color.DarkRed;
+                        series.Points[series.Points.Count - 1].Color = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
+                        series.Points[series.Points.Count - 1].BorderColor = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
+                        series.Points[series.Points.Count - 1].BackSecondaryColor = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
                     }
 
                     string toolTip = "";
@@ -882,7 +884,7 @@ namespace OsEngine.OsOptimizer
                     if (i + 1 == profitsSumm.Count)
                     { // last point
                         series.Points[series.Points.Count - 1].Label = Math.Round(profitsSumm[i], 4).ToStringWithNoEndZero();
-                        series.Points[series.Points.Count - 1].LabelForeColor = Color.AntiqueWhite;
+                        series.Points[series.Points.Count - 1].LabelForeColor = Themes.ThemeManager.GetColorWinForms("JournalEquityTotalColor");
                     }
 
                 }
@@ -931,19 +933,20 @@ namespace OsEngine.OsOptimizer
 
             _chartAverageProfit.ChartAreas.Clear();
             _chartAverageProfit.ChartAreas.Add(area);
-            _chartAverageProfit.BackColor = Color.FromArgb(21, 26, 30);
-            _chartAverageProfit.ChartAreas[0].AxisX.TitleForeColor = Color.FromArgb(149, 159, 176);
+            _chartAverageProfit.BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+            _chartAverageProfit.ChartAreas[0].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
             for (int i = 0; _chartAverageProfit.ChartAreas != null && i < _chartAverageProfit.ChartAreas.Count; i++)
             {
-                _chartAverageProfit.ChartAreas[i].BackColor = Color.FromArgb(21, 26, 30);
-                _chartAverageProfit.ChartAreas[i].BorderColor = Color.FromArgb(17, 18, 23);
-                _chartAverageProfit.ChartAreas[i].CursorY.LineColor = Color.FromArgb(149, 159, 176);
-                _chartAverageProfit.ChartAreas[i].CursorX.LineColor = Color.FromArgb(149, 159, 176);
+                _chartAverageProfit.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+                _chartAverageProfit.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColor");
+                _chartAverageProfit.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                _chartAverageProfit.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
                 foreach (var axe in _chartAverageProfit.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.FromArgb(149, 159, 176);
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
 
@@ -992,6 +995,12 @@ namespace OsEngine.OsOptimizer
                 {
                     // берём из ИнСампле таблицу роботов
                     List<OptimizerReport> bots = _reports[i].Reports;
+
+                    // отчётов может не быть вовсе (всё отфильтровано) — пропускаем фазу
+                    if (bots == null || bots.Count <= _sortBotNumber)
+                    {
+                        continue;
+                    }
 
                     OptimizerReport bestBot = _reports[i].Reports[_sortBotNumber];
 
@@ -1069,15 +1078,15 @@ namespace OsEngine.OsOptimizer
 
                     if (values[i] > 0)
                     {
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Color.DarkGreen;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Color.DarkGreen;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Color.DarkGreen;
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
                     }
                     else
                     {
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Color.DarkRed;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Color.DarkRed;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Color.DarkRed;
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
                     }
 
                     string toolTip = "";
@@ -1106,7 +1115,7 @@ namespace OsEngine.OsOptimizer
                     seriesAveragePoint.Points[0].Color = Color.AntiqueWhite;
 
                     seriesAveragePoint.Points[0].Label = label;
-                    seriesAveragePoint.Points[0].LabelForeColor = Color.AntiqueWhite;
+                    seriesAveragePoint.Points[0].LabelForeColor = Themes.ThemeManager.GetColorWinForms("JournalEquityTotalColor");
                 }
 
                 if (max != decimal.MinValue &&
@@ -1162,19 +1171,20 @@ namespace OsEngine.OsOptimizer
 
             _chartProfitFactor.ChartAreas.Clear();
             _chartProfitFactor.ChartAreas.Add(area);
-            _chartProfitFactor.BackColor = Color.FromArgb(21, 26, 30);
-            _chartProfitFactor.ChartAreas[0].AxisX.TitleForeColor = Color.FromArgb(149, 159, 176);
+            _chartProfitFactor.BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+            _chartProfitFactor.ChartAreas[0].AxisX.TitleForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
             for (int i = 0; _chartProfitFactor.ChartAreas != null && i < _chartProfitFactor.ChartAreas.Count; i++)
             {
-                _chartProfitFactor.ChartAreas[i].BackColor = Color.FromArgb(21, 26, 30);
-                _chartProfitFactor.ChartAreas[i].BorderColor = Color.FromArgb(17, 18, 23);
-                _chartProfitFactor.ChartAreas[i].CursorY.LineColor = Color.FromArgb(149, 159, 176);
-                _chartProfitFactor.ChartAreas[i].CursorX.LineColor = Color.FromArgb(149, 159, 176);
+                _chartProfitFactor.ChartAreas[i].BackColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColorLight");
+                _chartProfitFactor.ChartAreas[i].BorderColor = Themes.ThemeManager.GetColorWinForms("StandardBackGroundColor");
+                _chartProfitFactor.ChartAreas[i].CursorY.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                _chartProfitFactor.ChartAreas[i].CursorX.LineColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
 
                 foreach (var axe in _chartProfitFactor.ChartAreas[i].Axes)
                 {
-                    axe.LabelStyle.ForeColor = Color.FromArgb(149, 159, 176);
+                    axe.LabelStyle.ForeColor = Themes.ThemeManager.GetColorWinForms("OptimizerChartTextColor");
+                    axe.LabelStyle.Font = Themes.ThemeManager.GetChartAxisFont();
                 }
             }
 
@@ -1224,6 +1234,12 @@ namespace OsEngine.OsOptimizer
                 {
                     // берём из ИнСампле таблицу роботов
                     List<OptimizerReport> bots = _reports[i].Reports;
+
+                    // отчётов может не быть вовсе (всё отфильтровано) — пропускаем фазу
+                    if (bots == null || bots.Count == 0)
+                    {
+                        continue;
+                    }
 
                     OptimizerReport bestBot = _reports[i].Reports[0];
 
@@ -1301,15 +1317,15 @@ namespace OsEngine.OsOptimizer
 
                     if (values[i] > 0)
                     {
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Color.DarkGreen;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Color.DarkGreen;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Color.DarkGreen;
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Themes.ThemeManager.GetColorWinForms("OptimizerProfitBarColor");
                     }
                     else
                     {
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Color.DarkRed;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Color.DarkRed;
-                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Color.DarkRed;
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].Color = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BorderColor = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
+                        seriesOosValues.Points[seriesOosValues.Points.Count - 1].BackSecondaryColor = Themes.ThemeManager.GetColorWinForms("ChartBarMinusColor");
                     }
 
                     string toolTip = "";
@@ -1338,7 +1354,7 @@ namespace OsEngine.OsOptimizer
                     seriesAveragePoint.Points[0].Color = Color.AntiqueWhite;
 
                     seriesAveragePoint.Points[0].Label = label;
-                    seriesAveragePoint.Points[0].LabelForeColor = Color.AntiqueWhite;
+                    seriesAveragePoint.Points[0].LabelForeColor = Themes.ThemeManager.GetColorWinForms("JournalEquityTotalColor");
                 }
 
                 if (max != decimal.MinValue &&

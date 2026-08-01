@@ -92,6 +92,8 @@ using OsEngine.Market.Servers.MetaTrader5;
 using OsEngine.Market.Servers.QscalpMarketDepth;
 using OsEngine.Market.Servers.TData;
 using OsEngine.Market.Servers.BitGetUnified;
+using OsEngine.Market.Servers.TwelveData;
+using OsEngine.Market.Servers.BCS;
 
 namespace OsEngine.Market
 {
@@ -291,9 +293,9 @@ namespace OsEngine.Market
 
         public static void RealStarted()
         {
-            if (ServerMasterActivateInTesterRegimeEvent != null)
+            if (ServerMasterActivateInRealRegimeEvent != null)
             {
-                ServerMasterActivateInTesterRegimeEvent();
+                ServerMasterActivateInRealRegimeEvent();
             }
         }
 
@@ -306,6 +308,8 @@ namespace OsEngine.Market
         }
 
         public static event Action ServerMasterActivateInTesterRegimeEvent;
+
+        public static event Action ServerMasterActivateInRealRegimeEvent;
 
         public static event Action ServerMasterActivateInOptimizerRegimeEvent;
 
@@ -383,6 +387,8 @@ namespace OsEngine.Market
                 serverTypes.Add(ServerType.BinanceData);
                 serverTypes.Add(ServerType.AscendexSpot);
                 serverTypes.Add(ServerType.BitGetUnified);
+                serverTypes.Add(ServerType.TwelveData);
+                serverTypes.Add(ServerType.BCS);
 
                 // а теперь сортируем в зависимости от предпочтений пользователя
 
@@ -514,6 +520,8 @@ namespace OsEngine.Market
                 serverTypes.Add(ServerType.MetaTrader5);
                 serverTypes.Add(ServerType.QscalpMarketDepth);
                 serverTypes.Add(ServerType.TDataHistory);
+                serverTypes.Add(ServerType.TwelveData);
+                serverTypes.Add(ServerType.BCS);
 
                 return serverTypes;
             }
@@ -905,6 +913,14 @@ namespace OsEngine.Market
                     else if (type == ServerType.AscendexSpot)
                     {
                         newServer = new AscendexSpotServer(uniqueNum);
+                    }
+                    else if (type == ServerType.TwelveData)
+                    {
+                        newServer = new TwelveDataServer();
+                    }
+                    else if (type == ServerType.BCS)
+                    {
+                        newServer = new BcsServer(uniqueNum);
                     }
 
                     if (newServer == null)
@@ -1718,6 +1734,14 @@ namespace OsEngine.Market
                 {
                     serverPermission = new BitGetUnifiedServerPermission();
                 }
+                else if (type == ServerType.TwelveData)
+                {
+                    serverPermission = new TwelveDataPermission();
+                }
+                else if (type == ServerType.BCS)
+                {
+                    serverPermission = new BcsServerPermission();
+                }
 
                 if (serverPermission != null)
                 {
@@ -1911,6 +1935,37 @@ namespace OsEngine.Market
             {
                 SendNewLogMessage(ex.ToString(), LogMessageType.Error);
                 return null;
+            }
+        }
+
+        public static bool UpdateProxy(
+            int number, bool isOn, string ip, int port,
+            string login, string password, string pingWebAddress)
+        {
+            try
+            {
+                ProxyOsa proxy = GetOneProxyAt(number);
+
+                if (proxy == null)
+                {
+                    return false;
+                }
+
+                proxy.IsOn = isOn;
+                proxy.Ip = ip;
+                proxy.Port = port;
+                proxy.Login = login;
+                proxy.UserPassword = password;
+                proxy.PingWebAddress = pingWebAddress;
+
+                _proxyMaster.SaveProxy();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                SendNewLogMessage(ex.ToString(), LogMessageType.Error);
+                return false;
             }
         }
 
@@ -2548,6 +2603,18 @@ namespace OsEngine.Market
         /// Unified API for exchange BitGet (spot and futures)
         /// Унифицированный API для биржи BitGet (спот и фьючерсы)
         /// </summary>
-        BitGetUnified
+        BitGetUnified,
+
+        /// <summary>
+        /// downloading historical data from T-Invest archives
+        /// скачивание исторических данных и трансляция данных в режиме реального времени с TwelveData
+        /// </summary>
+        TwelveData,
+
+        /// <summary>
+        /// Bcs OpenAPI & Websocket
+        /// подключение к АПИ брокера БКС
+        /// </summary>
+        BCS
     }
 }
