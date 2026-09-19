@@ -1,5 +1,5 @@
 /* 
- Версия 1.3
+ Версия 1.4
  */
 
 
@@ -8,19 +8,12 @@ using OsEngine.Logging;
 using OsEngine.Market;
 using OsEngine.Market.Connectors;
 using OsEngine.Market.Servers;
-using OsEngine.Market.Servers.GateIo.GateIoFutures.Entities.Response;
-using OsEngine.Market.Servers.MFD;
-using OsEngine.Market.Servers.MoexFixFastSpot.FIX;
-using OsEngine.Market.Servers.Transaq.TransaqEntity;
 using OsEngine.OsTrader.Panels;
 using OsEngine.OsTrader.Panels.Attributes;
 using OsEngine.OsTrader.Panels.Tab;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Documents;
-using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 
 namespace OsEngine.Robots
@@ -38,6 +31,7 @@ namespace OsEngine.Robots
         StrategyParameterDecimal _koeff;
         StrategyParameterTimeOfDay _startToWork;
         StrategyParameterTimeOfDay _endToWork;
+        StrategyParameterString _workIntervalUnit;
         StrategyParameterInt _workInterval;
         StrategyParameterString _lastTimeCheckFinance;
         StrategyParameterString _repMoneyFund;
@@ -321,7 +315,8 @@ namespace OsEngine.Robots
             _koeff = CreateParameter("Koeff", 0.1m, 0.1m, 2, 0.1m, "Main Regime");
             _startToWork = CreateParameterTimeOfDay("Start to work", 10, 05, 00, 00, "Main Regime");
             _endToWork = CreateParameterTimeOfDay("End to work", 18, 40, 00, 00, "Main Regime");
-            _workInterval = CreateParameter("Work interval (min)", 5, 1, 20, 1, "Main Regime"); ;
+            _workIntervalUnit = CreateParameter("Work interval unit", "Minutes", new[] { "Minutes", "Seconds" }, "Main Regime");
+            _workInterval = CreateParameter("Work interval", 5, 1, 3600, 1, "Main Regime"); ;
             _lastTimeCheckFinance = CreateParameter("Last time work ", "", "Main Regime"); ;
             _repMoneyFund = CreateParameter("Replace Money Fund", "Off", new[] { "Off", "On" }, "Replace Money Fund");
             _repMoneyFundNew = CreateParameter("New Money Fund", "LQDT", "Replace Money Fund");
@@ -351,7 +346,15 @@ namespace OsEngine.Robots
 
             if (vDt.TimeOfDay >= _startToWork.TimeSpan && vDt.TimeOfDay <= _endToWork.TimeSpan)
             {
-                if (Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalMinutes) >= _workInterval.ValueInt)
+                // интервал отсчитываем в минутах или секундах в зависимости от выбранной единицы
+                double elapsedInterval = Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalMinutes);
+
+                if (_workIntervalUnit.ValueString == "Seconds")
+                {
+                    elapsedInterval = Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalSeconds);
+                }
+
+                if (elapsedInterval >= _workInterval.ValueInt)
                 {
                     // здесь переход к основному действию
                     CopyPortfolioLogic();
@@ -390,6 +393,19 @@ namespace OsEngine.Robots
                 if (isTradingActive == false)
                 {
                     //_tabToTrade1.Tabs[0].SetNewLogMessage("There are currently no trades going on", Logging.LogMessageType.System);
+                    return;
+                }
+
+                // не торгуем, пока скринер перезагружает табы: списки табов и позиций в этот момент несогласованы
+                if (_tabToTrade1.NeedToReloadTabs == true)
+                {
+                    SendNewLogMessage("Идёт перезагрузка табов скринера, цикл пропущен", Logging.LogMessageType.System);
+                    return;
+                }
+
+                // проверяем, что все включённые бумаги скринера имеют созданные и подключённые табы
+                if (AllTabsReady() == false)
+                {
                     return;
                 }
 
@@ -442,6 +458,12 @@ namespace OsEngine.Robots
 
                         decimal secPrice = GetLastPrice(tTab);
 
+                        if (secPrice <= 0)
+                        {
+                            SendNewLogMessage("Нет цены по инструменту " + boardSecName + ", цикл пропущен", Logging.LogMessageType.System);
+                            return;
+                        }
+
                         tIndex = posesAll.FindIndex(pos => pos.SecurityName == boardSecName);
                         decimal tPoseCurrent = 0;
                         Position tPos = null;
@@ -454,11 +476,11 @@ namespace OsEngine.Robots
 
                         if (_repMoneyFund == "On")
                         {
-                            mirrorPortfolio.myMoneyFundEdit(boardSecName, secPrice, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff), tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff * _koeff.ValueDecimal), tTab, tPos, positionOnBoard[i].SecurityNameCode, _repMoneyFundKoeff, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked);
+                            mirrorPortfolio.myMoneyFundEdit(boardSecName, secPrice, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff), tPoseCurrent, NormalizeVolume(tTab, (positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff * _koeff.ValueDecimal), tTab, tPos, positionOnBoard[i].SecurityNameCode, _repMoneyFundKoeff, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked);
                         }
                         else
                         {
-                            mirrorPortfolio.myMoneyFundEdit(positionOnBoard[i].SecurityNameCode, secPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
+                            mirrorPortfolio.myMoneyFundEdit(positionOnBoard[i].SecurityNameCode, secPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, NormalizeVolume(tTab, (positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
                         }
                     }
                     else
@@ -501,15 +523,21 @@ namespace OsEngine.Robots
                                 Entity.Security newSec = securitiesAll.Find(s => s.Name == positionOnBoard[i].SecurityNameCode);
                                 if (newSec == null) { return; }
 
-                                ActivatedSecurity sec = new ActivatedSecurity();
-                                sec.SecurityClass = newSec.NameClass;
-                                sec.SecurityName = newSec.Name;
-                                sec.IsOn = true;
+                                // не добавляем бумагу повторно, если она уже в списке и ждёт перезагрузки табов
+                                if (_tabToTrade1.SecuritiesNames.FindIndex(s => s.SecurityName == newSec.Name) == -1)
+                                {
+                                    ActivatedSecurity sec = new ActivatedSecurity();
+                                    sec.SecurityClass = newSec.NameClass;
+                                    sec.SecurityName = newSec.Name;
+                                    sec.IsOn = true;
 
-                                _tabToTrade1.SecuritiesNames.Add(sec);
-                                _tabToTrade1.NeedToReloadTabs = true;
-                                SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
-                                continue;
+                                    _tabToTrade1.SecuritiesNames.Add(sec);
+                                    _tabToTrade1.NeedToReloadTabs = true;
+                                    SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
+                                }
+
+                                // прерываем цикл: торговля возобновится после перезагрузки табов и проверки их готовности
+                                return;
                             }
                             catch (Exception error)
                             {
@@ -522,6 +550,12 @@ namespace OsEngine.Robots
                         tTab = _tabToTrade1.Tabs[tIndex];
 
                         decimal lastPrice = GetLastPrice(tTab);
+
+                        if (lastPrice <= 0)
+                        {
+                            SendNewLogMessage("Нет цены по инструменту " + positionOnBoard[i].SecurityNameCode + ", цикл пропущен", Logging.LogMessageType.System);
+                            return;
+                        }
 
                         tIndex = posesAll.FindIndex(pos => pos.SecurityName == positionOnBoard[i].SecurityNameCode);
                         decimal tPoseCurrent = 0;
@@ -541,7 +575,7 @@ namespace OsEngine.Robots
                             tPos = posesAll[tIndex];
                         }
 
-                        mirrorPortfolio.AddPosition(positionOnBoard[i].SecurityNameCode, lastPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
+                        mirrorPortfolio.AddPosition(positionOnBoard[i].SecurityNameCode, lastPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, NormalizeVolume(tTab, (positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
                     }
                 }
 
@@ -560,6 +594,12 @@ namespace OsEngine.Robots
 
 
                     decimal lastPrice = GetLastPrice(tTab);
+
+                    if (lastPrice <= 0)
+                    {
+                        SendNewLogMessage("Нет цены по инструменту " + posesAll[i].SecurityName + ", цикл пропущен", Logging.LogMessageType.System);
+                        return;
+                    }
 
                     mirrorPortfolio.AddPosition(posesAll[i].SecurityName, lastPrice, 0, posesAll[i].OpenVolume, 0, tTab, posesAll[i]);
 
@@ -619,6 +659,67 @@ namespace OsEngine.Robots
             }
 
             return tab.CandlesAll[tab.CandlesAll.Count - 1].Close;
+        }
+
+        private bool AllTabsReady()
+        {
+            for (int i = 0; i < _tabToTrade1.SecuritiesNames.Count; i++)
+            {
+                ActivatedSecurity sec = _tabToTrade1.SecuritiesNames[i];
+
+                if (sec.IsOn == false)
+                {
+                    continue;
+                }
+
+                int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security != null && tab.Security.Name == sec.SecurityName);
+
+                if (tIndex == -1)
+                {
+                    SendNewLogMessage("Таб для " + sec.SecurityName + " ещё не создан, цикл пропущен", Logging.LogMessageType.System);
+                    return false;
+                }
+
+                BotTabSimple tab = _tabToTrade1.Tabs[tIndex];
+
+                if (tab.IsConnected == false || tab.IsReadyToTrade == false)
+                {
+                    SendNewLogMessage("Таб " + sec.SecurityName + " не готов к торговле, цикл пропущен", Logging.LogMessageType.System);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private decimal NormalizeVolume(BotTabSimple tab, decimal volume)
+        {
+            if (tab == null || tab.Security == null)
+            {
+                return volume;
+            }
+
+            decimal step = tab.Security.VolumeStep;
+
+            if (step <= 0)
+            {
+                step = tab.Security.Lot;
+            }
+
+            if (step <= 0)
+            {
+                step = 1;
+            }
+
+            // округляем к кратности шагу объёма в сторону нуля, чтобы не ушла заявка с недопустимым или избыточным объёмом
+            decimal result = Math.Truncate(volume / step) * step;
+
+            if (tab.Security.DecimalsVolume > 0)
+            {
+                result = Math.Round(result, tab.Security.DecimalsVolume);
+            }
+
+            return result;
         }
 
         #region Checks
