@@ -343,3 +343,4 @@ __pycache__/
 
 # Private MCP API development context (work-in-progress, not for other developers)
 project/CONTEXT_MCP_API_DEVELOPMENT.md
+/doc.7z
