@@ -12,11 +12,9 @@ using OsEngine.Market.Servers.Entity;
 using OsEngine.OsData.BinaryEntity;
 using OsEngine.OsTrader;
 using OsEngine.OsTrader.Panels;
-using OsEngine.Entity.SyntheticBondEntity;
 using OsEngine.OsTrader.Iceberg;
 using OsEngine.OsTrader.Panels.Tab;
 using OsEngine.OsTrader.Panels.Tab.Internal;
-using OsEngine.OsTrader.Panels.Tab.SyntheticBondTab;
 using OsEngine.Wiki;
 using System;
 using System.Collections.Generic;
@@ -671,6 +669,8 @@ namespace OsEngine.Market.Servers.Tester
                     return;
                 }
 
+                bool resumeFromPause = TesterRegime != TesterRegime.NotActive;
+
                 TesterRegime = TesterRegime.Pause;
                 Thread.Sleep(200);
                 _serverTime = DateTime.MinValue;
@@ -713,6 +713,29 @@ namespace OsEngine.Market.Servers.Tester
 
                 Thread.Sleep(timeToWaitConnect);
 
+                int lastActiveCount = -1;
+                int stableMs = 0;
+                int waitSeriesMs = 0;
+
+                while ((stableMs < 3000 || _candleManager.ActiveSeriesCount < countSeriesInLastTest)
+                       && waitSeriesMs < 120000)
+                {
+                    int currentCount = _candleManager.ActiveSeriesCount;
+
+                    if (currentCount == lastActiveCount)
+                    {
+                        stableMs += 50;
+                    }
+                    else
+                    {
+                        lastActiveCount = currentCount;
+                        stableMs = 0;
+                    }
+
+                    Thread.Sleep(50);
+                    waitSeriesMs += 50;
+                }
+
                 _allTrades = null;
 
                 if (TimeStart == DateTime.MinValue)
@@ -750,7 +773,10 @@ namespace OsEngine.Market.Servers.Tester
 
                 _dataIsActive = false;
 
-                NumberGen.ResetToZeroInTester();
+                if (resumeFromPause == false)
+                {
+                    NumberGen.ResetToZeroInTester();
+                }
 
                 OrdersActive.Clear();
 
@@ -766,8 +792,6 @@ namespace OsEngine.Market.Servers.Tester
 
                 Thread.Sleep(2000);
 
-                TesterRegime = TesterRegime.Play;
-
                 if (TestingStartEvent != null)
                 {
                     try
@@ -779,6 +803,8 @@ namespace OsEngine.Market.Servers.Tester
                         SendLogMessage(ex.ToString(), LogMessageType.Error);
                     }
                 }
+
+                TesterRegime = TesterRegime.Play;
             }
             catch (Exception ex)
             {
@@ -918,6 +944,24 @@ namespace OsEngine.Market.Servers.Tester
         public event Action TestingEndEvent;
 
         public event Action TestingNewSecurityEvent;
+
+        /// <summary>
+        /// notify subscribers about the change of the testing period from outside the UI
+        /// </summary>
+        public void NotifyTestPeriodChanged()
+        {
+            try
+            {
+                if (TestingNewSecurityEvent != null)
+                {
+                    TestingNewSecurityEvent();
+                }
+            }
+            catch (Exception ex)
+            {
+                SendLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
 
         #endregion
 
@@ -3701,7 +3745,22 @@ namespace OsEngine.Market.Servers.Tester
             }
         }
 
-        public event Action<List<Security>> SecuritiesChangeEvent { add { } remove { } }
+        public event Action<List<Security>> SecuritiesChangeEvent;
+
+        private void RaiseSecuritiesChangeEvent()
+        {
+            try
+            {
+                if (SecuritiesChangeEvent != null)
+                {
+                    SecuritiesChangeEvent(_securities);
+                }
+            }
+            catch (Exception ex)
+            {
+                SendLogMessage(ex.ToString(), LogMessageType.Error);
+            }
+        }
 
         public void ShowSecuritiesDialog()
         {
@@ -4559,6 +4618,8 @@ namespace OsEngine.Market.Servers.Tester
             {
                 TestingNewSecurityEvent();
             }
+
+            RaiseSecuritiesChangeEvent();
         }
 
         private void LoadTickFromFolder(string folderName)
@@ -4821,6 +4882,8 @@ namespace OsEngine.Market.Servers.Tester
             {
                 TestingNewSecurityEvent();
             }
+
+            RaiseSecuritiesChangeEvent();
         }
 
         private void LoadMarketDepthFromFolder(string folderName)
@@ -5021,6 +5084,8 @@ namespace OsEngine.Market.Servers.Tester
             {
                 TestingNewSecurityEvent();
             }
+
+            RaiseSecuritiesChangeEvent();
         }
 
         private void ReadFile(string file, ref SecurityTester securityTester)
@@ -5740,17 +5805,6 @@ namespace OsEngine.Market.Servers.Tester
                 for (int i2 = 0; currentTabs != null && i2 < currentTabs.Count; i2++)
                 {
                     namesSecurity.Add(currentTabs[i2].CandleConnector.SecurityName);
-                }
-            }
-
-            for (int i = 0; i < bots.Count; i++)
-            {
-                List<BotTabSyntheticBond> synthTabs = bots[i].TabsSyntheticBond;
-
-                for (int i2 = 0; synthTabs != null && i2 < synthTabs.Count; i2++)
-                {
-                    List<string> secNames = synthTabs[i2].GetAllSecurityNames();
-                    namesSecurity.AddRange(secNames);
                 }
             }
 

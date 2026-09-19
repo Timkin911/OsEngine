@@ -110,9 +110,9 @@ namespace OsEngine.Market.Servers.InteractiveBrokers
         {
             try
             {
-                DeleteGrid();
-
                 SaveInServer();
+
+                DeleteGrid();
 
                 _server = null;
                 SecToSubscribe = null;
@@ -298,6 +298,7 @@ namespace OsEngine.Market.Servers.InteractiveBrokers
         private void SaveInServer()
         {
             SaveSecFromTable();
+            _server.SetSecuritiesInSecIB(SecToSubscribe);
             _server.GetSecurities();
             _server.SaveIbSecurities();
         }

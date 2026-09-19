@@ -16,6 +16,7 @@
 
         <SolidColorBrush x:Key="ControlForeground" Color="#4A7BC8" />
         <SolidColorBrush x:Key="ControlForegroundWhite" Color="#F0F4FA" />
+        <SolidColorBrush x:Key="CaretBrush" Color="#5B8DD6" />
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8A93A6" />
         <SolidColorBrush x:Key="LabelForegroundBrush" Color="#4A7BC8" />
         <Color x:Key="GridTextColor">#D8DEE8</Color>
@@ -25,6 +26,7 @@
         <SolidColorBrush x:Key="CheckBoxBackBrush" Color="#0E1420"/>
         <SolidColorBrush x:Key="WindowFrameBrush" Color="#3E5278"/>
         <SolidColorBrush x:Key="WindowFrameInactiveBrush" Color="#2C3E63"/>
+        <SolidColorBrush x:Key="ProgressLabelBrush" Color="#F0F4FA"/>
         <Color x:Key="GridTextInactiveColor">#8A93A6</Color>
         <Color x:Key="GridCellDisabledColor">#5A6373</Color>
         <Color x:Key="GridButtonBackColor">#0E1420</Color>

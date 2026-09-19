@@ -618,6 +618,16 @@ namespace OsEngine.Robots.SpeculantSet
                 return false;
             }
 
+            // индикатор может пересчитываться в фоне и серия значений в этот момент
+            // короче списка свечей - проверяем границы, иначе ArgumentOutOfRangeException
+            if (atr.DataSeries[0].Values == null
+                || atr.DataSeries[0].Values.Count == 0
+                || lastIndex >= atr.DataSeries[0].Values.Count
+                || backIndex >= atr.DataSeries[0].Values.Count)
+            {
+                return false;
+            }
+
             decimal atrPercentLast = atr.DataSeries[0].Values[lastIndex];
             decimal atrPercentBack = atr.DataSeries[0].Values[backIndex];
 
@@ -685,11 +695,19 @@ namespace OsEngine.Robots.SpeculantSet
             }
         }
 
-        // Активация / деактивация стопов открытых позиций
+        // Активация / деактивация стопов открытых позиций.
+        // Перевзводим стоп только у позиций в состоянии Open: у позиций, которые уже закрываются
+        // или закрыты (Closing, ClosingFail, ClosingSurplus, Done, OpeningFail, Deleted), стоп
+        // не трогаем, иначе после срабатывания он будет заново активирован и стоп сработает повторно.
         private void SetStopsActive(List<Position> positions, bool isActive)
         {
             for (int i = 0; i < positions.Count; i++)
             {
+                if (positions[i].State != PositionStateType.Open)
+                {
+                    continue;
+                }
+
                 if (positions[i].StopOrderPrice != 0)
                 {
                     positions[i].StopOrderIsActive = isActive;

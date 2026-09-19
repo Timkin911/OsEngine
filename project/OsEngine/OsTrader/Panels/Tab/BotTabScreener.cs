@@ -522,6 +522,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                             NewTabCreateEvent(newTab);
                         }
 
+                        if (NewTabCreateWithScreenerEvent != null)
+                        {
+                            NewTabCreateWithScreenerEvent(newTab, this);
+                        }
+
                         if (Tabs.Count == 1)
                         {
                             Tabs[0].IndicatorManuallyCreateEvent += BotTabScreener_IndicatorManuallyCreateEvent;
@@ -536,6 +541,39 @@ namespace OsEngine.OsTrader.Panels.Tab
             catch (Exception error)
             {
                 SendNewLogMessage(error.ToString(), LogMessageType.Error);
+            }
+
+            if (NeedToReloadTabs == false)
+            {
+                List<ActivatedSecurity> activeSecurities = SecuritiesNames.FindAll(s => s.IsOn);
+
+                if (Tabs.Count != activeSecurities.Count)
+                {
+                    NeedToReloadTabs = true;
+                }
+                else
+                {
+                    for (int i = 0; i < activeSecurities.Count; i++)
+                    {
+                        bool found = false;
+
+                        for (int i2 = 0; i2 < Tabs.Count; i2++)
+                        {
+                            if (Tabs[i2].Connector.SecurityName == activeSecurities[i].SecurityName
+                                && Tabs[i2].Connector.SecurityClass == activeSecurities[i].SecurityClass)
+                            {
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (found == false)
+                        {
+                            NeedToReloadTabs = true;
+                            break;
+                        }
+                    }
+                }
             }
 
             ReloadIndicatorsOnTabs();
@@ -1059,6 +1097,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                         {
                             NewTabCreateEvent(Tabs[Tabs.Count - 1]);
                         }
+
+                        if (NewTabCreateWithScreenerEvent != null)
+                        {
+                            NewTabCreateWithScreenerEvent(Tabs[Tabs.Count - 1], this);
+                        }
                     }
                 }
                 IsLoadTabs = false;
@@ -1181,6 +1224,11 @@ namespace OsEngine.OsTrader.Panels.Tab
             if (tab.Connector.ServerUid != ServerUid)
             {
                 tab.Connector.ServerUid = ServerUid;
+            }
+
+            if (tab.Connector.EventsIsOn != _eventsIsOn)
+            {
+                tab.Connector.EventsIsOn = _eventsIsOn;
             }
 
             tab.TimeFrameBuilder.MarketDepthBuildMaxSpread = MarketDepthBuildMaxSpread;
@@ -2984,6 +3032,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                     CandleFinishedEvent(candles, tab);
                 }
 
+                if (CandleFinishedWithScreenerEvent != null && EventsIsOn)
+                {
+                    CandleFinishedWithScreenerEvent(candles, tab, this);
+                }
+
                 SynchFinishCandlesMethod(candles, tab);
             };
 
@@ -2993,6 +3046,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     CandleUpdateEvent(candles, tab);
                 }
+
+                if (CandleUpdateWithScreenerEvent != null && EventsIsOn)
+                {
+                    CandleUpdateWithScreenerEvent(candles, tab, this);
+                }
             };
             tab.NewTickEvent += (Trade trade) =>
             {
@@ -3000,12 +3058,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     NewTickEvent(trade, tab);
                 }
+
+                if (NewTickWithScreenerEvent != null && EventsIsOn)
+                {
+                    NewTickWithScreenerEvent(trade, tab, this);
+                }
             };
             tab.MyTradeEvent += (MyTrade trade) =>
             {
                 if (MyTradeEvent != null && EventsIsOn)
                 {
                     MyTradeEvent(trade, tab);
+                }
+
+                if (MyTradeWithScreenerEvent != null && EventsIsOn)
+                {
+                    MyTradeWithScreenerEvent(trade, tab, this);
                 }
             };
             tab.MyTradeEvent += (MyTrade trade) =>
@@ -3021,12 +3089,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     OrderUpdateEvent(order, tab);
                 }
+
+                if (OrderUpdateWithScreenerEvent != null && EventsIsOn)
+                {
+                    OrderUpdateWithScreenerEvent(order, tab, this);
+                }
             };
             tab.MarketDepthUpdateEvent += (MarketDepth md) =>
             {
                 if (MarketDepthUpdateEvent != null && EventsIsOn)
                 {
                     MarketDepthUpdateEvent(md, tab);
+                }
+
+                if (MarketDepthUpdateWithScreenerEvent != null && EventsIsOn)
+                {
+                    MarketDepthUpdateWithScreenerEvent(md, tab, this);
                 }
             };
 
@@ -3036,6 +3114,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     BestBidAskChangeEvent(bid, ask, tab);
                 }
+
+                if (BestBidAskChangeWithScreenerEvent != null && EventsIsOn)
+                {
+                    BestBidAskChangeWithScreenerEvent(bid, ask, tab, this);
+                }
             };
 
             tab.PositionClosingSuccesEvent += (Position pos) =>
@@ -3044,12 +3127,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     PositionClosingSuccesEvent(pos, tab);
                 }
+
+                if (PositionClosingSuccesWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionClosingSuccesWithScreenerEvent(pos, tab, this);
+                }
             };
             tab.PositionOpeningSuccesEvent += (Position pos) =>
             {
                 if (PositionOpeningSuccesEvent != null && EventsIsOn)
                 {
                     PositionOpeningSuccesEvent(pos, tab);
+                }
+
+                if (PositionOpeningSuccesWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionOpeningSuccesWithScreenerEvent(pos, tab, this);
                 }
             };
             tab.PositionNetVolumeChangeEvent += (Position pos) =>
@@ -3058,12 +3151,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     PositionNetVolumeChangeEvent(pos, tab);
                 }
+
+                if (PositionNetVolumeChangeWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionNetVolumeChangeWithScreenerEvent(pos, tab, this);
+                }
             };
             tab.PositionOpeningFailEvent += (Position pos) =>
             {
                 if (PositionOpeningFailEvent != null && EventsIsOn)
                 {
                     PositionOpeningFailEvent(pos, tab);
+                }
+
+                if (PositionOpeningFailWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionOpeningFailWithScreenerEvent(pos, tab, this);
                 }
             };
             tab.PositionClosingFailEvent += (Position pos) =>
@@ -3072,12 +3175,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     PositionClosingFailEvent(pos, tab);
                 }
+
+                if (PositionClosingFailWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionClosingFailWithScreenerEvent(pos, tab, this);
+                }
             };
             tab.PositionStopActivateEvent += (Position pos) =>
             {
                 if (PositionStopActivateEvent != null && EventsIsOn)
                 {
                     PositionStopActivateEvent(pos, tab);
+                }
+
+                if (PositionStopActivateWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionStopActivateWithScreenerEvent(pos, tab, this);
                 }
             };
             tab.PositionProfitActivateEvent += (Position pos) =>
@@ -3086,12 +3199,22 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     PositionProfitActivateEvent(pos, tab);
                 }
+
+                if (PositionProfitActivateWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionProfitActivateWithScreenerEvent(pos, tab, this);
+                }
             };
             tab.PositionBuyAtStopActivateEvent += (Position pos) =>
             {
                 if (PositionBuyAtStopActivateEvent != null && EventsIsOn)
                 {
                     PositionBuyAtStopActivateEvent(pos, tab);
+                }
+
+                if (PositionBuyAtStopActivateWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionBuyAtStopActivateWithScreenerEvent(pos, tab, this);
                 }
             };
             tab.PositionSellAtStopActivateEvent += (Position pos) =>
@@ -3100,6 +3223,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                 {
                     PositionSellAtStopActivateEvent(pos, tab);
                 }
+
+                if (PositionSellAtStopActivateWithScreenerEvent != null && EventsIsOn)
+                {
+                    PositionSellAtStopActivateWithScreenerEvent(pos, tab, this);
+                }
             };
         }
 
@@ -3107,6 +3235,11 @@ namespace OsEngine.OsTrader.Panels.Tab
         /// New tab creation event
         /// </summary>
         public event Action<BotTabSimple> NewTabCreateEvent;
+
+        /// <summary>
+        /// New tab creation event. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<BotTabSimple, BotTabScreener> NewTabCreateWithScreenerEvent;
 
         /// <summary>
         /// Last candle finished
@@ -3189,6 +3322,86 @@ namespace OsEngine.OsTrader.Panels.Tab
         public event Action<Position, BotTabSimple> PositionSellAtStopActivateEvent;
 
         /// <summary>
+        /// Last candle finished. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<List<Candle>, BotTabSimple, BotTabScreener> CandleFinishedWithScreenerEvent;
+
+        /// <summary>
+        /// Last candle update. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<List<Candle>, BotTabSimple, BotTabScreener> CandleUpdateWithScreenerEvent;
+
+        /// <summary>
+        /// New trades. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Trade, BotTabSimple, BotTabScreener> NewTickWithScreenerEvent;
+
+        /// <summary>
+        /// My new trade event. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<MyTrade, BotTabSimple, BotTabScreener> MyTradeWithScreenerEvent;
+
+        /// <summary>
+        /// Updated order. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Order, BotTabSimple, BotTabScreener> OrderUpdateWithScreenerEvent;
+
+        /// <summary>
+        /// New marketDepth. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<MarketDepth, BotTabSimple, BotTabScreener> MarketDepthUpdateWithScreenerEvent;
+
+        /// <summary>
+        /// Bid ask change. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<decimal, decimal, BotTabSimple, BotTabScreener> BestBidAskChangeWithScreenerEvent;
+
+        /// <summary>
+        /// Position successfully closed. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionClosingSuccesWithScreenerEvent;
+
+        /// <summary>
+        /// Position successfully opened. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionOpeningSuccesWithScreenerEvent;
+
+        /// <summary>
+        /// Open position volume has changed. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionNetVolumeChangeWithScreenerEvent;
+
+        /// <summary>
+        /// Opening position failed. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionOpeningFailWithScreenerEvent;
+
+        /// <summary>
+        /// Position closing failed. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionClosingFailWithScreenerEvent;
+
+        /// <summary>
+        /// A stop order is activated for the position. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionStopActivateWithScreenerEvent;
+
+        /// <summary>
+        /// A profit order is activated for the position. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionProfitActivateWithScreenerEvent;
+
+        /// <summary>
+        /// Stop order buy activated. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionBuyAtStopActivateWithScreenerEvent;
+
+        /// <summary>
+        /// Stop order sell activated. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<Position, BotTabSimple, BotTabScreener> PositionSellAtStopActivateWithScreenerEvent;
+
+        /// <summary>
         /// Source removed
         /// </summary>
         public event Action TabDeletedEvent;
@@ -3201,12 +3414,15 @@ namespace OsEngine.OsTrader.Panels.Tab
         {
             try
             {
-                if (CandlesSyncFinishedEvent == null)
+                if (CandlesSyncFinishedEvent != null)
                 {
-                    return;
+                    CandlesSyncFinishedEvent(Tabs);
                 }
 
-                CandlesSyncFinishedEvent(Tabs);
+                if (CandlesSyncFinishedWithScreenerEvent != null)
+                {
+                    CandlesSyncFinishedWithScreenerEvent(Tabs, this);
+                }
             }
             catch (Exception error)
             {
@@ -3265,6 +3481,11 @@ namespace OsEngine.OsTrader.Panels.Tab
                 Thread.Sleep(2000);
 
                 CandlesSyncFinishedEvent(Tabs);
+
+                if (CandlesSyncFinishedWithScreenerEvent != null)
+                {
+                    CandlesSyncFinishedWithScreenerEvent(Tabs, this);
+                }
             }
             catch (Exception error)
             {
@@ -3276,6 +3497,11 @@ namespace OsEngine.OsTrader.Panels.Tab
         /// Candles have finished for all screener sources.
         /// </summary>
         public event Action<List<BotTabSimple>> CandlesSyncFinishedEvent;
+
+        /// <summary>
+        /// Candles have finished for all screener sources. Screener is passed in the last parameter
+        /// </summary>
+        public event Action<List<BotTabSimple>, BotTabScreener> CandlesSyncFinishedWithScreenerEvent;
 
         #endregion
 

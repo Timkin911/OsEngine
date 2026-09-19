@@ -54,6 +54,12 @@ namespace OsEngine.OsTrader.Gui
 
         private DataGridView _grid;
 
+        // Tags for rows in the table: BotPanel - bot row, string - group header row, _nullRowTag / _addRowTag - service rows
+
+        private static readonly object _nullRowTag = new object();
+
+        private static readonly object _addRowTag = new object();
+
         private void CreateTable(StartProgram startProgram)
         {
             DataGridView newGrid =
@@ -162,7 +168,17 @@ namespace OsEngine.OsTrader.Gui
 
         private void _grid_DataError(object sender, DataGridViewDataErrorEventArgs e)
         {
-            _master.SendNewLogMessage(e.ToString(), Logging.LogMessageType.Error);
+            string exception = "null";
+
+            if (e.Exception != null)
+            {
+                exception = e.Exception.GetType().Name + ": " + e.Exception.Message;
+            }
+
+            _master.SendNewLogMessage(
+                "DataGridView error. Row: " + e.RowIndex + " Column: " + e.ColumnIndex
+                + " Context: " + e.Context + " Exception: " + exception,
+                Logging.LogMessageType.Error);
         }
 
         private void _grid_CellEndEdit(object sender, DataGridViewCellEventArgs e)
@@ -187,10 +203,12 @@ namespace OsEngine.OsTrader.Gui
                     return;
                 }
 
-                if (rowIndex >= _master.PanelsArray.Count)
+                if ((_grid.Rows[rowIndex].Tag is BotPanel) == false)
                 {
                     return;
                 }
+
+                BotPanel bot = (BotPanel)_grid.Rows[rowIndex].Tag;
 
                 string newName = null;
 
@@ -201,11 +219,11 @@ namespace OsEngine.OsTrader.Gui
                 }
                 else
                 {
-                    newName = _master.PanelsArray[rowIndex].NameStrategyUniq;
+                    newName = bot.NameStrategyUniq;
                     _grid.Rows[rowIndex].Cells[1].Value = newName;
                 }
 
-                _master.PanelsArray[rowIndex].PublicName = newName;
+                bot.PublicName = newName;
                 _master.Save();
             }
             catch (Exception ex)
@@ -269,56 +287,54 @@ namespace OsEngine.OsTrader.Gui
     colum10.HeaderText = "Action";
     */
 
-                int botsCount = 0;
-
-                if (_master.PanelsArray != null)
+                if (rowIndex < 0 || rowIndex >= _grid.Rows.Count)
                 {
-                    botsCount = _master.PanelsArray.Count;
-                }
-
-                BotPanel bot = null;
-
-                if (rowIndex < botsCount)
-                {
-                    bot = _master.PanelsArray[rowIndex];
-                }
-
-                if (coluIndex == 7 &&
-                    rowIndex < botsCount)
-                { // вызываем чарт робота
-                    bot.ShowChartDialog();
-                }
-                else if (coluIndex == 8 &&
-       rowIndex < botsCount)
-                { // вызываем параметры
-                    bot.ShowParameterDialog();
-                }
-                else if (coluIndex == 9 &&
-        rowIndex < botsCount)
-                { // вызываем окно удаление робота
-
-                    AcceptDialogUi ui = new AcceptDialogUi(OsLocalization.Trader.Label4);
-                    ui.ShowDialog();
-
-                    if (ui.UserAcceptAction == false)
-                    {
-                        return;
-                    }
-
-                    _master.DeleteRobotByNum(rowIndex);
-                }
-                else if (coluIndex == 10 &&
-                    rowIndex < botsCount)
-                { // вызываем журнал конкретного робота
-                    bot.ShowJournalDialog();
                     return;
                 }
 
-                if (rowIndex == botsCount + 1)
+                object rowTag = _grid.Rows[rowIndex].Tag;
+
+                if (rowTag is string groupName)
+                { // строка-заголовок группы - свернуть / развернуть
+                    _master.SetGroupCollapsed(groupName, !_master.IsGroupCollapsed(groupName));
+                    RePaintTable();
+                    return;
+                }
+
+                if (rowTag is BotPanel bot)
+                {
+                    if (coluIndex == 7)
+                    { // вызываем чарт робота
+                        bot.ShowChartDialog();
+                    }
+                    else if (coluIndex == 8)
+                    { // вызываем параметры
+                        bot.ShowParameterDialog();
+                    }
+                    else if (coluIndex == 9)
+                    { // вызываем окно удаление робота
+
+                        AcceptDialogUi ui = new AcceptDialogUi(OsLocalization.Trader.Label4);
+                        ui.ShowDialog();
+
+                        if (ui.UserAcceptAction == false)
+                        {
+                            return;
+                        }
+
+                        _master.DeleteRobotByInstance(bot);
+                    }
+                    else if (coluIndex == 10)
+                    { // вызываем журнал конкретного робота
+                        bot.ShowJournalDialog();
+                        return;
+                    }
+                }
+
+                if (ReferenceEquals(rowTag, _addRowTag))
                 { // последняя строка
 
-                    if (coluIndex == 1 &&
-                       rowIndex == botsCount + 1)
+                    if (coluIndex == 1)
                     {
                         if (_master._startProgram == StartProgram.IsOsTrader)
                         {
@@ -351,38 +367,25 @@ namespace OsEngine.OsTrader.Gui
                     {
                         ServerMaster.ShowCopyMasterDialog();
                     }
-                    else if (coluIndex == 8 &&
-                       rowIndex == botsCount + 1)
+                    else if (coluIndex == 8)
                     { // вызываем общий журнал
                         _master.ShowCommunityJournal(2, 0, 0);
                     }
-                    else if (coluIndex == 9 &&
-                       rowIndex == botsCount + 1)
+                    else if (coluIndex == 9)
                     { // вызываем добавление нового бота
                         _master.CreateNewBot();
                     }
-                    else if (coluIndex == 10 &&
-                       rowIndex == botsCount + 1 &&
-                       _master._startProgram != StartProgram.IsOsTrader)
-                    { // Save preset
-                        SaveFileDialog dialog = new SaveFileDialog();
-                        dialog.Filter = "Txt files|*.txt";
-                        if (dialog.ShowDialog() == DialogResult.OK)
+                    else if (coluIndex == 10)
+                    { // окно миграции роботов
+                        if (_migrationUi != null)
                         {
-                            _master.SaveBotsPreset(dialog.FileName);
+                            _migrationUi.Activate();
+                            return;
                         }
-                    }
-                }
 
-                if (rowIndex == botsCount + 2 &&
-                    coluIndex == 10 &&
-                    _master._startProgram == StartProgram.IsOsTrader)
-                { // Load preset
-                    OpenFileDialog dialog = new OpenFileDialog();
-                    dialog.Filter = "Txt files|*.txt";
-                    if (dialog.ShowDialog() == DialogResult.OK)
-                    {
-                        _master.LoadBotsPreset(dialog.FileName);
+                        _migrationUi = new BotsMigrationUi(_master);
+                        _migrationUi.Closed += _migrationUi_Closed;
+                        _migrationUi.Show();
                     }
                 }
 
@@ -402,6 +405,14 @@ namespace OsEngine.OsTrader.Gui
             }
         }
 
+        private BotsMigrationUi _migrationUi;
+
+        private void _migrationUi_Closed(object sender, EventArgs e)
+        {
+            _migrationUi.Closed -= _migrationUi_Closed;
+            _migrationUi = null;
+        }
+
         #region Pop-up menu
 
         private int _mouseXPos;
@@ -410,30 +421,52 @@ namespace OsEngine.OsTrader.Gui
 
         private BotPanel _lastSelectedBot;
 
+        private string _lastSelectedGroup;
+
         private void _grid_CellMouseClick(object sender, DataGridViewCellMouseEventArgs e)
         {
             try
             {
                 if (e.Button != MouseButtons.Right)
                 {
-                    if (_grid.ContextMenuStrip != null)
-                    {
-                        _grid.ContextMenuStrip = null;
-                    }
-
                     return;
                 }
 
                 int rowIndex = e.RowIndex;
                 int columnIndex = e.ColumnIndex;
 
-                if (rowIndex >= _master.PanelsArray.Count
-                    || rowIndex < 0)
+                if (rowIndex < 0 || rowIndex >= _grid.Rows.Count)
                 {
                     return;
                 }
 
-                _lastSelectedBot = _master.PanelsArray[rowIndex];
+                object rowTag = _grid.Rows[rowIndex].Tag;
+
+                if (rowTag is string groupName)
+                { // меню для заголовка группы
+                    if (groupName == BotPanel.BaseGroupName)
+                    {
+                        return;
+                    }
+
+                    _lastSelectedGroup = groupName;
+
+                    ContextMenuStrip groupMenu = new ContextMenuStrip();
+
+                    ToolStripMenuItem deleteGroupItem = new ToolStripMenuItem(OsLocalization.Trader.Label779);
+                    deleteGroupItem.Click += BotTabsPainter_DeleteGroup_Click;
+                    groupMenu.Items.Add(deleteGroupItem);
+
+                    groupMenu.Show(_grid, new System.Drawing.Point(_mouseXPos, _mouseYPos));
+                    return;
+                }
+
+                if ((rowTag is BotPanel) == false)
+                {
+                    return;
+                }
+
+                _lastSelectedBot = (BotPanel)rowTag;
 
                 List<ToolStripMenuItem> items = new List<ToolStripMenuItem>();
 
@@ -479,13 +512,47 @@ namespace OsEngine.OsTrader.Gui
                 items.Add(new ToolStripMenuItem(OsLocalization.Trader.Label417));
                 items[7].Click += BotTabsPainter_MoveDown_Click;
 
+                ToolStripMenuItem moveToGroupItem = new ToolStripMenuItem(OsLocalization.Trader.Label776);
+                items.Add(moveToGroupItem);
+
                 items.Add(new ToolStripMenuItem(OsLocalization.Trader.Label39));
-                items[8].Click += BotTabsPainter_Delete_Click;
+                items[9].Click += BotTabsPainter_Delete_Click;
+
+                // подменю перемещения робота в группу
+
+                List<string> botsGroups = _master.GetBotsGroups();
+
+                for (int i = 0; i < botsGroups.Count; i++)
+                {
+                    if (botsGroups[i] == _lastSelectedBot.BotGroup)
+                    {
+                        continue;
+                    }
+
+                    ToolStripMenuItem groupItem = new ToolStripMenuItem(botsGroups[i]);
+                    groupItem.Click += BotTabsPainter_MoveToGroup_Click;
+                    moveToGroupItem.DropDownItems.Add(groupItem);
+                }
+
+                if (_lastSelectedBot.BotGroup != BotPanel.BaseGroupName)
+                {
+                    ToolStripMenuItem baseGroupItem = new ToolStripMenuItem(OsLocalization.Trader.Label778);
+                    baseGroupItem.Click += BotTabsPainter_MoveToBaseGroup_Click;
+                    moveToGroupItem.DropDownItems.Add(baseGroupItem);
+                }
+
+                if (moveToGroupItem.DropDownItems.Count > 0)
+                {
+                    moveToGroupItem.DropDownItems.Add(new ToolStripSeparator());
+                }
+
+                ToolStripMenuItem newGroupItem = new ToolStripMenuItem(OsLocalization.Trader.Label777);
+                newGroupItem.Click += BotTabsPainter_MoveToNewGroup_Click;
+                moveToGroupItem.DropDownItems.Add(newGroupItem);
 
                 ContextMenuStrip menu = new ContextMenuStrip(); menu.Items.AddRange(items.ToArray());
 
-                _grid.ContextMenuStrip = menu;
-                _grid.ContextMenuStrip.Show(_grid, new System.Drawing.Point(_mouseXPos, _mouseYPos));
+                menu.Show(_grid, new System.Drawing.Point(_mouseXPos, _mouseYPos));
             }
             catch (Exception ex)
             {
@@ -610,9 +677,25 @@ namespace OsEngine.OsTrader.Gui
                 {
                     if (_master.PanelsArray[i].NameStrategyUniq == _lastSelectedBot.NameStrategyUniq)
                     {
+                        int swapIndex = -1;
+
+                        for (int j = i - 1; j >= 0; j--)
+                        {
+                            if (_master.PanelsArray[j].BotGroup == _lastSelectedBot.BotGroup)
+                            {
+                                swapIndex = j;
+                                break;
+                            }
+                        }
+
+                        if (swapIndex == -1)
+                        {
+                            break;
+                        }
+
                         BotPanel panel = _master.PanelsArray[i];
-                        _master.PanelsArray[i] = _master.PanelsArray[i - 1];
-                        _master.PanelsArray[i - 1] = panel;
+                        _master.PanelsArray[i] = _master.PanelsArray[swapIndex];
+                        _master.PanelsArray[swapIndex] = panel;
                         _master.Save();
                         RePaintTable();
                         break;
@@ -633,9 +716,25 @@ namespace OsEngine.OsTrader.Gui
                 {
                     if (_master.PanelsArray[i].NameStrategyUniq == _lastSelectedBot.NameStrategyUniq)
                     {
+                        int swapIndex = -1;
+
+                        for (int j = i + 1; j < _master.PanelsArray.Count; j++)
+                        {
+                            if (_master.PanelsArray[j].BotGroup == _lastSelectedBot.BotGroup)
+                            {
+                                swapIndex = j;
+                                break;
+                            }
+                        }
+
+                        if (swapIndex == -1)
+                        {
+                            break;
+                        }
+
                         BotPanel panel = _master.PanelsArray[i];
-                        _master.PanelsArray[i] = _master.PanelsArray[i + 1];
-                        _master.PanelsArray[i + 1] = panel;
+                        _master.PanelsArray[i] = _master.PanelsArray[swapIndex];
+                        _master.PanelsArray[swapIndex] = panel;
                         _master.Save();
                         RePaintTable();
                         break;
@@ -653,22 +752,10 @@ namespace OsEngine.OsTrader.Gui
         {
             try
             {
-                int rowIndex = -1;
-
-                for (int i = 0; i < _master.PanelsArray.Count; i++)
-                {
-                    if (_master.PanelsArray[i].NameStrategyUniq == _lastSelectedBot.NameStrategyUniq)
-                    {
-                        rowIndex = i;
-                        break;
-                    }
-                }
-
-                if (rowIndex == -1)
+                if (_lastSelectedBot == null)
                 {
                     return;
                 }
-
 
                 AcceptDialogUi ui = new AcceptDialogUi(OsLocalization.Trader.Label4);
                 ui.ShowDialog();
@@ -678,7 +765,113 @@ namespace OsEngine.OsTrader.Gui
                     return;
                 }
 
-                _master.DeleteRobotByNum(rowIndex);
+                _master.DeleteRobotByInstance(_lastSelectedBot);
+            }
+            catch (Exception ex)
+            {
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void BotTabsPainter_MoveToGroup_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_lastSelectedBot == null)
+                {
+                    return;
+                }
+
+                string groupName = ((ToolStripMenuItem)sender).Text;
+
+                _master.MoveBotToGroup(_lastSelectedBot, groupName);
+                RePaintTable();
+            }
+            catch (Exception ex)
+            {
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void BotTabsPainter_MoveToBaseGroup_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_lastSelectedBot == null)
+                {
+                    return;
+                }
+
+                _master.MoveBotToGroup(_lastSelectedBot, BotPanel.BaseGroupName);
+                RePaintTable();
+            }
+            catch (Exception ex)
+            {
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void BotTabsPainter_MoveToNewGroup_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_lastSelectedBot == null)
+                {
+                    return;
+                }
+
+                List<string> oldGroupNames = _master.GetBotsGroups();
+                oldGroupNames.Add(BotPanel.BaseGroupName);
+                oldGroupNames.Add(OsLocalization.Trader.Label778);
+
+                NewGroupAddInJournalUi ui = new NewGroupAddInJournalUi(oldGroupNames);
+                ui.ShowDialog();
+
+                if (ui.IsAccepted == false
+                    || string.IsNullOrEmpty(ui.NewGroupName))
+                {
+                    return;
+                }
+
+                string newGroup = ui.NewGroupName.Replace("@", "").Trim();
+
+                if (string.IsNullOrEmpty(newGroup)
+                    || newGroup == BotPanel.BaseGroupName
+                    || newGroup == OsLocalization.Trader.Label778
+                    || _master.GetBotsGroups().Contains(newGroup))
+                {
+                    return;
+                }
+
+                _master.AddNewGroup(newGroup);
+                _master.MoveBotToGroup(_lastSelectedBot, newGroup);
+                RePaintTable();
+            }
+            catch (Exception ex)
+            {
+                _master.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
+        }
+
+        private void BotTabsPainter_DeleteGroup_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(_lastSelectedGroup))
+                {
+                    return;
+                }
+
+                AcceptDialogUi ui = new AcceptDialogUi(string.Format(OsLocalization.Trader.Label780, _lastSelectedGroup));
+                ui.ShowDialog();
+
+                if (ui.UserAcceptAction == false)
+                {
+                    return;
+                }
+
+                _master.DeleteGroup(_lastSelectedGroup);
+                RePaintTable();
             }
             catch (Exception ex)
             {
@@ -727,11 +920,9 @@ namespace OsEngine.OsTrader.Gui
 
                 _lastTimeClick = DateTime.Now;
 
-                int botsCount = 0;
-
-                if (_master.PanelsArray != null)
+                if (rowIndex >= _grid.Rows.Count)
                 {
-                    botsCount = _master.PanelsArray.Count;
+                    return;
                 }
 
                 object cellValue = _grid.Rows[rowIndex].Cells[columnIndex].Value;
@@ -743,21 +934,29 @@ namespace OsEngine.OsTrader.Gui
 
                 bool isOn = Convert.ToBoolean(cellValue);
 
-                if (columnIndex == 5 && rowIndex < botsCount)
+                object rowTag = _grid.Rows[rowIndex].Tag;
+
+                if (rowTag is BotPanel bot)
                 {
-                    OnOffBot(rowIndex, isOn);
+                    if (columnIndex == 5)
+                    {
+                        OnOffBot(bot, isOn);
+                    }
+                    else if (columnIndex == 6)
+                    {
+                        OnOffEmulatorBot(bot, isOn);
+                    }
                 }
-                else if (columnIndex == 5 && rowIndex == botsCount)
+                else if (ReferenceEquals(rowTag, _nullRowTag))
                 {
-                    OnOffAll(isOn);
-                }
-                else if (columnIndex == 6 && rowIndex < botsCount)
-                {
-                    OnOffEmulatorBot(rowIndex, isOn);
-                }
-                else if (columnIndex == 6 && rowIndex == botsCount)
-                {
-                    OnOffEmulatorAll(isOn);
+                    if (columnIndex == 5)
+                    {
+                        OnOffAll(isOn);
+                    }
+                    else if (columnIndex == 6)
+                    {
+                        OnOffEmulatorAll(isOn);
+                    }
                 }
             }
             catch (Exception ex)
@@ -766,9 +965,8 @@ namespace OsEngine.OsTrader.Gui
             }
         }
 
-        private void OnOffBot(int botNum, bool value)
+        private void OnOffBot(BotPanel bot, bool value)
         {
-            BotPanel bot = _master.PanelsArray[botNum];
             bot.OnOffEventsInTabs = value;
         }
 
@@ -785,9 +983,8 @@ namespace OsEngine.OsTrader.Gui
             }
         }
 
-        private void OnOffEmulatorBot(int botNum, bool value)
+        private void OnOffEmulatorBot(BotPanel bot, bool value)
         {
-            BotPanel bot = _master.PanelsArray[botNum];
             bot.OnOffEmulatorsInTabs = value;
         }
 
@@ -814,26 +1011,68 @@ namespace OsEngine.OsTrader.Gui
 
                 _grid.Rows.Clear();
 
-                for (int i = 0; _master.PanelsArray != null && i < _master.PanelsArray.Count; i++)
-                {
-                    BotPanel bot = _master.PanelsArray[i];
+                // сначала базовая группа, затем пользовательские в порядке создания
 
-                    if (bot == null)
+                List<string> groups = new List<string>();
+                groups.Add(BotPanel.BaseGroupName);
+                groups.AddRange(_master.GetBotsGroups());
+
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    string groupName = groups[i];
+
+                    List<BotPanel> botsInGroup = new List<BotPanel>();
+
+                    for (int j = 0; _master.PanelsArray != null && j < _master.PanelsArray.Count; j++)
+                    {
+                        BotPanel bot = _master.PanelsArray[j];
+
+                        if (bot == null)
+                        {
+                            continue;
+                        }
+
+                        string botGroup = bot.BotGroup;
+
+                        if (string.IsNullOrEmpty(botGroup))
+                        {
+                            botGroup = BotPanel.BaseGroupName;
+                        }
+
+                        if (botGroup == groupName)
+                        {
+                            botsInGroup.Add(bot);
+                        }
+                    }
+
+                    if (groupName == BotPanel.BaseGroupName
+                        && botsInGroup.Count == 0)
+                    { // пустую базовую группу не показываем
+                        continue;
+                    }
+
+                    bool isCollapsed = _master.IsGroupCollapsed(groupName);
+
+                    _grid.Rows.Add(GetGroupRow(groupName, botsInGroup.Count, isCollapsed));
+
+                    if (isCollapsed == true)
                     {
                         continue;
                     }
 
-                    _grid.Rows.Add(GetRow(bot, i + 1));
+                    for (int j = 0; j < botsInGroup.Count; j++)
+                    {
+                        _grid.Rows.Add(GetRow(botsInGroup[j], j + 1));
+                    }
                 }
 
-                _grid.Rows.Add(GetNullRow());
+                DataGridViewRow nullRow = GetNullRow();
+                nullRow.Tag = _nullRowTag;
+                _grid.Rows.Add(nullRow);
 
-                _grid.Rows.Add(GetAddRow());
-
-                if (_master._startProgram == StartProgram.IsOsTrader)
-                {
-                    _grid.Rows.Add(GetLoadRow());
-                }
+                DataGridViewRow addRow = GetAddRow();
+                addRow.Tag = _addRowTag;
+                _grid.Rows.Add(addRow);
 
                 if (lastShowRowIndex > 0 &&
                     lastShowRowIndex < _grid.Rows.Count)
@@ -852,6 +1091,45 @@ namespace OsEngine.OsTrader.Gui
             {
                 _master.SendNewLogMessage(error.ToString(), Logging.LogMessageType.Error);
             }
+        }
+
+        private DataGridViewRow GetGroupRow(string groupName, int botsCount, bool isCollapsed)
+        {
+            DataGridViewRow row = new DataGridViewRow();
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+            row.Cells[0].Value = isCollapsed ? "+" : "–";
+
+            row.Cells.Add(new DataGridViewTextBoxCell());
+
+            if (groupName == BotPanel.BaseGroupName)
+            {
+                row.Cells[1].Value = OsLocalization.Trader.Label778 + " (" + botsCount + ")";
+            }
+            else
+            {
+                row.Cells[1].Value = groupName + " (" + botsCount + ")";
+            }
+
+            for (int i = 2; i <= 10; i++)
+            {
+                row.Cells.Add(new DataGridViewTextBoxCell());
+            }
+
+            // пустая строка в ячейках чек-боксов, чтобы DataGridView не вызывал DataError (FormatException) при форматировании null
+
+            row.Cells[5].Value = "";
+            row.Cells[6].Value = "";
+
+            for (int i = 0; i < row.Cells.Count; i++)
+            {
+                row.Cells[i].Style.BackColor = Themes.ThemeManager.GetColorWinForms("GridButtonBackColor");
+            }
+
+            row.ReadOnly = true;
+            row.Tag = groupName;
+
+            return row;
         }
 
         private DataGridViewRow GetRow(BotPanel bot, int num)
@@ -926,6 +1204,8 @@ colum10.HeaderText = "Action";
                     row.Cells[i].Style.BackColor = Themes.ThemeManager.GetColorWinForms("GridRowAltColor");
                 }
             }
+
+            row.Tag = bot;
 
             return row;
         }
@@ -1019,33 +1299,7 @@ colum9.HeaderText = "Journal";
             row.Cells.Add(new DataGridViewButtonCell());
             row.Cells[9].Value = OsLocalization.Trader.Label38; //"Add New...";
             row.Cells.Add(new DataGridViewButtonCell());
-
-            if (_master._startProgram != StartProgram.IsOsTrader)
-            {
-                row.Cells[10].Value = OsLocalization.Trader.Label748;  // "Save bots";
-            }
-
-            return row;
-        }
-
-        private DataGridViewRow GetLoadRow()
-        {
-            DataGridViewRow row = new DataGridViewRow();
-
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[5].Value = "";
-            row.Cells.Add(new DataGridViewTextBoxCell());
-            row.Cells[6].Value = "";
-            row.Cells.Add(new DataGridViewButtonCell());
-            row.Cells.Add(new DataGridViewButtonCell());
-            row.Cells.Add(new DataGridViewButtonCell());
-            row.Cells.Add(new DataGridViewButtonCell());
-            row.Cells[10].Value = OsLocalization.Trader.Label749;  // "Load bots";
+            row.Cells[10].Value = OsLocalization.Trader.Label762;  // "Migration";
 
             return row;
         }
@@ -1117,7 +1371,7 @@ colum9.HeaderText = "Journal";
                     return;
                 }
 
-                for (int i = 0; i < _master.PanelsArray.Count && i < _grid.Rows.Count; i++)
+                for (int i = 0; i < _grid.Rows.Count; i++)
                 {
                     if (_lastTimeClick.AddSeconds(2) > DateTime.Now)
                     {
@@ -1126,7 +1380,12 @@ colum9.HeaderText = "Journal";
 
                     DataGridViewRow row = _grid.Rows[i];
 
-                    BotPanel bot = _master.PanelsArray[i];
+                    if ((row.Tag is BotPanel) == false)
+                    {
+                        continue;
+                    }
+
+                    BotPanel bot = (BotPanel)row.Tag;
 
                     if (bot == null)
                     {
@@ -1183,9 +1442,9 @@ colum9.HeaderText = "Journal";
                     return;
                 }
 
-                int botNum = 0;
-
                 bool findTheBot = false;
+
+                BotPanel foundBot = null;
 
                 for (int i = 0; i < _master.PanelsArray.Count; i++)
                 {
@@ -1197,7 +1456,7 @@ colum9.HeaderText = "Journal";
                         {
                             if (curRobot.TabsSimple[i2].TabName == botTabName)
                             {
-                                botNum = i;
+                                foundBot = curRobot;
                                 findTheBot = true;
                                 break;
                             }
@@ -1214,7 +1473,7 @@ colum9.HeaderText = "Journal";
                             {
                                 if (screener.Tabs[j].TabName == botTabName)
                                 {
-                                    botNum = i;
+                                    foundBot = curRobot;
                                     findTheBot = true;
                                     break;
                                 }
@@ -1232,13 +1491,13 @@ colum9.HeaderText = "Journal";
                             {
                                 if (pair.Pairs[j].Tab1.TabName == botTabName)
                                 {
-                                    botNum = i;
+                                    foundBot = curRobot;
                                     findTheBot = true;
                                     break;
                                 }
                                 if (pair.Pairs[j].Tab2.TabName == botTabName)
                                 {
-                                    botNum = i;
+                                    foundBot = curRobot;
                                     findTheBot = true;
                                     break;
                                 }
@@ -1254,7 +1513,14 @@ colum9.HeaderText = "Journal";
 
                 if (findTheBot)
                 {
-                    _rowToPaintInOpenPoses = botNum;
+                    int rowNum = GetGridRowIndexByBot(foundBot);
+
+                    if (rowNum == -1)
+                    { // робот в свёрнутой группе - не подсвечиваем
+                        return;
+                    }
+
+                    _rowToPaintInOpenPoses = rowNum;
                     Task.Run(PaintPos);
                 }
             }
@@ -1265,6 +1531,24 @@ colum9.HeaderText = "Journal";
         }
 
         private int _rowToPaintInOpenPoses = -1;
+
+        private int GetGridRowIndexByBot(BotPanel bot)
+        {
+            if (_grid.InvokeRequired)
+            {
+                return (int)_grid.Invoke(new Func<BotPanel, int>(GetGridRowIndexByBot), bot);
+            }
+
+            for (int i = 0; i < _grid.Rows.Count; i++)
+            {
+                if (ReferenceEquals(_grid.Rows[i].Tag, bot))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
 
         System.Drawing.Color _lastBackColor;
 

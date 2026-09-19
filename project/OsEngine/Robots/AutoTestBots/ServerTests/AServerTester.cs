@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Threading;
 using OsEngine.OsTrader.Panels.Attributes;
 using OsEngine.Language;
+using OsEngine.OsTrader.Panels.Tab;
 
 namespace OsEngine.Robots.AutoTestBots.ServerTests
 {
@@ -193,6 +194,35 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
             O12_Volume = CreateParameter("Volume. orders test 12", 0.01m, 1, 1, 1, "O12");
             O12_CountOrders = CreateParameter("Count orders test 12", 5, 1, 1, 1, "O12");
 
+            StrategyParameterButton buttonOrdersTest13 = CreateParameterButton("Start test orders 13", "O13");
+            buttonOrdersTest13.UserClickOnButtonEvent += ButtonOrdersTest13_UserClickOnButtonEvent;
+            O13_PortfolioName = CreateParameter("Portfolio. orders test 13", "BinanceFutures", "O13");
+            O13_SecurityName = CreateParameter("Sec name. orders test 13", "ETHUSDT", "O13");
+            O13_SecurityClass = CreateParameter("Sec class. orders test 13", "Futures", "O13");
+            O13_Volume = CreateParameter("Volume. orders test 13", 0.01m, 1, 1, 1, "O13");
+
+            StrategyParameterButton buttonOrdersTest14 = CreateParameterButton("Start test orders 14", "O14");
+            buttonOrdersTest14.UserClickOnButtonEvent += ButtonOrdersTest14_UserClickOnButtonEvent;
+            O14_PortfolioName = CreateParameter("Portfolio. orders test 14", "BinanceFutures", "O14");
+            O14_SecurityName = CreateParameter("Sec name. orders test 14", "ETHUSDT", "O14");
+            O14_SecurityClass = CreateParameter("Sec class. orders test 14", "Futures", "O14");
+            O14_Volume = CreateParameter("Volume. orders test 14", 0.01m, 1, 1, 1, "O14");
+            O14_CountOrders = CreateParameter("Count orders test 14", 20, 1, 1, 1, "O14");
+
+            StrategyParameterButton buttonOrdersTest15 = CreateParameterButton("Start test orders 15", "O15");
+            buttonOrdersTest15.UserClickOnButtonEvent += ButtonOrdersTest15_UserClickOnButtonEvent;
+            O15_PortfolioName = CreateParameter("Portfolio. orders test 15", "BinanceFutures", "O15");
+            O15_SecurityName = CreateParameter("Sec name. orders test 15", "ETHUSDT", "O15");
+            O15_SecurityClass = CreateParameter("Sec class. orders test 15", "Futures", "O15");
+            O15_Volume = CreateParameter("Volume. orders test 15", 0.01m, 1, 1, 1, "O15");
+
+            StrategyParameterButton buttonOrdersTest16 = CreateParameterButton("Start test orders 16", "O16");
+            buttonOrdersTest16.UserClickOnButtonEvent += ButtonOrdersTest16_UserClickOnButtonEvent;
+            O16_PortfolioName = CreateParameter("Portfolio. orders test 16", "BinanceFutures", "O16");
+            O16_SecurityName = CreateParameter("Sec name. orders test 16", "ETHUSDT", "O16");
+            O16_SecurityClass = CreateParameter("Sec class. orders test 16", "Futures", "O16");
+            O16_Volume = CreateParameter("Volume. orders test 16", 0.01m, 1, 1, 1, "O16");
+
 
             StrategyParameterButton buttonPortfolioTest1 = CreateParameterButton("Start test portfolio 1", "P1");
             buttonPortfolioTest1.UserClickOnButtonEvent += ButtonPortfolioTest1_UserClickOnButtonEvent;
@@ -201,6 +231,78 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
             P1_SecurityClass = CreateParameter("Sec class.  portfolio 1", "Futures", "P1");
             P1_AssetInPortfolioName = CreateParameter("Asset In portfolio 1", "ETH", "P1");
             P1_Volume = CreateParameter("Volume.  portfolio 1", 0.01m, 1, 1, 1, "P1");
+
+            StrategyParameterButton buttonBotTabSimple1 = CreateParameterButton("Start test BotTabSimple 1", "B1");
+            buttonBotTabSimple1.UserClickOnButtonEvent += ButtonBotTabSimple1_UserClickOnButtonEvent;
+            B1_PortfolioName = CreateParameter("Portfolio. BotTabSimple 1", "BinanceFutures", "B1");
+            B1_SecurityName = CreateParameter("Sec name. BotTabSimple 1", "ETHUSDT", "B1");
+            B1_SecurityClass = CreateParameter("Sec class. BotTabSimple 1", "Futures", "B1");
+            B1_Volume = CreateParameter("Volume. BotTabSimple 1", 0.01m, 1, 1, 1, "B1");
+            B1_Attempts = CreateParameter("Attempts B1", 4, 1, 10, 1, "B1");
+            B1_CleanupTimeoutSec = CreateParameter("Cleanup timeout sec B1", 120, 1, 600, 1, "B1");
+
+            StrategyParameterButton buttonBotTabSimple1Description = CreateParameterButton("Description BotTabSimple 1", "B1");
+            buttonBotTabSimple1Description.UserClickOnButtonEvent += ButtonBotTabSimple1Description_UserClickOnButtonEvent;
+
+            StrategyParameterButton buttonBotTabSimple2 = CreateParameterButton("Start test BotTabSimple 2", "B2");
+            buttonBotTabSimple2.UserClickOnButtonEvent += ButtonBotTabSimple2_UserClickOnButtonEvent;
+            B2_PortfolioName = CreateParameter("Portfolio. BotTabSimple 2", "BinanceFutures", "B2");
+            B2_SecurityName = CreateParameter("Sec name. BotTabSimple 2", "ETHUSDT", "B2");
+            B2_SecurityClass = CreateParameter("Sec class. BotTabSimple 2", "Futures", "B2");
+            B2_Volume = CreateParameter("Volume. BotTabSimple 2", 0.01m, 1, 1, 1, "B2");
+            B2_Attempts = CreateParameter("Attempts B2", 4, 1, 10, 1, "B2");
+            B2_CleanupTimeoutSec = CreateParameter("Cleanup timeout sec B2", 120, 1, 600, 1, "B2");
+
+            StrategyParameterButton buttonBotTabSimple2Description = CreateParameterButton("Description BotTabSimple 2", "B2");
+            buttonBotTabSimple2Description.UserClickOnButtonEvent += ButtonBotTabSimple2Description_UserClickOnButtonEvent;
+
+            StrategyParameterButton buttonBotTabSimple3 = CreateParameterButton("Start test BotTabSimple 3", "B3");
+            buttonBotTabSimple3.UserClickOnButtonEvent += ButtonBotTabSimple3_UserClickOnButtonEvent;
+            B3_PortfolioName = CreateParameter("Portfolio. BotTabSimple 3", "BinanceFutures", "B3");
+            B3_SecurityName = CreateParameter("Sec name. BotTabSimple 3", "ETHUSDT", "B3");
+            B3_SecurityClass = CreateParameter("Sec class. BotTabSimple 3", "Futures", "B3");
+            B3_Volume = CreateParameter("Volume. BotTabSimple 3", 0.01m, 1, 1, 1, "B3");
+            B3_Attempts = CreateParameter("Attempts B3", 4, 1, 10, 1, "B3");
+            B3_CleanupTimeoutSec = CreateParameter("Cleanup timeout sec B3", 120, 1, 600, 1, "B3");
+
+            StrategyParameterButton buttonBotTabSimple3Description = CreateParameterButton("Description BotTabSimple 3", "B3");
+            buttonBotTabSimple3Description.UserClickOnButtonEvent += ButtonBotTabSimple3Description_UserClickOnButtonEvent;
+
+            StrategyParameterButton buttonBotTabSimple4 = CreateParameterButton("Start test BotTabSimple 4", "B4");
+            buttonBotTabSimple4.UserClickOnButtonEvent += ButtonBotTabSimple4_UserClickOnButtonEvent;
+            B4_PortfolioName = CreateParameter("Portfolio. BotTabSimple 4", "BinanceFutures", "B4");
+            B4_SecurityName = CreateParameter("Sec name. BotTabSimple 4", "ETHUSDT", "B4");
+            B4_SecurityClass = CreateParameter("Sec class. BotTabSimple 4", "Futures", "B4");
+            B4_Volume = CreateParameter("Volume. BotTabSimple 4", 0.01m, 1, 1, 1, "B4");
+            B4_Attempts = CreateParameter("Attempts B4", 4, 1, 10, 1, "B4");
+            B4_CleanupTimeoutSec = CreateParameter("Cleanup timeout sec B4", 120, 1, 600, 1, "B4");
+
+            StrategyParameterButton buttonBotTabSimple4Description = CreateParameterButton("Description BotTabSimple 4", "B4");
+            buttonBotTabSimple4Description.UserClickOnButtonEvent += ButtonBotTabSimple4Description_UserClickOnButtonEvent;
+
+            StrategyParameterButton buttonBotTabSimple5 = CreateParameterButton("Start test BotTabSimple 5", "B5");
+            buttonBotTabSimple5.UserClickOnButtonEvent += ButtonBotTabSimple5_UserClickOnButtonEvent;
+            B5_PortfolioName = CreateParameter("Portfolio. BotTabSimple 5", "BinanceFutures", "B5");
+            B5_SecurityName = CreateParameter("Sec name. BotTabSimple 5", "ETHUSDT", "B5");
+            B5_SecurityClass = CreateParameter("Sec class. BotTabSimple 5", "Futures", "B5");
+            B5_Volume = CreateParameter("Volume. BotTabSimple 5", 0.01m, 1, 1, 1, "B5");
+            B5_FarOffsetTicks = CreateParameter("Far offset ticks B5", 100, 1, 10000, 1, "B5");
+            B5_CleanupTimeoutSec = CreateParameter("Cleanup timeout sec B5", 120, 1, 600, 1, "B5");
+
+            StrategyParameterButton buttonBotTabSimple5Description = CreateParameterButton("Description BotTabSimple 5", "B5");
+            buttonBotTabSimple5Description.UserClickOnButtonEvent += ButtonBotTabSimple5Description_UserClickOnButtonEvent;
+
+            StrategyParameterButton buttonBotTabSimple6 = CreateParameterButton("Start test BotTabSimple 6", "B6");
+            buttonBotTabSimple6.UserClickOnButtonEvent += ButtonBotTabSimple6_UserClickOnButtonEvent;
+            B6_PortfolioName = CreateParameter("Portfolio. BotTabSimple 6", "BinanceFutures", "B6");
+            B6_SecurityName = CreateParameter("Sec name. BotTabSimple 6", "ETHUSDT", "B6");
+            B6_SecurityClass = CreateParameter("Sec class. BotTabSimple 6", "Futures", "B6");
+            B6_Volume = CreateParameter("Volume. BotTabSimple 6", 0.01m, 1, 1, 1, "B6");
+            B6_FarOffsetTicks = CreateParameter("Far offset ticks B6", 100, 1, 10000, 1, "B6");
+            B6_CleanupTimeoutSec = CreateParameter("Cleanup timeout sec B6", 120, 1, 600, 1, "B6");
+
+            StrategyParameterButton buttonBotTabSimple6Description = CreateParameterButton("Description BotTabSimple 6", "B6");
+            buttonBotTabSimple6Description.UserClickOnButtonEvent += ButtonBotTabSimple6Description_UserClickOnButtonEvent;
 
             Description = OsLocalization.Description.DescriptionLabel125;
         }
@@ -325,11 +427,74 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
         StrategyParameterDecimal O12_Volume;
         StrategyParameterInt O12_CountOrders;
 
+        StrategyParameterString O13_SecurityName;
+        StrategyParameterString O13_SecurityClass;
+        StrategyParameterString O13_PortfolioName;
+        StrategyParameterDecimal O13_Volume;
+
+        StrategyParameterString O14_SecurityName;
+        StrategyParameterString O14_SecurityClass;
+        StrategyParameterString O14_PortfolioName;
+        StrategyParameterDecimal O14_Volume;
+        StrategyParameterInt O14_CountOrders;
+
+        StrategyParameterString O15_SecurityName;
+        StrategyParameterString O15_SecurityClass;
+        StrategyParameterString O15_PortfolioName;
+        StrategyParameterDecimal O15_Volume;
+
+        StrategyParameterString O16_SecurityName;
+        StrategyParameterString O16_SecurityClass;
+        StrategyParameterString O16_PortfolioName;
+        StrategyParameterDecimal O16_Volume;
+
         StrategyParameterString P1_SecurityName;
         StrategyParameterString P1_SecurityClass;
         StrategyParameterString P1_AssetInPortfolioName;
         StrategyParameterString P1_PortfolioName;
         StrategyParameterDecimal P1_Volume;
+
+        StrategyParameterString B1_PortfolioName;
+        StrategyParameterString B1_SecurityName;
+        StrategyParameterString B1_SecurityClass;
+        StrategyParameterDecimal B1_Volume;
+        StrategyParameterInt B1_Attempts;
+        StrategyParameterInt B1_CleanupTimeoutSec;
+
+        StrategyParameterString B2_PortfolioName;
+        StrategyParameterString B2_SecurityName;
+        StrategyParameterString B2_SecurityClass;
+        StrategyParameterDecimal B2_Volume;
+        StrategyParameterInt B2_Attempts;
+        StrategyParameterInt B2_CleanupTimeoutSec;
+
+        StrategyParameterString B3_PortfolioName;
+        StrategyParameterString B3_SecurityName;
+        StrategyParameterString B3_SecurityClass;
+        StrategyParameterDecimal B3_Volume;
+        StrategyParameterInt B3_Attempts;
+        StrategyParameterInt B3_CleanupTimeoutSec;
+
+        StrategyParameterString B4_PortfolioName;
+        StrategyParameterString B4_SecurityName;
+        StrategyParameterString B4_SecurityClass;
+        StrategyParameterDecimal B4_Volume;
+        StrategyParameterInt B4_Attempts;
+        StrategyParameterInt B4_CleanupTimeoutSec;
+
+        StrategyParameterString B5_PortfolioName;
+        StrategyParameterString B5_SecurityName;
+        StrategyParameterString B5_SecurityClass;
+        StrategyParameterDecimal B5_Volume;
+        StrategyParameterInt B5_FarOffsetTicks;
+        StrategyParameterInt B5_CleanupTimeoutSec;
+
+        StrategyParameterString B6_PortfolioName;
+        StrategyParameterString B6_SecurityName;
+        StrategyParameterString B6_SecurityClass;
+        StrategyParameterDecimal B6_Volume;
+        StrategyParameterInt B6_FarOffsetTicks;
+        StrategyParameterInt B6_CleanupTimeoutSec;
 
 
         #endregion
@@ -684,6 +849,58 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
             worker.Start();
         }
 
+        private void ButtonOrdersTest13_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.Order_13;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonOrdersTest14_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.Order_14;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonOrdersTest15_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.Order_15;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonOrdersTest16_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.Order_16;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
         private void ButtonPortfolioTest1_UserClickOnButtonEvent()
         {
             if (_threadIsWork == true)
@@ -695,6 +912,126 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
 
             Thread worker = new Thread(WorkerThreadArea);
             worker.Start();
+        }
+
+        private void ButtonBotTabSimple1_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.BotTabSimple_1;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonBotTabSimple2_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.BotTabSimple_2;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonBotTabSimple3_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.BotTabSimple_3;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonBotTabSimple4_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.BotTabSimple_4;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonBotTabSimple5_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.BotTabSimple_5;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonBotTabSimple6_UserClickOnButtonEvent()
+        {
+            if (_threadIsWork == true)
+            {
+                return;
+            }
+
+            CurTestType = ServerTestType.BotTabSimple_6;
+
+            Thread worker = new Thread(WorkerThreadArea);
+            worker.Start();
+        }
+
+        private void ButtonBotTabSimple1Description_UserClickOnButtonEvent()
+        {
+            WServerTesterDescriptionUi ui = new WServerTesterDescriptionUi(
+                "BotTabSimple_1_OpenStopLimit", BotTabSimple_1_OpenStopLimit.TestDescription);
+            ui.ShowDialog();
+        }
+
+        private void ButtonBotTabSimple2Description_UserClickOnButtonEvent()
+        {
+            WServerTesterDescriptionUi ui = new WServerTesterDescriptionUi(
+                "BotTabSimple_2_OpenStopMarket", BotTabSimple_2_OpenStopMarket.TestDescription);
+            ui.ShowDialog();
+        }
+
+        private void ButtonBotTabSimple3Description_UserClickOnButtonEvent()
+        {
+            WServerTesterDescriptionUi ui = new WServerTesterDescriptionUi(
+                "BotTabSimple_3_CloseAtStop", BotTabSimple_3_CloseAtStop.TestDescription);
+            ui.ShowDialog();
+        }
+
+        private void ButtonBotTabSimple4Description_UserClickOnButtonEvent()
+        {
+            WServerTesterDescriptionUi ui = new WServerTesterDescriptionUi(
+                "BotTabSimple_4_ToPosition", BotTabSimple_4_ToPosition.TestDescription);
+            ui.ShowDialog();
+        }
+
+        private void ButtonBotTabSimple5Description_UserClickOnButtonEvent()
+        {
+            WServerTesterDescriptionUi ui = new WServerTesterDescriptionUi(
+                "BotTabSimple_5_Cancel", BotTabSimple_5_Cancel.TestDescription);
+            ui.ShowDialog();
+        }
+
+        private void ButtonBotTabSimple6Description_UserClickOnButtonEvent()
+        {
+            WServerTesterDescriptionUi ui = new WServerTesterDescriptionUi(
+                "BotTabSimple_6_AutoRestCancel", BotTabSimple_6_AutoRestCancel.TestDescription);
+            ui.ShowDialog();
         }
 
         private ServerTestType CurTestType;
@@ -1073,6 +1410,63 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
                         SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
                         tester.Start();
                     }
+                    else if (CurTestType == ServerTestType.Order_13)
+                    {
+                        Orders_13_StopOrders tester = new Orders_13_StopOrders();
+                        tester.SecurityNameToTrade = O13_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = O13_SecurityClass.ValueString;
+                        tester.PortfolioName = O13_PortfolioName.ValueString;
+                        tester.VolumeToTrade = O13_Volume.ValueDecimal;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.Order_14)
+                    {
+                        Orders_14_StopLimitPlaceCancel tester = new Orders_14_StopLimitPlaceCancel();
+                        tester.SecurityNameToTrade = O14_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = O14_SecurityClass.ValueString;
+                        tester.PortfolioName = O14_PortfolioName.ValueString;
+                        tester.VolumeToTrade = O14_Volume.ValueDecimal;
+                        tester.CountOrders = O14_CountOrders.ValueInt;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.Order_15)
+                    {
+                        Orders_15_StopLimitRequestOnReconnect tester = new Orders_15_StopLimitRequestOnReconnect();
+                        tester.SecurityNameToTrade = O15_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = O15_SecurityClass.ValueString;
+                        tester.PortfolioName = O15_PortfolioName.ValueString;
+                        tester.VolumeToTrade = O15_Volume.ValueDecimal;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.Order_16)
+                    {
+                        Orders_16_StopTriggerOnReconnect tester = new Orders_16_StopTriggerOnReconnect();
+                        tester.SecurityNameToTrade = O16_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = O16_SecurityClass.ValueString;
+                        tester.PortfolioName = O16_PortfolioName.ValueString;
+                        tester.VolumeToTrade = O16_Volume.ValueDecimal;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
                     else if (CurTestType == ServerTestType.Portfolio_1)
                     {
                         Portfolio_1_Validation tester = new Portfolio_1_Validation();
@@ -1081,6 +1475,108 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
                         tester.PortfolioName = P1_PortfolioName.ValueString;
                         tester.VolumeToTrade = P1_Volume.ValueDecimal;
                         tester.AssetInPortfolio = P1_AssetInPortfolioName.ValueString;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.BotTabSimple_1)
+                    {
+                        BotTabSimple_1_OpenStopLimit tester = new BotTabSimple_1_OpenStopLimit();
+                        tester.SecurityNameToTrade = B1_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = B1_SecurityClass.ValueString;
+                        tester.PortfolioName = B1_PortfolioName.ValueString;
+                        tester.VolumeToTrade = B1_Volume.ValueDecimal;
+                        tester.Attempts = B1_Attempts.ValueInt;
+                        tester.CleanupTimeoutSeconds = B1_CleanupTimeoutSec.ValueInt;
+                        tester.StartProgram = StartProgram;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.BotTabSimple_2)
+                    {
+                        BotTabSimple_2_OpenStopMarket tester = new BotTabSimple_2_OpenStopMarket();
+                        tester.SecurityNameToTrade = B2_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = B2_SecurityClass.ValueString;
+                        tester.PortfolioName = B2_PortfolioName.ValueString;
+                        tester.VolumeToTrade = B2_Volume.ValueDecimal;
+                        tester.Attempts = B2_Attempts.ValueInt;
+                        tester.CleanupTimeoutSeconds = B2_CleanupTimeoutSec.ValueInt;
+                        tester.StartProgram = StartProgram;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.BotTabSimple_3)
+                    {
+                        BotTabSimple_3_CloseAtStop tester = new BotTabSimple_3_CloseAtStop();
+                        tester.SecurityNameToTrade = B3_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = B3_SecurityClass.ValueString;
+                        tester.PortfolioName = B3_PortfolioName.ValueString;
+                        tester.VolumeToTrade = B3_Volume.ValueDecimal;
+                        tester.Attempts = B3_Attempts.ValueInt;
+                        tester.CleanupTimeoutSeconds = B3_CleanupTimeoutSec.ValueInt;
+                        tester.StartProgram = StartProgram;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.BotTabSimple_4)
+                    {
+                        BotTabSimple_4_ToPosition tester = new BotTabSimple_4_ToPosition();
+                        tester.SecurityNameToTrade = B4_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = B4_SecurityClass.ValueString;
+                        tester.PortfolioName = B4_PortfolioName.ValueString;
+                        tester.VolumeToTrade = B4_Volume.ValueDecimal;
+                        tester.Attempts = B4_Attempts.ValueInt;
+                        tester.CleanupTimeoutSeconds = B4_CleanupTimeoutSec.ValueInt;
+                        tester.StartProgram = StartProgram;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.BotTabSimple_5)
+                    {
+                        BotTabSimple_5_Cancel tester = new BotTabSimple_5_Cancel();
+                        tester.SecurityNameToTrade = B5_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = B5_SecurityClass.ValueString;
+                        tester.PortfolioName = B5_PortfolioName.ValueString;
+                        tester.VolumeToTrade = B5_Volume.ValueDecimal;
+                        tester.FarOffsetTicks = B5_FarOffsetTicks.ValueInt;
+                        tester.CleanupTimeoutSeconds = B5_CleanupTimeoutSec.ValueInt;
+                        tester.StartProgram = StartProgram;
+                        tester.LogMessage += SendNewLogMessage;
+                        tester.TestEndEvent += Tester_TestEndEvent;
+                        _testers.Add(tester);
+                        tester.Server = (AServer)servers[i];
+                        SendNewLogMessage("Tests started " + tester.GetType().Name + " " + servers[i].ServerType.ToString(), LogMessageType.Error);
+                        tester.Start();
+                    }
+                    else if (CurTestType == ServerTestType.BotTabSimple_6)
+                    {
+                        BotTabSimple_6_AutoRestCancel tester = new BotTabSimple_6_AutoRestCancel();
+                        tester.SecurityNameToTrade = B6_SecurityName.ValueString;
+                        tester.SecurityClassToTrade = B6_SecurityClass.ValueString;
+                        tester.PortfolioName = B6_PortfolioName.ValueString;
+                        tester.VolumeToTrade = B6_Volume.ValueDecimal;
+                        tester.FarOffsetTicks = B6_FarOffsetTicks.ValueInt;
+                        tester.CleanupTimeoutSeconds = B6_CleanupTimeoutSec.ValueInt;
+                        tester.StartProgram = StartProgram;
                         tester.LogMessage += SendNewLogMessage;
                         tester.TestEndEvent += Tester_TestEndEvent;
                         _testers.Add(tester);
@@ -1165,7 +1661,17 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
         Order_10,
         Order_11,
         Order_12,
+        Order_13,
+        Order_14,
+        Order_15,
+        Order_16,
         Portfolio_1,
+        BotTabSimple_1,
+        BotTabSimple_2,
+        BotTabSimple_3,
+        BotTabSimple_4,
+        BotTabSimple_5,
+        BotTabSimple_6,
     }
 
     public abstract class AServerTester
@@ -1260,7 +1766,15 @@ namespace OsEngine.Robots.AutoTestBots.ServerTests
 
         public List<string> _errors = new List<string>();
 
-        public event Action<string, LogMessageType> LogMessage { add { } remove { } }
+        public event Action<string, LogMessageType> LogMessage;
+
+        public void SendLogMessage(string message, LogMessageType logType)
+        {
+            if (LogMessage != null)
+            {
+                LogMessage(message, logType);
+            }
+        }
 
         public void TestEnded()
         {

@@ -38,12 +38,12 @@ cd Tests/McpTestStand/OsEngine.McpApi.TestStand/bin/Debug/net10.0
 # (1 Protocol, 2 Logs, 3 Settings, 4 Config, 5 ServerManagement,
 #  6 ServerInstance, 7 SSE, 8 Errors, 9 WikiRobots, 10 WikiIndicators,
 #  11 WikiSecurities, 12 WikiDividends, 13 Data, 14 Tester, 15 Terminal,
-#  16 SystemLoad, 17 ComparePositions, 18 Proxy, 19 Optimizer)
+#  16 SystemLoad, 17 ComparePositions, 18 Proxy, 19 Optimizer, 20 Encryption)
 ./OsEngine.McpApi.TestStand.exe --module Tester
 ./OsEngine.McpApi.TestStand.exe --module 5,6
 ```
 
-Цель стенда: **164/164 passed**.
+Цель стенда: **196/196 passed** (`--transport v2`) и **187/187 passed** (`--transport v1`).
 
 **Важно:** тестовый стенд MCP API (`OsEngine.McpApi.TestStand.exe`) запускать только с **явного разрешения пользователя**.
 
@@ -67,8 +67,9 @@ cd Tests/McpTestStand/OsEngine.McpApi.TestStand/bin/Debug/net10.0
 
 Если меняешь:
 
-- MCP API → `CONTEXT_MCP.md`, `TempContext/CONTEXT_MCP_API_DEVELOPMENT.md`.
-- Сценарии MCP → `CONTEXT_MCP_SCENARIO.md`.
+- MCP API (V2, рекомендуемая) → `CONTEXT_MCP_V2.md`, `TempContext/CONTEXT_MCP_API_DEVELOPMENT.md`.
+- MCP API (V1, легаси) → `CONTEXT_MCP_V1.md`.
+- Сценарии MCP → `CONTEXT_MCP_SCENARIO_V2.md` (V2) / `CONTEXT_MCP_SCENARIO_V1.md` (V1, легаси).
 - Соглашения → `CONTEXT_CODING_GUIDELINES.md`.
 - Карту проекта → `CONTEXT.md`.
 - Правила агентов → этот файл.

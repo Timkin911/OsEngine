@@ -53,7 +53,7 @@ namespace OsEngine.Market.Servers.BCS
         {
             get { return false; }
         }
-               
+
         public bool DataFeedTf1MinuteCanLoad
         {
             get { return true; }
@@ -117,6 +117,11 @@ namespace OsEngine.Market.Servers.BCS
             get { return true; }
         }
 
+        public bool StopOrdersIsSupport
+        {
+            get { return false; }
+        }
+
         public int WaitTimeSecondsAfterFirstStartToSendOrders
         {
             get { return 10; }
@@ -154,7 +159,10 @@ namespace OsEngine.Market.Servers.BCS
                 string[] values = new string[]
                 {
                     "RUB",
-                    "CNY"
+                    "CNY",
+                    "USD",
+                    "EUR",
+                    "HKD"
                  };
 
                 return values;

@@ -14,7 +14,6 @@ using OsEngine.Market;
 using OsEngine.Market.Servers;
 using OsEngine.Market.Servers.Tester;
 using OsEngine.OsTrader.Panels.Tab;
-using OsEngine.OsTrader.Panels.Tab.SyntheticBondTab;
 using OsEngine.OsTrader.RiskManager;
 using System;
 using System.Collections.Generic;
@@ -71,12 +70,7 @@ namespace OsEngine.OsTrader.Panels
         /// <summary>
         /// source for options trading
         /// </summary>
-        Options,
-
-        /// <summary>
-        /// source for trading synthetic bonds
-        /// </summary>
-        SyntheticBond
+        Options
     }
 
     /// <summary>
@@ -290,6 +284,16 @@ namespace OsEngine.OsTrader.Panels
         public string PublicName;
 
         /// <summary>
+        /// internal key of the base robot group
+        /// </summary>
+        public const string BaseGroupName = "Base";
+
+        /// <summary>
+        /// the group to which the robot belongs in the bots list. Base group by default
+        /// </summary>
+        public string BotGroup = BaseGroupName;
+
+        /// <summary>
         /// the program that launched the robot. Tester  Robot  Optimizer
         /// </summary>
         public StartProgram StartProgram;
@@ -344,18 +348,6 @@ namespace OsEngine.OsTrader.Panels
                 else if (_botTabs[i].TabType == BotTabType.Polygon)
                 {
                     List<Journal.Journal> journalsOnTab = ((BotTabPolygon)_botTabs[i]).GetJournals();
-
-                    if (journalsOnTab == null ||
-                        journalsOnTab.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    journals.AddRange(journalsOnTab);
-                }
-                else if (_botTabs[i].TabType == BotTabType.SyntheticBond)
-                {
-                    List<Journal.Journal> journalsOnTab = ((BotTabSyntheticBond)_botTabs[i]).GetJournals();
 
                     if (journalsOnTab == null ||
                         journalsOnTab.Count == 0)
@@ -2023,19 +2015,6 @@ position => position.State != PositionStateType.OpeningFail
             }
         }
 
-        /// <summary>
-        /// synthetic bond tabs
-        /// </summary>
-        public List<BotTabSyntheticBond> TabsSyntheticBond
-        {
-            get
-            {
-                return _botTabs != null
-                    ? _botTabs.OfType<BotTabSyntheticBond>().ToList()
-                    : new List<BotTabSyntheticBond>();
-            }
-        }
-
         public DateTime TimeServer
         {
             get
@@ -2181,13 +2160,6 @@ position => position.State != PositionStateType.OpeningFail
                 else if (tabType == BotTabType.Options)
                 {
                     newTab = new BotTabOptions(nameTab, StartProgram);
-                }
-                else if (tabType == BotTabType.SyntheticBond)
-                {
-                    newTab = new BotTabSyntheticBond(nameTab, StartProgram);
-
-                    ((BotTabSyntheticBond)newTab).UserSelectActionEvent += UserSetPositionAction;
-                    ((BotTabSyntheticBond)newTab).NewTabCreateEvent += (tab) => NewTabCreateEvent?.Invoke();
                 }
                 else
                 {
@@ -2437,10 +2409,6 @@ position => position.State != PositionStateType.OpeningFail
                     else if (ActiveTab.TabType == BotTabType.News)
                     {
                         ((BotTabNews)ActiveTab).StartPaint(_hostChart);
-                    }
-                    else if (ActiveTab.TabType == BotTabType.SyntheticBond)
-                    {
-                        ((BotTabSyntheticBond)ActiveTab).StartPaint(_hostChart, _hostOpenDeals, _hostCloseDeals);
                     }
                 }
             }

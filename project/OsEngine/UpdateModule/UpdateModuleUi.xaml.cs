@@ -6,14 +6,14 @@
 using OsEngine.Entity;
 using OsEngine.Language;
 using OsEngine.Market;
-using OsEngine.OsTrader.Grids;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Net.Sockets;
+using System.Net.Security;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -29,17 +29,26 @@ namespace OsEngine.UpdateModule
     public partial class UpdateModuleUi : Window
     {
         private UpdateResponse _serverResp;
+
         private UpdaterStatus _status;
+
         private List<FileState> _filesInDebug;
+
         private Dictionary<string, GithubFileInfo> _filesTimeOnPC;
-        private readonly CancellationTokenSource _updCts = new();
+
+        private CancellationTokenSource _updCts = new();
+
         private bool _needUpdateUpdaterApp;
+
         private int _modifiedFilesCount;
 
-        private readonly HttpClient _httpClient = new HttpClient(new HttpClientHandler
-        {
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
-        });
+        private HttpClient _httpClient = new HttpClient(UpdateServerTls.CreatePinnedHandler()) { Timeout = TimeSpan.FromMinutes(2) };
+
+        private DispatcherTimer _blinkTimer;
+
+        private int _blinkCount;
+
+        private bool _blinkIsGreenVisible = true;
 
         public UpdateModuleUi(UpdateResponse response)
         {
@@ -78,6 +87,7 @@ namespace OsEngine.UpdateModule
             ComboBoxSaveVersionType.Items.Add(SaveVersionsType.Five.ToString());
             ComboBoxSaveVersionType.SelectedItem = VersionsSaveType.ToString();
             ComboBoxSaveVersionType.SelectionChanged += ComboBoxSaveVersionType_SelectionChanged;
+            VersionsDataGrid.MouseRightButtonDown += VersionsDataGrid_MouseRightButtonDown;
 
             LabelLog.Content = OsLocalization.Updater.Label4;
             LogsDataGrid.Columns[0].Header = OsLocalization.Updater.GridColumn7;
@@ -99,45 +109,14 @@ namespace OsEngine.UpdateModule
         {
             try
             {
-                DispatcherTimer timer = new DispatcherTimer();
-                int blinkCount = 0;
-                bool isGreenVisible = true;
+                _blinkTimer = new DispatcherTimer();
+                _blinkCount = 0;
+                _blinkIsGreenVisible = true;
 
-                timer.Interval = TimeSpan.FromMilliseconds(300);
-                timer.Tick += (s, e) =>
-                {
-                    try
-                    {
-                        if (blinkCount >= 20)
-                        {
-                            timer.Stop();
-                            PostGreenUpdateModule.Opacity = 1;
-                            PostWhiteUpdateModule.Opacity = 0;
-                            return;
-                        }
+                _blinkTimer.Interval = TimeSpan.FromMilliseconds(300);
+                _blinkTimer.Tick += BlinkTimer_Tick;
 
-                        if (isGreenVisible)
-                        {
-                            PostGreenUpdateModule.Opacity = 0;
-                            PostWhiteUpdateModule.Opacity = 1;
-                        }
-                        else
-                        {
-                            PostGreenUpdateModule.Opacity = 1;
-                            PostWhiteUpdateModule.Opacity = 0;
-                        }
-
-                        isGreenVisible = !isGreenVisible;
-                        blinkCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
-                        timer.Stop();
-                    }
-                };
-
-                timer.Start();
+                _blinkTimer.Start();
             }
             catch (Exception ex)
             {
@@ -145,16 +124,70 @@ namespace OsEngine.UpdateModule
             }
         }
 
+        private void BlinkTimer_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_blinkCount >= 20)
+                {
+                    _blinkTimer.Stop();
+                    PostGreenUpdateModule.Opacity = 1;
+                    PostWhiteUpdateModule.Opacity = 0;
+                    return;
+                }
+
+                if (_blinkIsGreenVisible)
+                {
+                    PostGreenUpdateModule.Opacity = 0;
+                    PostWhiteUpdateModule.Opacity = 1;
+                }
+                else
+                {
+                    PostGreenUpdateModule.Opacity = 1;
+                    PostWhiteUpdateModule.Opacity = 0;
+                }
+
+                _blinkIsGreenVisible = !_blinkIsGreenVisible;
+                _blinkCount++;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                _blinkTimer?.Stop();
+            }
+        }
+
         private void UpdateModuleUi_Closed(object sender, EventArgs e)
         {
-            _updCts.Cancel();
-            _updCts.Dispose();
+            try
+            {
+                Loaded -= UpdateModuleUi_Loaded;
+                Closed -= UpdateModuleUi_Closed;
+                ComboBoxSaveVersionType.SelectionChanged -= ComboBoxSaveVersionType_SelectionChanged;
+                VersionsDataGrid.MouseRightButtonDown -= VersionsDataGrid_MouseRightButtonDown;
 
-            _serverResp = null;
-            _filesInDebug = null;
-            _filesTimeOnPC = null;
+                if (_blinkTimer != null)
+                {
+                    _blinkTimer.Tick -= BlinkTimer_Tick;
+                    _blinkTimer.Stop();
+                    _blinkTimer = null;
+                }
 
-            _httpClient.Dispose();
+                _updCts.Cancel();
+                _updCts.Dispose();
+                _updCts = null;
+
+                _httpClient.Dispose();
+                _httpClient = null;
+
+                _serverResp = null;
+                _filesInDebug = null;
+                _filesTimeOnPC = null;
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
         private void UpdateModuleUi_Loaded(object sender, RoutedEventArgs e)
@@ -209,9 +242,9 @@ namespace OsEngine.UpdateModule
                 Enum.TryParse(ComboBoxSaveVersionType.SelectedValue.ToString(), out VersionsSaveType);
                 SaveSettings();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ignore
+                SaveLogMessage(ex.ToString());
             }
         }
 
@@ -266,9 +299,9 @@ namespace OsEngine.UpdateModule
                     reader.Close();
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ignore
+                SaveLogMessage(ex.ToString());
             }
         }
 
@@ -289,9 +322,9 @@ namespace OsEngine.UpdateModule
                     writer.Close();
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ignore
+                SaveLogMessage(ex.ToString());
             }
         }
 
@@ -360,44 +393,75 @@ namespace OsEngine.UpdateModule
             }
         }
 
-        // Выделение строки по ПКМ
         private void VersionsDataGrid_MouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            var dataGrid = sender as DataGrid;
-            if (dataGrid == null) return;
-
-            // Получаем элемент под курсором мыши
-            var hitTestResult = VisualTreeHelper.HitTest(dataGrid, e.GetPosition(dataGrid));
-            var row = GetParent<DataGridRow>(hitTestResult.VisualHit);
-
-            if (row != null)
+            try
             {
-                dataGrid.SelectedItem = row.Item;
+                DataGrid dataGrid = sender as DataGrid;
+
+                if (dataGrid == null)
+                {
+                    return;
+                }
+
+                // Получаем элемент под курсором мыши
+                HitTestResult hitTestResult = VisualTreeHelper.HitTest(dataGrid, e.GetPosition(dataGrid));
+
+                if (hitTestResult == null || hitTestResult.VisualHit == null)
+                {
+                    return;
+                }
+
+                DataGridRow row = GetParent<DataGridRow>(hitTestResult.VisualHit);
+
+                if (row != null)
+                {
+                    dataGrid.SelectedItem = row.Item;
+                }
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
         private T GetParent<T>(DependencyObject child) where T : DependencyObject
         {
-            while (child != null && !(child is T))
+            try
             {
-                child = VisualTreeHelper.GetParent(child);
+                while (child != null && !(child is T))
+                {
+                    child = VisualTreeHelper.GetParent(child);
+                }
+                return child as T;
             }
-            return child as T;
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+                return null;
+            }
         }
 
-        // Кнопка "Открыть"
         private void OpenButton_Click(object sender, RoutedEventArgs e)
         {
-            var button = sender as Button;
-            if (button == null) return;
+            try
+            {
+                Button button = sender as Button;
 
-            string path = button.Tag as string;
-            if (string.IsNullOrEmpty(path)) return;
+                if (button == null) return;
 
-            OpenFolder(path);
+                string path = button.Tag as string;
+
+                if (string.IsNullOrEmpty(path)) return;
+
+                OpenFolder(path);
+            }
+            catch (Exception ex)
+            {
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
+            }
         }
 
-        // Кнопка "Откатить"
         private void RollbackButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -476,7 +540,6 @@ namespace OsEngine.UpdateModule
             }
         }
 
-        // Метод открытия папки
         private void OpenFolder(string path)
         {
             try
@@ -657,7 +720,20 @@ namespace OsEngine.UpdateModule
 
                     _modifiedFilesCount = changedFilesCount + deletedFilesCount;
 
-                    TabFiles.Header = $"{OsLocalization.Updater.TabItemFiles} ({_modifiedFilesCount})";
+                    string tabFilesHeader = $"{OsLocalization.Updater.TabItemFiles} ({_modifiedFilesCount})";
+
+                    // метод может вызываться из фонового потока — заголовок только через Dispatcher
+                    if (Dispatcher.CheckAccess())
+                    {
+                        TabFiles.Header = tabFilesHeader;
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            TabFiles.Header = tabFilesHeader;
+                        });
+                    }
 
                     SaveLogMessage(logMsg);
                 }
@@ -685,6 +761,23 @@ namespace OsEngine.UpdateModule
                     return;
                 }
 
+                ButtonUpdRequest.IsEnabled = false;
+
+                // сетевой запрос в фоновом потоке, чтобы не вешать UI
+                Task.Run(() => RequestUpdateStatus());
+            }
+            catch (Exception ex)
+            {
+                SaveLogMessage($"{OsLocalization.Updater.Message28}: {ex.Message}");
+                _status = UpdaterStatus.Disconnected;
+                ButtonUpdRequest.IsEnabled = true;
+            }
+        }
+
+        private void RequestUpdateStatus()
+        {
+            try
+            {
                 DateTime insideVersionDate = DateTime.UtcNow;
 
                 if (File.Exists(@"Engine\Updater\LastUpdatesInfo.txt"))
@@ -692,82 +785,77 @@ namespace OsEngine.UpdateModule
                     // взять из файла последний коммит
                     string time = File.ReadAllText(@"Engine\Updater\LastUpdatesInfo.txt");
 
-                    if (!DateTime.TryParse(time, out insideVersionDate))
+                    DateTime parsedDate;
+
+                    if (!DateTime.TryParse(time, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out parsedDate)
+                        && !DateTime.TryParse(time, out parsedDate))
                     {
                         SaveLogMessage(OsLocalization.Updater.Message20);
                         return;
                     }
+
+                    insideVersionDate = DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc);
                 }
 
-                string ip = "185.186.143.9";
-                int port = 49152;
+                SaveLogMessage($"{OsLocalization.Updater.Message21} {UpdateServerTls.ServerHost}:{UpdateServerTls.UpdateProtocolPort}...");
 
-                using (TcpClient client = new TcpClient())
+                using (SslStream stream = UpdateServerTls.ConnectPinned(UpdateServerTls.ServerHost, UpdateServerTls.UpdateProtocolPort, 5000))
                 {
-                    SaveLogMessage($"{OsLocalization.Updater.Message21} {ip}:{port}...");
+                    SaveLogMessage(OsLocalization.Updater.Message22);
 
-                    client.Connect(ip, port);
+                    string request = $"{{\"LastUpdateDate\":\"{insideVersionDate:yyyy-MM-ddTHH:mm:ssZ}\"}}";
 
-                    if (client.Connected)
+                    byte[] data = Encoding.UTF8.GetBytes(request);
+
+                    stream.Write(data, 0, data.Length);
+
+                    SaveLogMessage($"{OsLocalization.Updater.Message23}: {insideVersionDate:yyyy-MM-dd HH:mm:ss}");
+
+                    using (MemoryStream ms = new MemoryStream())
                     {
-                        SaveLogMessage(OsLocalization.Updater.Message22);
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
 
-                        string request = $"{{\"LastUpdateDate\":\"{insideVersionDate:yyyy-MM-ddTHH:mm:ss}\"}}";
-
-                        byte[] data = Encoding.UTF8.GetBytes(request);
-
-                        NetworkStream stream = client.GetStream();
-                        stream.Write(data, 0, data.Length);
-
-                        SaveLogMessage($"{OsLocalization.Updater.Message23}: {insideVersionDate:yyyy-MM-dd HH:mm:ss}");
-
-                        using (MemoryStream ms = new MemoryStream())
+                        // Читаем пока есть данные
+                        while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
                         {
-                            byte[] buffer = new byte[8192];
-                            int bytesRead;
+                            ms.Write(buffer, 0, bytesRead);
+                        }
 
-                            // Читаем пока есть данные
-                            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                        string response = Encoding.UTF8.GetString(ms.ToArray());
+
+                        if (!string.IsNullOrEmpty(response))
+                        {
+                            SaveLogMessage(OsLocalization.Updater.Message24);
+
+                            UpdateResponse specResponse = JsonSerializer.Deserialize<UpdateResponse>(response);
+
+                            if (specResponse != null)
                             {
-                                ms.Write(buffer, 0, bytesRead);
-                            }
+                                _serverResp = specResponse;
 
-                            string response = Encoding.UTF8.GetString(ms.ToArray());
+                                _filesInDebug = GetFilesState(_serverResp.Files);
 
-                            if (!string.IsNullOrEmpty(response))
-                            {
-                                SaveLogMessage(OsLocalization.Updater.Message24);
+                                _filesInDebug.Sort((x, y) => x.State.CompareTo(y.State));
 
-                                UpdateResponse specResponse = JsonSerializer.Deserialize<UpdateResponse>(response);
-
-                                if (specResponse != null)
+                                // обновление UI только через Dispatcher
+                                Dispatcher.Invoke(() =>
                                 {
-                                    _serverResp = specResponse;
-
-                                    _filesInDebug = GetFilesState(_serverResp.Files);
-
-                                    _filesInDebug.Sort((x, y) => x.State.CompareTo(y.State));
-
                                     FilesDataGrid.ItemsSource = _filesInDebug;
 
                                     CommitsDataGrid.ItemsSource = _serverResp.Commits;
 
                                     TabCommits.Header = $"{OsLocalization.Updater.TabItemCommits} ({_serverResp.Commits.Count})";
+                                });
 
-                                    SaveLogMessage($"{_serverResp.Commits.Count} {OsLocalization.Updater.Message25}");
-                                }
-                            }
-                            else
-                            {
-                                SaveLogMessage(OsLocalization.Updater.Message26);
-                                _status = UpdaterStatus.Disconnected;
+                                SaveLogMessage($"{_serverResp.Commits.Count} {OsLocalization.Updater.Message25}");
                             }
                         }
-                    }
-                    else
-                    {
-                        SaveLogMessage(OsLocalization.Updater.Message27);
-                        _status = UpdaterStatus.Disconnected;
+                        else
+                        {
+                            SaveLogMessage(OsLocalization.Updater.Message26);
+                            _status = UpdaterStatus.Disconnected;
+                        }
                     }
                 }
             }
@@ -776,7 +864,29 @@ namespace OsEngine.UpdateModule
                 SaveLogMessage($"{OsLocalization.Updater.Message28}: {ex.Message}");
                 _status = UpdaterStatus.Disconnected;
             }
+            finally
+            {
+                try
+                {
+                    if (ButtonUpdRequest.Dispatcher.CheckAccess())
+                    {
+                        ButtonUpdRequest.IsEnabled = true;
+                    }
+                    else
+                    {
+                        ButtonUpdRequest.Dispatcher.Invoke(() =>
+                        {
+                            ButtonUpdRequest.IsEnabled = true;
+                        });
+                    }
+                }
+                catch
+                {
+                    // окно уже закрыто
+                }
+            }
         }
+
         #endregion
 
         #region Update process
@@ -785,221 +895,268 @@ namespace OsEngine.UpdateModule
 
         private async void ButtonUpdate_Click(object sender, RoutedEventArgs e)
         {
-            SaveLogMessage(OsLocalization.Updater.Message29);
-
-            if (_status == UpdaterStatus.Available)
+            try
             {
-                AcceptDialogUi ui = new AcceptDialogUi($"{OsLocalization.Updater.Message8}\n{OsLocalization.Updater.Message30}");
-                ui.ShowDialog();
+                SaveLogMessage(OsLocalization.Updater.Message29);
 
-                if (ui.UserAcceptAction == false)
+                if (_status == UpdaterStatus.Available)
                 {
-                    return;
-                }
+                    AcceptDialogUi ui = new AcceptDialogUi($"{OsLocalization.Updater.Message8}\n{OsLocalization.Updater.Message30}");
+                    ui.ShowDialog();
 
-                // процесс обновления
-                SaveLogMessage(OsLocalization.Updater.Message31);
-
-                IsUpdated = true;
-
-                // Отключаем кнопки на время обновления
-                ButtonUpdate.IsEnabled = false;
-                ButtonUpdRequest.IsEnabled = false;
-
-                string buildReservePath = $"Engine\\Updater\\Builds\\Build_{DateTime.Now:dd-MM-yyyy_HH-mm}";
-                Directory.CreateDirectory(buildReservePath);
-
-                string tempDir = $"Engine\\Updater\\Temp";
-                Directory.CreateDirectory(tempDir);
-
-                string updaterExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Updater.exe");
-
-                // Добавляем файл с временем обновления на случай отката
-                string updTempPath = Path.Combine(buildReservePath, "LastUpdatesInfo.txt");
-
-                File.Copy(@"Engine\Updater\LastUpdatesInfo.txt", updTempPath, true);
-
-                // и запись о текущей версии файлов
-                string filesTempPath = Path.Combine(buildReservePath, "FilesVersionsTime.txt");
-
-                File.Copy(@"Engine\Updater\FilesVersionsTime.txt", filesTempPath, true);
-
-                // также в папку Temp кладём файл с временем последнего коммита  на сервере,
-                // чтобы после успешного обновления при следующем запуске от него смотреть изменения
-                File.WriteAllText(tempDir + "\\LastUpdatesInfo.txt", _serverResp.Commits[0].Timestamp.ToString("G"));
-
-                //файлы с новым временем в папку Temp 
-                WriteFilesVersionsTime(tempDir);
-
-                // Если изменился только Updater.exe
-                if (_needUpdateUpdaterApp && _modifiedFilesCount == 1)
-                {
-                    bool updSucces = await UpdateOnlyUpdaterExe(buildReservePath, tempDir, updaterExePath);
-
-                    if (updSucces)
+                    if (ui.UserAcceptAction == false)
                     {
-                        Directory.Delete(tempDir, true);
-                        SaveLogMessage(OsLocalization.Updater.Message41);
+                        return;
                     }
 
-                    ButtonUpdate.IsEnabled = true;
-                    ButtonUpdRequest.IsEnabled = true;
+                    // процесс обновления
+                    SaveLogMessage(OsLocalization.Updater.Message31);
 
-                    CustomMessageBoxUi boxUi = new CustomMessageBoxUi(OsLocalization.Updater.Message58);
-                    boxUi.ShowDialog();
+                    IsUpdated = true;
 
-                    return;
-                }
+                    // Отключаем кнопки на время обновления
+                    ButtonUpdate.IsEnabled = false;
+                    ButtonUpdRequest.IsEnabled = false;
 
-                SaveLogMessage(OsLocalization.Updater.Message32);
+                    string buildReservePath = "";
+                    string tempDir = "";
+                    string updaterExePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Updater.exe");
 
-                try
-                {
-                    // делает резервную копию всей папки Debug в папку с резервными копиями
-                    await Task.Run(async () =>
+                    try
+                    {
+                        buildReservePath = $"Engine\\Updater\\Builds\\Build_{DateTime.Now:dd-MM-yyyy_HH-mm}";
+                        Directory.CreateDirectory(buildReservePath);
+
+                        tempDir = $"Engine\\Updater\\Temp";
+                        Directory.CreateDirectory(tempDir);
+
+                        // Добавляем файл с временем обновления на случай отката
+                        string updTempPath = Path.Combine(buildReservePath, "LastUpdatesInfo.txt");
+
+                        File.Copy(@"Engine\Updater\LastUpdatesInfo.txt", updTempPath, true);
+
+                        // и запись о текущей версии файлов
+                        string filesTempPath = Path.Combine(buildReservePath, "FilesVersionsTime.txt");
+
+                        File.Copy(@"Engine\Updater\FilesVersionsTime.txt", filesTempPath, true);
+
+                        // также в папку Temp кладём файл с временем последнего коммита  на сервере,
+                        // чтобы после успешного обновления при следующем запуске от него смотреть изменения
+                        DateTime lastCommitTime = _serverResp.Commits.Count > 0 ? _serverResp.Commits[0].Timestamp : DateTime.UtcNow;
+
+                        File.WriteAllText(tempDir + "\\LastUpdatesInfo.txt", lastCommitTime.ToUniversalTime().ToString("O"));
+                    }
+                    catch (Exception ex)
+                    {
+                        SaveLogMessage($"{OsLocalization.Updater.Message43}: {ex.Message}");
+
+                        ButtonUpdate.IsEnabled = true;
+                        ButtonUpdRequest.IsEnabled = true;
+
+                        return;
+                    }
+
+                    //файлы с новым временем запишем в Temp ПОСЛЕ скачивания — только честно скачанные
+
+                    // Если изменился только Updater.exe
+                    if (_needUpdateUpdaterApp && _modifiedFilesCount == 1)
                     {
                         try
                         {
-                            await CopyDirectory(AppDomain.CurrentDomain.BaseDirectory, buildReservePath, _updCts.Token);
+                            bool updSucces = await UpdateOnlyUpdaterExe(buildReservePath, tempDir, updaterExePath);
+
+                            if (updSucces)
+                            {
+                                Directory.Delete(tempDir, true);
+                                SaveLogMessage(OsLocalization.Updater.Message41);
+                            }
+
+                            CustomMessageBoxUi boxUi = new CustomMessageBoxUi(OsLocalization.Updater.Message58);
+                            boxUi.ShowDialog();
                         }
                         catch (OperationCanceledException)
                         {
-                            SaveLogMessage(OsLocalization.Updater.Message33);
-                            Directory.Delete(buildReservePath, true);
-                            throw;
+                            SaveLogMessage(OsLocalization.Updater.Message36);
                         }
                         catch (Exception ex)
                         {
-                            SaveLogMessage($"{OsLocalization.Updater.Message34}: {ex.Message}");
-                            Directory.Delete(buildReservePath, true);
-                            throw;
+                            SaveLogMessage($"{OsLocalization.Updater.Message43}: {ex.Message}");
                         }
-                    }, _updCts.Token);
-
-
-                    List<FileState> newFiles = _filesInDebug.FindAll(f => f.State == State.New);
-
-                    if (newFiles.Count > 0)
-                    {
-                        // записать новые файлы, чтобы можно было удалить при откате
-                        string newFilesPath = Path.Combine(buildReservePath, "NewFiles.txt");
-
-                        StringBuilder sb = new StringBuilder();
-
-                        for (int i = 0; i < newFiles.Count; i++)
+                        finally
                         {
-                            FileState file = newFiles[i];
-                            sb.AppendLine(file.Name);
+                            ButtonUpdate.IsEnabled = true;
+                            ButtonUpdRequest.IsEnabled = true;
                         }
 
-                        File.WriteAllText(newFilesPath, sb.ToString());
+                        return;
                     }
 
-                    SaveLogMessage(OsLocalization.Updater.Message35);
+                    SaveLogMessage(OsLocalization.Updater.Message32);
 
-                    // скачивает поочереди все нужные файлы, аккуратно кладя их в папку Temp
-                    List<FileState> filesForDownload = _filesInDebug.FindAll(f => f.State == State.Obsolete || f.State == State.New);
-
-                    if (filesForDownload.Count > 0)
+                    try
                     {
-                        // Ожидаем скачивание файлов
+                        // делает резервную копию всей папки Debug в папку с резервными копиями
                         await Task.Run(async () =>
                         {
                             try
                             {
-                                await DownloadChangedFiles(filesForDownload, tempDir, _updCts.Token);
+                                await CopyDirectory(AppDomain.CurrentDomain.BaseDirectory, buildReservePath, _updCts.Token);
                             }
                             catch (OperationCanceledException)
                             {
-                                SaveLogMessage(OsLocalization.Updater.Message36);
-                                Directory.Delete(tempDir, true);
+                                SaveLogMessage(OsLocalization.Updater.Message33);
+                                Directory.Delete(buildReservePath, true);
                                 throw;
                             }
                             catch (Exception ex)
                             {
-                                SaveLogMessage($"{OsLocalization.Updater.Message37}: {ex.Message}");
-                                Directory.Delete(tempDir, true);
+                                SaveLogMessage($"{OsLocalization.Updater.Message34}: {ex.Message}");
+                                Directory.Delete(buildReservePath, true);
                                 throw;
                             }
                         }, _updCts.Token);
 
-                        SaveLogMessage(OsLocalization.Updater.Message38);
-                    }
 
-                    List<FileState> filesForDelete = _filesInDebug.FindAll(f => f.State == State.Removed);
+                        List<FileState> newFiles = _filesInDebug.FindAll(f => f.State == State.New);
 
-                    if (filesForDelete.Count > 0) // сохраняем список файлов, подлежащих удалению
-                    {
-                        StringBuilder sb = new StringBuilder();
-
-                        for (int i = 0; i < filesForDelete.Count; i++)
+                        if (newFiles.Count > 0)
                         {
-                            FileState file = filesForDelete[i];
-                            sb.AppendLine(file.Name);
+                            // записать новые файлы, чтобы можно было удалить при откате
+                            string newFilesPath = Path.Combine(buildReservePath, "NewFiles.txt");
+
+                            StringBuilder sb = new StringBuilder();
+
+                            for (int i = 0; i < newFiles.Count; i++)
+                            {
+                                FileState file = newFiles[i];
+                                sb.AppendLine(file.Name);
+                            }
+
+                            File.WriteAllText(newFilesPath, sb.ToString());
                         }
 
-                        File.WriteAllText(tempDir + "\\Files_For_Delete.txt", sb.ToString());
+                        SaveLogMessage(OsLocalization.Updater.Message35);
 
-                        SaveLogMessage(OsLocalization.Updater.Message39);
-                    }
+                        // скачивает поочереди все нужные файлы, аккуратно кладя их в папку Temp
+                        List<FileState> filesForDownload = _filesInDebug.FindAll(f => f.State == State.Obsolete || f.State == State.New);
 
-                    if (!File.Exists(updaterExePath))
-                    {
-                        SaveLogMessage(OsLocalization.Updater.Message40);
-                        return;
-                    }
+                        List<string> downloadedFiles = new List<string>();
 
-                    // Если Updater.exe изменился, сначала обновляем его              
-                    if (_needUpdateUpdaterApp)
-                    {
-                        if (File.Exists(tempDir + "\\-Updater.exe"))
+                        if (filesForDownload.Count > 0)
                         {
-                            File.Copy(tempDir + "\\-Updater.exe", updaterExePath, true);
+                            // Ожидаем скачивание файлов
+                            await Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    downloadedFiles = await DownloadChangedFiles(filesForDownload, tempDir, _updCts.Token);
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    SaveLogMessage(OsLocalization.Updater.Message36);
+                                    Directory.Delete(tempDir, true);
+                                    throw;
+                                }
+                                catch (Exception ex)
+                                {
+                                    SaveLogMessage($"{OsLocalization.Updater.Message37}: {ex.Message}");
+                                    Directory.Delete(tempDir, true);
+                                    throw;
+                                }
+                            }, _updCts.Token);
 
-                            File.Delete(tempDir + "\\-Updater.exe");
-
-                            SaveLogMessage(OsLocalization.Updater.Message41);
+                            SaveLogMessage(OsLocalization.Updater.Message38);
                         }
-                        else
+
+                        // версионная запись — только честно скачанные файлы.
+                        // Нескачавшееся остаётся со старой датой и докачается при следующей проверке
+                        WriteFilesVersionsTime(tempDir, downloadedFiles);
+
+                        List<FileState> filesForDelete = _filesInDebug.FindAll(f => f.State == State.Removed);
+
+                        if (filesForDelete.Count > 0) // сохраняем список файлов, подлежащих удалению
                         {
-                            SaveLogMessage(OsLocalization.Updater.Message56);
+                            StringBuilder sb = new StringBuilder();
+
+                            for (int i = 0; i < filesForDelete.Count; i++)
+                            {
+                                FileState file = filesForDelete[i];
+                                sb.AppendLine(file.Name);
+                            }
+
+                            File.WriteAllText(tempDir + "\\Files_For_Delete.txt", sb.ToString());
+
+                            SaveLogMessage(OsLocalization.Updater.Message39);
                         }
+
+                        if (!File.Exists(updaterExePath))
+                        {
+                            SaveLogMessage(OsLocalization.Updater.Message40);
+                            return;
+                        }
+
+                        // Если Updater.exe изменился, сначала обновляем его              
+                        if (_needUpdateUpdaterApp)
+                        {
+                            if (File.Exists(tempDir + "\\-Updater.exe"))
+                            {
+                                File.Copy(tempDir + "\\-Updater.exe", updaterExePath, true);
+
+                                File.Delete(tempDir + "\\-Updater.exe");
+
+                                SaveLogMessage(OsLocalization.Updater.Message41);
+                            }
+                            else
+                            {
+                                SaveLogMessage(OsLocalization.Updater.Message56);
+                            }
+                        }
+
+                        TryRemoveOutdatedBuildsInCash();
+
+                        SaveLogMessage(OsLocalization.Updater.Message42);
+
+                        StartUpdateApp(tempDir);
+
                     }
-
-                    TryRemoveOutdatedBuildsInCash();
-
-                    SaveLogMessage(OsLocalization.Updater.Message42);
-                    
-                    StartUpdateApp(tempDir);
-
+                    catch (Exception ex)
+                    {
+                        string errMsg = $"{OsLocalization.Updater.Message43}: {ex.Message}";
+                        SaveLogMessage(errMsg);
+                        CustomMessageBoxUi boxUi = new CustomMessageBoxUi(errMsg);
+                        boxUi.ShowDialog();
+                    }
+                    finally
+                    {
+                        // Включаем обратно
+                        ButtonUpdate.IsEnabled = true;
+                        ButtonUpdRequest.IsEnabled = true;
+                    }
                 }
-                catch (Exception ex)
+                else if (_status == UpdaterStatus.NoNeed)
                 {
-                    string errMsg = $"{OsLocalization.Updater.Message43}: {ex.Message}";
-                    SaveLogMessage(errMsg);
-                    CustomMessageBoxUi boxUi = new CustomMessageBoxUi(errMsg);
+                    string stateMsg = OsLocalization.Updater.Message44;
+                    SaveLogMessage(stateMsg);
+                    CustomMessageBoxUi boxUi = new CustomMessageBoxUi(stateMsg);
                     boxUi.ShowDialog();
                 }
-                finally
+                else if (_status == UpdaterStatus.Disconnected)
                 {
-                    // Включаем обратно
-                    ButtonUpdate.IsEnabled = true;
-                    ButtonUpdRequest.IsEnabled = true;
+                    string stateMsg = OsLocalization.Updater.Message45;
+                    SaveLogMessage(stateMsg);
+                    CustomMessageBoxUi boxUi = new CustomMessageBoxUi(stateMsg);
+                    boxUi.ShowDialog();
                 }
             }
-            else if (_status == UpdaterStatus.NoNeed)
+            catch (OperationCanceledException)
             {
-                string stateMsg = OsLocalization.Updater.Message44;
-                SaveLogMessage(stateMsg);
-                CustomMessageBoxUi boxUi = new CustomMessageBoxUi(stateMsg);
-                boxUi.ShowDialog();
+                // отмена при закрытии окна
+                SaveLogMessage(OsLocalization.Updater.Message33);
             }
-            else if (_status == UpdaterStatus.Disconnected)
+            catch (Exception ex)
             {
-                string stateMsg = OsLocalization.Updater.Message45;
-                SaveLogMessage(stateMsg);
-                CustomMessageBoxUi boxUi = new CustomMessageBoxUi(stateMsg);
-                boxUi.ShowDialog();
+                SaveLogMessage($"{OsLocalization.Updater.Message43}: {ex.Message}");
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
@@ -1040,7 +1197,9 @@ namespace OsEngine.UpdateModule
             }
             catch (OperationCanceledException)
             {
-                throw;
+                // отмена при закрытии окна — не ребрасываем в async void родителя
+                SaveLogMessage(OsLocalization.Updater.Message36);
+                return false;
             }
             catch (Exception ex)
             {
@@ -1050,8 +1209,10 @@ namespace OsEngine.UpdateModule
             }
         }
 
-        private async Task DownloadChangedFiles(List<FileState> files, string tempDir, CancellationToken token)
+        private async Task<List<string>> DownloadChangedFiles(List<FileState> files, string tempDir, CancellationToken token)
         {
+            List<string> downloadedFiles = new List<string>();
+
             try
             {
                 SaveLogMessage(OsLocalization.Updater.Message46);
@@ -1066,7 +1227,9 @@ namespace OsEngine.UpdateModule
 
                     string tempPath = Path.Combine(tempDir, tempFileName);
 
-                    using (HttpResponseMessage response = await _httpClient.GetAsync(files[i].Url, token))
+                    string secureUrl = UpdateServerTls.GetSecureFileUrl(files[i].Url); // скачиваем только по HTTPS
+
+                    using (HttpResponseMessage response = await _httpClient.GetAsync(secureUrl, token))
                     {
                         if (response.StatusCode != HttpStatusCode.OK)
                         {
@@ -1081,6 +1244,23 @@ namespace OsEngine.UpdateModule
                             contentStream.CopyTo(fileStream);
                         }
                     }
+
+                    // проверяем целостность: файл должен существовать и сойтись по размеру
+                    FileInfo downloaded = new FileInfo(tempPath);
+
+                    if (downloaded.Exists && downloaded.Length == files[i].Size)
+                    {
+                        downloadedFiles.Add(files[i].Name);
+                    }
+                    else
+                    {
+                        SaveLogMessage($"{OsLocalization.Updater.Message47.Split('#')[0]} {files[i].Name} {OsLocalization.Updater.Message47.Split('#')[1]}");
+
+                        if (downloaded.Exists)
+                        {
+                            downloaded.Delete();
+                        }
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -1092,6 +1272,8 @@ namespace OsEngine.UpdateModule
                 SaveLogMessage(error.ToString());
                 throw;
             }
+
+            return downloadedFiles;
         }
 
         private async Task CopyDirectory(string sourceDirName, string destDirName, CancellationToken token)
@@ -1177,19 +1359,19 @@ namespace OsEngine.UpdateModule
                     {
                         Directory.Delete(directoriesInfo[i].FullName, true);
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // ignore
+                        ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 
-        private void WriteFilesVersionsTime(string tempDir)
+        private void WriteFilesVersionsTime(string tempDir, List<string> downloadedFiles)
         {
             try
             {
@@ -1197,9 +1379,31 @@ namespace OsEngine.UpdateModule
 
                 for (int i = 0; i < _serverResp.Files.Count; i++)
                 {
-                    var fileInfo = _serverResp.Files[i];
+                    GithubFileInfo fileInfo = _serverResp.Files[i];
 
-                    sb.AppendLine(fileInfo.Name + "#" + fileInfo.LastUpdate + "#" + fileInfo.Size);
+                    FileState state = _filesInDebug.Find(f => f.Name == fileInfo.Name);
+
+                    if (state == null)
+                    {
+                        continue;
+                    }
+
+                    if (state.State == State.Actual)
+                    {
+                        // в этом раунде не качали — оставляем записанное ранее время
+                        sb.AppendLine(fileInfo.Name + "#" + state.CurrVersionTime + "#" + fileInfo.Size);
+                    }
+                    else if (downloadedFiles.Contains(fileInfo.Name))
+                    {
+                        // честно скачан — записываем серверное время
+                        sb.AppendLine(fileInfo.Name + "#" + fileInfo.LastUpdate + "#" + fileInfo.Size);
+                    }
+                    else if (state.State == State.Obsolete)
+                    {
+                        // не скачался — оставляем старое время, повторит при следующей проверке
+                        sb.AppendLine(fileInfo.Name + "#" + state.CurrVersionTime + "#" + fileInfo.Size);
+                    }
+                    // State.New и не скачался — в запись не попадает, в следующий раз снова будет New
                 }
 
                 File.WriteAllText(Path.Combine(tempDir, "FilesVersionsTime.txt"), sb.ToString());
@@ -1338,7 +1542,7 @@ namespace OsEngine.UpdateModule
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"{OsLocalization.Updater.Message54}: {ex.Message}");
+                ServerMaster.SendNewLogMessage(ex.ToString(), Logging.LogMessageType.Error);
             }
         }
 

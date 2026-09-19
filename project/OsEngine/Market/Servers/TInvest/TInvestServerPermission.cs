@@ -118,6 +118,11 @@ namespace OsEngine.Market.Servers.TInvest
             get { return true; }
         }
 
+        public bool StopOrdersIsSupport
+        {
+            get { return true; }
+        }
+
         public int WaitTimeSecondsAfterFirstStartToSendOrders
         {
             get { return 10; }
@@ -220,7 +225,7 @@ namespace OsEngine.Market.Servers.TInvest
 
         public bool IsNewsServer
         {
-            get { return false; }
+            get { return true; }
         }
 
         public bool IsSupports_CheckDataFeedLogic
