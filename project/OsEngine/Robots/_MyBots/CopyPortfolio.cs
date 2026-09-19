@@ -1,5 +1,5 @@
 /* 
- Версия 1.4
+ Версия 1.5
  */
 
 
@@ -523,16 +523,14 @@ namespace OsEngine.Robots
                                 Entity.Security newSec = securitiesAll.Find(s => s.Name == positionOnBoard[i].SecurityNameCode);
                                 if (newSec == null) { return; }
 
-                                // не добавляем бумагу повторно, если она уже в списке и ждёт перезагрузки табов
-                                if (_tabToTrade1.SecuritiesNames.FindIndex(s => s.SecurityName == newSec.Name) == -1)
-                                {
-                                    ActivatedSecurity sec = new ActivatedSecurity();
-                                    sec.SecurityClass = newSec.NameClass;
-                                    sec.SecurityName = newSec.Name;
-                                    sec.IsOn = true;
+                                ActivatedSecurity sec = new ActivatedSecurity();
+                                sec.SecurityClass = newSec.NameClass;
+                                sec.SecurityName = newSec.Name;
+                                sec.IsOn = true;
 
-                                    _tabToTrade1.SecuritiesNames.Add(sec);
-                                    _tabToTrade1.NeedToReloadTabs = true;
+                                // плагин сам проверяет дубликаты, сохраняет настройки и ставит флаг перезагрузки табов
+                                if (ScreenerSecuritySync.AddSecurity(_tabToTrade1, sec))
+                                {
                                     SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
                                 }
 
