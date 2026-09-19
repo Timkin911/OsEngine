@@ -1,5 +1,5 @@
 /* 
- Версия 1.5
+ Версия 1.10
  */
 
 
@@ -37,6 +37,14 @@ namespace OsEngine.Robots
         StrategyParameterString _repMoneyFund;
         StrategyParameterString _repMoneyFundNew;
         StrategyParameterDecimal _repMoneyFundKoeff;
+        StrategyParameterDecimal _maxPriceAgeHours;
+        StrategyParameterString _verifyPositions;
+        StrategyParameterString _icebergIsOn;
+        StrategyParameterInt _icebergOrdersCount;
+        StrategyParameterInt _icebergTimeoutSec;
+        DateTime _lastSystemLogTime = DateTime.MinValue;
+        List<string> _deadSecurities = new List<string>();
+        private object _deadSecuritiesLocker = new object();
 
         #region Классы MirrorPosition и MirrorPortfolio
         public class MirrorPosition
@@ -92,6 +100,8 @@ namespace OsEngine.Robots
             public MirrorPosition myTradeAsset { get; set; }
             public MirrorPosition myMoneyFund { get; set; }
             public decimal Price { get; set; }
+            public int IcebergOrdersCount = 1;
+            public int IcebergTimeoutSec = 0;
 
             public MirrorPortfolio()
             {
@@ -139,6 +149,274 @@ namespace OsEngine.Robots
                 return MirrorPositionsList.Count;
             }
 
+            private void IcebergSleep()
+            {
+                if (IcebergTimeoutSec > 0)
+                {
+                    System.Threading.Thread.Sleep(IcebergTimeoutSec * 1000);
+                }
+            }
+
+            // часть объёма, кратная шагу объёма инструмента
+            private decimal NormalizePart(BotTabSimple tab, decimal volume)
+            {
+                if (tab == null || tab.Security == null)
+                {
+                    return volume;
+                }
+
+                decimal step = tab.Security.VolumeStep;
+
+                if (step <= 0)
+                {
+                    step = tab.Security.Lot;
+                }
+
+                if (step <= 0)
+                {
+                    step = 1;
+                }
+
+                return Math.Truncate(volume / step) * step;
+            }
+
+            public void IcebergBuy(BotTabSimple tab, decimal volume)
+            {
+                if (volume <= 0)
+                {
+                    return;
+                }
+
+                if (IcebergOrdersCount <= 1)
+                {
+                    tab.BuyAtMarket(volume);
+                    return;
+                }
+
+                decimal part = NormalizePart(tab, volume / IcebergOrdersCount);
+
+                if (part <= 0)
+                {
+                    // объём меньше лота — одним ордером
+                    tab.BuyAtMarket(volume);
+                    return;
+                }
+
+                Position pos = null;
+
+                for (int i = 0; i < IcebergOrdersCount; i++)
+                {
+                    // последняя часть забирает остаток и нормализуется вниз до кратности шагу,
+                    // чтобы заявка не была отклонена биржей при некратном текущем объёме позиции
+                    decimal curPart = (i == IcebergOrdersCount - 1) ? NormalizePart(tab, volume - part * (IcebergOrdersCount - 1)) : part;
+
+                    if (curPart <= 0)
+                    {
+                        break;
+                    }
+
+                    if (pos == null)
+                    {
+                        pos = tab.BuyAtMarket(curPart);
+                    }
+                    else
+                    {
+                        // последующие части докупаем в ту же позицию,
+                        // иначе на следующем цикле робот посчитает их позиции лишними и закроет
+                        tab.BuyAtMarketToPosition(pos, curPart);
+                    }
+
+                    if (pos == null)
+                    {
+                        // заявка не ушла (нет котировок/коннектор не готов) — дальше не шлём
+                        break;
+                    }
+
+                    if (i < IcebergOrdersCount - 1)
+                    {
+                        IcebergSleep();
+                    }
+                }
+            }
+
+            public void IcebergSell(BotTabSimple tab, decimal volume)
+            {
+                if (volume <= 0)
+                {
+                    return;
+                }
+
+                if (IcebergOrdersCount <= 1)
+                {
+                    tab.SellAtMarket(volume);
+                    return;
+                }
+
+                decimal part = NormalizePart(tab, volume / IcebergOrdersCount);
+
+                if (part <= 0)
+                {
+                    tab.SellAtMarket(volume);
+                    return;
+                }
+
+                Position pos = null;
+
+                for (int i = 0; i < IcebergOrdersCount; i++)
+                {
+                    // последняя часть забирает остаток и нормализуется вниз до кратности шагу,
+                    // чтобы заявка не была отклонена биржей при некратном текущем объёме позиции
+                    decimal curPart = (i == IcebergOrdersCount - 1) ? NormalizePart(tab, volume - part * (IcebergOrdersCount - 1)) : part;
+
+                    if (curPart <= 0)
+                    {
+                        break;
+                    }
+
+                    if (pos == null)
+                    {
+                        pos = tab.SellAtMarket(curPart);
+                    }
+                    else
+                    {
+                        tab.SellAtMarketToPosition(pos, curPart);
+                    }
+
+                    if (pos == null)
+                    {
+                        break;
+                    }
+
+                    if (i < IcebergOrdersCount - 1)
+                    {
+                        IcebergSleep();
+                    }
+                }
+            }
+
+            public void IcebergBuyToPosition(BotTabSimple tab, Position position, decimal volume)
+            {
+                if (volume <= 0)
+                {
+                    return;
+                }
+
+                if (IcebergOrdersCount <= 1)
+                {
+                    tab.BuyAtMarketToPosition(position, volume);
+                    return;
+                }
+
+                decimal part = NormalizePart(tab, volume / IcebergOrdersCount);
+
+                if (part <= 0)
+                {
+                    tab.BuyAtMarketToPosition(position, volume);
+                    return;
+                }
+
+                for (int i = 0; i < IcebergOrdersCount; i++)
+                {
+                    // последняя часть забирает остаток и нормализуется вниз до кратности шагу,
+                    // чтобы заявка не была отклонена биржей при некратном текущем объёме позиции
+                    decimal curPart = (i == IcebergOrdersCount - 1) ? NormalizePart(tab, volume - part * (IcebergOrdersCount - 1)) : part;
+
+                    if (curPart <= 0)
+                    {
+                        break;
+                    }
+
+                    tab.BuyAtMarketToPosition(position, curPart);
+
+                    if (i < IcebergOrdersCount - 1)
+                    {
+                        IcebergSleep();
+                    }
+                }
+            }
+
+            public void IcebergSellToPosition(BotTabSimple tab, Position position, decimal volume)
+            {
+                if (volume <= 0)
+                {
+                    return;
+                }
+
+                if (IcebergOrdersCount <= 1)
+                {
+                    tab.SellAtMarketToPosition(position, volume);
+                    return;
+                }
+
+                decimal part = NormalizePart(tab, volume / IcebergOrdersCount);
+
+                if (part <= 0)
+                {
+                    tab.SellAtMarketToPosition(position, volume);
+                    return;
+                }
+
+                for (int i = 0; i < IcebergOrdersCount; i++)
+                {
+                    // последняя часть забирает остаток и нормализуется вниз до кратности шагу,
+                    // чтобы заявка не была отклонена биржей при некратном текущем объёме позиции
+                    decimal curPart = (i == IcebergOrdersCount - 1) ? NormalizePart(tab, volume - part * (IcebergOrdersCount - 1)) : part;
+
+                    if (curPart <= 0)
+                    {
+                        break;
+                    }
+
+                    tab.SellAtMarketToPosition(position, curPart);
+
+                    if (i < IcebergOrdersCount - 1)
+                    {
+                        IcebergSleep();
+                    }
+                }
+            }
+
+            public void IcebergClose(BotTabSimple tab, Position position, decimal volume)
+            {
+                if (volume <= 0)
+                {
+                    return;
+                }
+
+                if (IcebergOrdersCount <= 1)
+                {
+                    tab.CloseAtMarket(position, volume);
+                    return;
+                }
+
+                decimal part = NormalizePart(tab, volume / IcebergOrdersCount);
+
+                if (part <= 0)
+                {
+                    tab.CloseAtMarket(position, volume);
+                    return;
+                }
+
+                for (int i = 0; i < IcebergOrdersCount; i++)
+                {
+                    // последняя часть забирает остаток и нормализуется вниз до кратности шагу,
+                    // чтобы заявка не была отклонена биржей при некратном текущем объёме позиции
+                    decimal curPart = (i == IcebergOrdersCount - 1) ? NormalizePart(tab, volume - part * (IcebergOrdersCount - 1)) : part;
+
+                    if (curPart <= 0)
+                    {
+                        break;
+                    }
+
+                    tab.CloseAtMarket(position, curPart);
+
+                    if (i < IcebergOrdersCount - 1)
+                    {
+                        IcebergSleep();
+                    }
+                }
+            }
+
             private void PercentCalculation()
             {
                 Price = Math.Abs(myTradeAsset.SecurityValue) * myTradeAsset.SecurityPrice + Math.Abs(myMoneyFund.SecurityValue) * myMoneyFund.SecurityPrice;
@@ -168,7 +446,7 @@ namespace OsEngine.Robots
             public string CorrectPortfolio(Boolean onlyInfo = true, Boolean changeMoneyFund = true, Boolean repMoneyFund = false)
             {
                 string sInfo = "Сравнение " + DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss") + "\r\n";
-                var sortedList = MirrorPositionsList.OrderBy(x => x.SecurityNameCode).ToList();
+                List<MirrorPosition> sortedList = MirrorPositionsList.OrderBy(x => x.SecurityNameCode).ToList();
 
                 Boolean tChange = false;
 
@@ -186,11 +464,11 @@ namespace OsEngine.Robots
                         {
                             if (tar > 0)
                             {
-                                sortedList[i].Tab.BuyAtMarket(tar);
+                                IcebergBuy(sortedList[i].Tab, tar);
                             }
                             if (tar < 0)
                             {
-                                sortedList[i].Tab.SellAtMarket(Math.Abs(tar));
+                                IcebergSell(sortedList[i].Tab, Math.Abs(tar));
                             }
                         }
                         else
@@ -199,40 +477,40 @@ namespace OsEngine.Robots
                             {
                                 if (cur > 0 && tar > 0)
                                 {
-                                    sortedList[i].Tab.BuyAtMarketToPosition(sortedList[i].Pose, tar - cur);
+                                    IcebergBuyToPosition(sortedList[i].Tab, sortedList[i].Pose, tar - cur);
                                 }
                                 else if (cur < 0 && tar == 0)
                                 {
-                                    sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, Math.Abs(cur));
+                                    IcebergClose(sortedList[i].Tab, sortedList[i].Pose, Math.Abs(cur));
                                 }
                                 else if (cur < 0 && tar > 0)
                                 {
-                                    sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, Math.Abs(cur));
-                                    sortedList[i].Tab.BuyAtMarket(tar);
+                                    IcebergClose(sortedList[i].Tab, sortedList[i].Pose, Math.Abs(cur));
+                                    IcebergBuy(sortedList[i].Tab, tar);
                                 }
                                 else if (cur < 0 && tar < 0)
                                 {
-                                    sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, tar - cur);
+                                    IcebergClose(sortedList[i].Tab, sortedList[i].Pose, tar - cur);
                                 }
                             }
                             else if (cur > tar)
                             {
                                 if (cur > 0 && tar > 0)
                                 {
-                                    sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, cur - tar);
+                                    IcebergClose(sortedList[i].Tab, sortedList[i].Pose, cur - tar);
                                 }
                                 else if (cur > 0 && tar == 0)
                                 {
-                                    sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, cur);
+                                    IcebergClose(sortedList[i].Tab, sortedList[i].Pose, cur);
                                 }
                                 else if (cur > 0 && tar < 0)
                                 {
-                                    sortedList[i].Tab.CloseAtMarket(sortedList[i].Pose, cur);
-                                    sortedList[i].Tab.SellAtMarket(Math.Abs(tar));
+                                    IcebergClose(sortedList[i].Tab, sortedList[i].Pose, cur);
+                                    IcebergSell(sortedList[i].Tab, Math.Abs(tar));
                                 }
                                 else if (cur < 0 && tar < 0)
                                 {
-                                    sortedList[i].Tab.SellAtMarketToPosition(sortedList[i].Pose, cur - tar);
+                                    IcebergSellToPosition(sortedList[i].Tab, sortedList[i].Pose, cur - tar);
                                 }
                             }
                         }
@@ -265,11 +543,11 @@ namespace OsEngine.Robots
                     {
                         if (myMoneyFund.Pose == null)
                         {
-                            myMoneyFund.Tab.BuyAtMarket(myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
+                            IcebergBuy(myMoneyFund.Tab, myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
                         }
                         else
                         {
-                            myMoneyFund.Tab.BuyAtMarketToPosition(myMoneyFund.Pose, myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
+                            IcebergBuyToPosition(myMoneyFund.Tab, myMoneyFund.Pose, myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
                         }
                         tChange = true;
                     }
@@ -278,11 +556,11 @@ namespace OsEngine.Robots
                     {
                         if (myMoneyFund.Pose == null)
                         {
-                            myMoneyFund.Tab.SellAtMarket(myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
+                            IcebergSell(myMoneyFund.Tab, myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
                         }
                         else
                         {
-                            myMoneyFund.Tab.CloseAtMarket(myMoneyFund.Pose, myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
+                            IcebergClose(myMoneyFund.Tab, myMoneyFund.Pose, myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
                         }
                         tChange = true;
                     }
@@ -317,11 +595,15 @@ namespace OsEngine.Robots
             _endToWork = CreateParameterTimeOfDay("End to work", 18, 40, 00, 00, "Main Regime");
             _workIntervalUnit = CreateParameter("Work interval unit", "Minutes", new[] { "Minutes", "Seconds" }, "Main Regime");
             _workInterval = CreateParameter("Work interval", 5, 1, 3600, 1, "Main Regime"); ;
-            _lastTimeCheckFinance = CreateParameter("Last time work ", "", "Main Regime"); ;
+            _maxPriceAgeHours = CreateParameter("Max price age (hours)", 72m, 0.5m, 8760m, 0.5m, "Main Regime");
+            _verifyPositions = CreateParameter("Verify positions with account", "Off", new[] { "Off", "On" }, "Main Regime");
             _repMoneyFund = CreateParameter("Replace Money Fund", "Off", new[] { "Off", "On" }, "Replace Money Fund");
             _repMoneyFundNew = CreateParameter("New Money Fund", "LQDT", "Replace Money Fund");
             _repMoneyFundKoeff = CreateParameter("New Money Fund Koeff", 1.001m, 1.001m, 20.001m, 0.001m, "Replace Money Fund");
-
+            _icebergIsOn = CreateParameter("Iceberg orders", "Off", new[] { "Off", "On" }, "Iceberg");
+            _icebergOrdersCount = CreateParameter("Iceberg orders count", 3, 1, 50, 1, "Iceberg");
+            _icebergTimeoutSec = CreateParameter("Iceberg timeout (sec)", 5, 0, 300, 1, "Iceberg");
+            _lastTimeCheckFinance = CreateParameter("Last time work ", "", "Main Regime");
 
             StrategyParameterButton button = CreateParameterButton("Copy manual", "Main Regime");
             button.UserClickOnButtonEvent += Button_UserClickOnButtonEvent;
@@ -333,37 +615,44 @@ namespace OsEngine.Robots
 
         private void _tabToTrade2_ServerTimeChangeEvent(DateTime obj)
         {
-            if (_regime.ValueString == "Off")
+            try
             {
-                return;
-            }
-
-            DateTime vDt = DateTime.Now;
-            if (_lastTimeCheckFinance.ValueString == "")
-            {
-                _lastTimeCheckFinance.ValueString = Convert.ToString(vDt);
-            }
-
-            if (vDt.TimeOfDay >= _startToWork.TimeSpan && vDt.TimeOfDay <= _endToWork.TimeSpan)
-            {
-                // интервал отсчитываем в минутах или секундах в зависимости от выбранной единицы
-                double elapsedInterval = Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalMinutes);
-
-                if (_workIntervalUnit.ValueString == "Seconds")
+                if (_regime.ValueString == "Off")
                 {
-                    elapsedInterval = Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalSeconds);
+                    return;
                 }
 
-                if (elapsedInterval >= _workInterval.ValueInt)
+                DateTime vDt = DateTime.Now;
+                if (_lastTimeCheckFinance.ValueString == "")
                 {
-                    // здесь переход к основному действию
-                    CopyPortfolioLogic();
                     _lastTimeCheckFinance.ValueString = Convert.ToString(vDt);
                 }
 
+                if (vDt.TimeOfDay >= _startToWork.TimeSpan && vDt.TimeOfDay <= _endToWork.TimeSpan)
+                {
+                    // интервал отсчитываем в минутах или секундах в зависимости от выбранной единицы
+                    double elapsedInterval = Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalMinutes);
 
+                    if (_workIntervalUnit.ValueString == "Seconds")
+                    {
+                        elapsedInterval = Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalSeconds);
+                    }
+
+                    if (elapsedInterval >= _workInterval.ValueInt)
+                    {
+                        // здесь переход к основному действию
+                        CopyPortfolioLogic();
+                        _lastTimeCheckFinance.ValueString = Convert.ToString(vDt);
+                    }
+
+
+                }
+                return;
             }
-            return;
+            catch (Exception error)
+            {
+                SendNewLogMessage("Ошибка в _tabToTrade2_ServerTimeChangeEvent: " + error.ToString(), LogMessageType.Error);
+            }
         }
 
 
@@ -385,21 +674,21 @@ namespace OsEngine.Robots
 
                 if (_tabToTrade1.Tabs[0].IsReadyToTrade == false)
                 {
-                    _tabToTrade1.Tabs[0].SetNewLogMessage("Connection not ready to trade", Logging.LogMessageType.System);
+                    SendThrottledSystemLog("Connection not ready to trade, цикл пропущен");
                     return;
                 }
 
                 bool isTradingActive = IsTradingActive(_tabToTrade1.Tabs[0]);
                 if (isTradingActive == false)
                 {
-                    //_tabToTrade1.Tabs[0].SetNewLogMessage("There are currently no trades going on", Logging.LogMessageType.System);
+                    SendThrottledSystemLog("Торговая сессия не активна (нет данных стакана), цикл пропущен");
                     return;
                 }
 
                 // не торгуем, пока скринер перезагружает табы: списки табов и позиций в этот момент несогласованы
                 if (_tabToTrade1.NeedToReloadTabs == true)
                 {
-                    SendNewLogMessage("Идёт перезагрузка табов скринера, цикл пропущен", Logging.LogMessageType.System);
+                    SendThrottledSystemLog("Идёт перезагрузка табов скринера, цикл пропущен");
                     return;
                 }
 
@@ -429,6 +718,24 @@ namespace OsEngine.Robots
                     return;
                 }
 
+
+                // до снятия позиций убеждаемся, что для всех бумаг источника есть табы:
+                // недостающие добавляем и ждём готовности заранее, чтобы позиции не снимались по устаревшему снапшоту
+                for (int i = 0; i < positionOnBoard.Count; i++)
+                {
+                    if (positionOnBoard[i].SecurityNameCode == _tradeAssetInPortfolio.ValueString
+                        || positionOnBoard[i].SecurityNameCode == _moneyFundInPortfolio.ValueString)
+                    {
+                        continue;
+                    }
+
+                    int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security != null && tab.Security.Name == positionOnBoard[i].SecurityNameCode);
+
+                    if (tIndex == -1)
+                    {
+                        TryAddSecurityAndWaitTab(positionOnBoard[i].SecurityNameCode);
+                    }
+                }
 
                 // Анализируем все позиции исходного портфеля
                 List<Position> posesAll = _tabToTrade1.PositionsOpenAll;
@@ -460,7 +767,7 @@ namespace OsEngine.Robots
 
                         if (secPrice <= 0)
                         {
-                            SendNewLogMessage("Нет цены по инструменту " + boardSecName + ", цикл пропущен", Logging.LogMessageType.System);
+                            SendThrottledSystemLog("Нет цены по инструменту " + boardSecName + ", цикл пропущен");
                             return;
                         }
 
@@ -474,6 +781,14 @@ namespace OsEngine.Robots
                             tPos = posesAll[tIndex];
                         }
 
+                        if (_verifyPositions == "On" && IsPositionMatchAccount(tTab, boardSecName, tPoseCurrent) == false)
+                        {
+                            decimal accountVolume = 0m;
+                            GetAccountVolume(tTab, boardSecName, out accountVolume);
+                            SendThrottledLog("Сверка со счётом: по " + boardSecName + " журнал " + tPoseCurrent + " ≠ счёт " + accountVolume + ". Цикл пропущен", Logging.LogMessageType.Error);
+                            return;
+                        }
+
                         if (_repMoneyFund == "On")
                         {
                             mirrorPortfolio.myMoneyFundEdit(boardSecName, secPrice, Math.Round((positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff), tPoseCurrent, NormalizeVolume(tTab, (positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _repMoneyFundKoeff * _koeff.ValueDecimal), tTab, tPos, positionOnBoard[i].SecurityNameCode, _repMoneyFundKoeff, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked);
@@ -485,75 +800,38 @@ namespace OsEngine.Robots
                     }
                     else
                     {
-                        int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security.Name == positionOnBoard[i].SecurityNameCode);
+                        int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security != null && tab.Security.Name == positionOnBoard[i].SecurityNameCode);
                         if (tIndex == -1)
                         {
-                            SendNewLogMessage("Отсутствует настройка для " + positionOnBoard[i].SecurityNameCode, Logging.LogMessageType.Error);
-
-                            //Здесь пробуем добавить новый tab для отсутствующей бумаги
-                            try
-                            {
-                                // Проверка 1: сервер брокера должен быть включен
-                                List<AServer> servers = ServerMaster.GetAServers();
-                                if (servers == null
-                                    || servers.Count == 0)
-                                {
-                                    SendNewLogMessage("Сначала подключите коннектор к Брокеру", Logging.LogMessageType.Error);
-                                    return;
-                                }
-
-                                int sIndex = servers.FindIndex(s => s.ServerType == _tabToTrade1.ServerType);
-                                if (sIndex == -1)
-                                {
-                                    SendNewLogMessage("Проблема с коннектором скринера", Logging.LogMessageType.Error);
-                                    return;
-                                }
-
-                                // Проверка 2: фьючерсная площадка и спот, должны быть подключены к коннектору
-                                AServer myServer = servers[sIndex];
-                                List<Entity.Security> securitiesAll = myServer.Securities;
-                                
-                                if (securitiesAll == null || securitiesAll.Count == 0)
-                                {
-                                    SendNewLogMessage("В коннекторе не найдены бумаги. Возможно он не подключен", Logging.LogMessageType.Error);
-                                    return;
-                                }
-
-                                // Добавляем бумагу
-                                Entity.Security newSec = securitiesAll.Find(s => s.Name == positionOnBoard[i].SecurityNameCode);
-                                if (newSec == null) { return; }
-
-                                ActivatedSecurity sec = new ActivatedSecurity();
-                                sec.SecurityClass = newSec.NameClass;
-                                sec.SecurityName = newSec.Name;
-                                sec.IsOn = true;
-
-                                // плагин сам проверяет дубликаты, сохраняет настройки и ставит флаг перезагрузки табов
-                                if (ScreenerSecuritySync.AddSecurity(_tabToTrade1, sec))
-                                {
-                                    SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
-                                }
-
-                                // прерываем цикл: торговля возобновится после перезагрузки табов и проверки их готовности
-                                return;
-                            }
-                            catch (Exception error)
-                            {
-                                SendNewLogMessage("Ошибка при добавлении " + positionOnBoard[i].SecurityNameCode + " " + error.ToString(), LogMessageType.Error);
-                                return;
-                            }
-                            //
-                        
+                            // пре-проход уже пытался добавить таб и дождаться его — пропускаем бумагу в этом цикле
+                            continue;
                         }
                         tTab = _tabToTrade1.Tabs[tIndex];
+
+                        // мёртвый инструмент (исключён из коннектора или нет котировок) пропускаем:
+                        // не считаем по нему цели, но и не замораживаем весь портфель
+                        if (IsSecurityInServer(positionOnBoard[i].SecurityNameCode) == false)
+                        {
+                            LogDeadOnce(positionOnBoard[i].SecurityNameCode, "исключён из коннектора");
+                            continue;
+                        }
+
+                        if (IsTradingActive(tTab) == false)
+                        {
+                            LogDeadOnce(positionOnBoard[i].SecurityNameCode, "нет котировок");
+                            continue;
+                        }
 
                         decimal lastPrice = GetLastPrice(tTab);
 
                         if (lastPrice <= 0)
                         {
-                            SendNewLogMessage("Нет цены по инструменту " + positionOnBoard[i].SecurityNameCode + ", цикл пропущен", Logging.LogMessageType.System);
-                            return;
+                            LogDeadOnce(positionOnBoard[i].SecurityNameCode, "нет цены");
+                            continue;
                         }
+
+                        // бумага ожила — снимаем пометку, чтобы при новой проблеме снова залогировать
+                        MarkSecurityAlive(positionOnBoard[i].SecurityNameCode);
 
                         tIndex = posesAll.FindIndex(pos => pos.SecurityName == positionOnBoard[i].SecurityNameCode);
                         decimal tPoseCurrent = 0;
@@ -573,6 +851,14 @@ namespace OsEngine.Robots
                             tPos = posesAll[tIndex];
                         }
 
+                        if (_verifyPositions == "On" && IsPositionMatchAccount(tTab, positionOnBoard[i].SecurityNameCode, tPoseCurrent) == false)
+                        {
+                            decimal accountVolume = 0m;
+                            GetAccountVolume(tTab, positionOnBoard[i].SecurityNameCode, out accountVolume);
+                            SendThrottledLog("Сверка со счётом: по " + positionOnBoard[i].SecurityNameCode + " журнал " + tPoseCurrent + " ≠ счёт " + accountVolume + ". Бумага пропущена", Logging.LogMessageType.Error);
+                            continue;
+                        }
+
                         mirrorPortfolio.AddPosition(positionOnBoard[i].SecurityNameCode, lastPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, NormalizeVolume(tTab, (positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked) * _koeff.ValueDecimal), tTab, tPos);
                     }
                 }
@@ -588,15 +874,41 @@ namespace OsEngine.Robots
                         SendNewLogMessage("Отсутствует настройка для " + posesAll[i].SecurityName, Logging.LogMessageType.Error);
                         return;
                     }
+                    if (IsSecurityInServer(posesAll[i].SecurityName) == false)
+                    {
+                        LogDeadOnce(posesAll[i].SecurityName, "исключён из коннектора");
+                        continue;
+                    }
+
                     tTab = _tabToTrade1.Tabs[tIndex];
 
+                    if (IsTradingActive(tTab) == false)
+                    {
+                        LogDeadOnce(posesAll[i].SecurityName, "нет котировок");
+                        continue;
+                    }
 
                     decimal lastPrice = GetLastPrice(tTab);
 
                     if (lastPrice <= 0)
                     {
-                        SendNewLogMessage("Нет цены по инструменту " + posesAll[i].SecurityName + ", цикл пропущен", Logging.LogMessageType.System);
-                        return;
+                        LogDeadOnce(posesAll[i].SecurityName, "нет цены");
+                        continue;
+                    }
+
+                    MarkSecurityAlive(posesAll[i].SecurityName);
+
+                    if (_verifyPositions == "On")
+                    {
+                        decimal journalVolume = posesAll[i].Direction == Side.Buy ? posesAll[i].OpenVolume : -posesAll[i].OpenVolume;
+
+                        if (IsPositionMatchAccount(tTab, posesAll[i].SecurityName, journalVolume) == false)
+                        {
+                            decimal accountVolume = 0m;
+                            GetAccountVolume(tTab, posesAll[i].SecurityName, out accountVolume);
+                            SendThrottledLog("Сверка со счётом: по " + posesAll[i].SecurityName + " журнал " + journalVolume + " ≠ счёт " + accountVolume + ". Бумага пропущена", Logging.LogMessageType.Error);
+                            continue;
+                        }
                     }
 
                     mirrorPortfolio.AddPosition(posesAll[i].SecurityName, lastPrice, 0, posesAll[i].OpenVolume, 0, tTab, posesAll[i]);
@@ -607,6 +919,10 @@ namespace OsEngine.Robots
 
                 Boolean repMoneyFund = false;
                 if (_repMoneyFund == "On") { repMoneyFund = true; }
+
+                // настройки айсберга для CorrectPortfolio
+                mirrorPortfolio.IcebergOrdersCount = _icebergIsOn.ValueString == "On" ? _icebergOrdersCount.ValueInt : 1;
+                mirrorPortfolio.IcebergTimeoutSec = _icebergTimeoutSec.ValueInt;
 
 
                 if (_onlyInfo == "On")
@@ -656,7 +972,208 @@ namespace OsEngine.Robots
                 return 0;
             }
 
-            return tab.CandlesAll[tab.CandlesAll.Count - 1].Close;
+            Candle lastCandle = tab.CandlesAll[tab.CandlesAll.Count - 1];
+
+            // цена из протухшей свечи хуже её отсутствия: по мёртвой цене считаются ложные цели и объёмы
+            if (IsCandleFresh(lastCandle) == false)
+            {
+                SendThrottledSystemLog("Цена по инструменту " + tab.Security.Name + " протухла: возраст последней свечи больше " + _maxPriceAgeHours.ValueDecimal + " ч");
+                return 0;
+            }
+
+            return lastCandle.Close;
+        }
+
+        private bool IsCandleFresh(Candle candle)
+        {
+            if (candle == null)
+            {
+                return false;
+            }
+
+            return (DateTime.Now - candle.TimeStart).TotalHours <= (double)_maxPriceAgeHours.ValueDecimal;
+        }
+
+        private bool IsSecurityInServer(string securityName)
+        {
+            // если коннектор не найден или бумаги ещё не подгрузились, проверить нечем — не считаем бумагу мёртвой
+            List<AServer> servers = ServerMaster.GetAServers();
+
+            if (servers == null || servers.Count == 0)
+            {
+                return true;
+            }
+
+            AServer server = servers.Find(s => s.ServerType == _tabToTrade1.ServerType);
+
+            if (server == null)
+            {
+                return true;
+            }
+
+            List<Entity.Security> securities = server.Securities;
+
+            if (securities == null || securities.Count == 0)
+            {
+                return true;
+            }
+
+            return securities.Find(s => s.Name == securityName) != null;
+        }
+
+        private bool GetAccountVolume(BotTabSimple tab, string securityName, out decimal accountVolume)
+        {
+            accountVolume = 0m;
+
+            if (tab == null)
+            {
+                return false;
+            }
+
+            Portfolio portfolio = tab.Portfolio;
+
+            if (portfolio == null)
+            {
+                return false;
+            }
+
+            List<PositionOnBoard> positionsOnBoard = portfolio.GetPositionOnBoard();
+
+            if (positionsOnBoard == null)
+            {
+                return false;
+            }
+
+            PositionOnBoard boardPos = positionsOnBoard.Find(p => p.SecurityNameCode == securityName);
+
+            if (boardPos == null)
+            {
+                // позиции на счёте нет — это валидный ноль
+                return true;
+            }
+
+            accountVolume = boardPos.ValueCurrent;
+            return true;
+        }
+
+        // сверка объёма позиции из журнала таба с реальным объёмом на счёте
+        private bool IsPositionMatchAccount(BotTabSimple tab, string securityName, decimal journalVolume)
+        {
+            decimal accountVolume = 0m;
+
+            if (GetAccountVolume(tab, securityName, out accountVolume) == false)
+            {
+                // сверить не удалось — не блокируем торговлю
+                return true;
+            }
+
+            return accountVolume == journalVolume;
+        }
+
+        private void LogDeadOnce(string securityName, string reason)
+        {
+            // мёртвую бумагу логируем один раз за сессию, чтобы не спамить каждый цикл
+            lock (_deadSecuritiesLocker)
+            {
+                if (_deadSecurities.Contains(securityName))
+                {
+                    return;
+                }
+
+                _deadSecurities.Add(securityName);
+            }
+
+            SendNewLogMessage("Инструмент " + securityName + " " + reason + ". Исключён из ребалансировки, его позиции не корректируются", Logging.LogMessageType.Error);
+        }
+
+        private void MarkSecurityAlive(string securityName)
+        {
+            // бумага ожила — снимаем пометку, чтобы при новой проблеме снова залогировать
+            lock (_deadSecuritiesLocker)
+            {
+                _deadSecurities.Remove(securityName);
+            }
+        }
+
+        private int TryAddSecurityAndWaitTab(string securityNameCode)
+        {
+            try
+            {
+                // Проверка 1: сервер брокера должен быть включен
+                List<AServer> servers = ServerMaster.GetAServers();
+                if (servers == null
+                    || servers.Count == 0)
+                {
+                    SendNewLogMessage("Сначала подключите коннектор к Брокеру", Logging.LogMessageType.Error);
+                    return -1;
+                }
+
+                int sIndex = servers.FindIndex(s => s.ServerType == _tabToTrade1.ServerType);
+                if (sIndex == -1)
+                {
+                    SendNewLogMessage("Проблема с коннектором скринера", Logging.LogMessageType.Error);
+                    return -1;
+                }
+
+                // Проверка 2: фьючерсная площадка и спот, должны быть подключены к коннектору
+                AServer myServer = servers[sIndex];
+                List<Entity.Security> securitiesAll = myServer.Securities;
+
+                if (securitiesAll == null || securitiesAll.Count == 0)
+                {
+                    SendNewLogMessage("В коннекторе не найдены бумаги. Возможно он не подключен", Logging.LogMessageType.Error);
+                    return -1;
+                }
+
+                // Добавляем бумагу
+                Entity.Security newSec = securitiesAll.Find(s => s.Name == securityNameCode);
+                if (newSec == null)
+                {
+                    SendNewLogMessage("Инструмент " + securityNameCode + " не найден в списке бумаг коннектора. Проверьте подключение класса бумаг у коннектора скринера", Logging.LogMessageType.Error);
+                    return -1;
+                }
+
+                ActivatedSecurity sec = new ActivatedSecurity();
+                sec.SecurityClass = newSec.NameClass;
+                sec.SecurityName = newSec.Name;
+                sec.IsOn = true;
+
+                // плагин сам проверяет дубликаты, сохраняет настройки и ставит флаг перезагрузки табов
+                if (ScreenerSecuritySync.AddSecurity(_tabToTrade1, sec))
+                {
+                    SendNewLogMessage("Добавлен инструмент " + newSec.Name + " Класс " + newSec.NameClass, Logging.LogMessageType.Error);
+                }
+
+                return WaitTabReady(securityNameCode);
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage("Ошибка при добавлении " + securityNameCode + " " + error.ToString(), LogMessageType.Error);
+                return -1;
+            }
+        }
+
+        private int WaitTabReady(string securityNameCode)
+        {
+            // фоновый поток скринера подхватывает NeedToReloadTabs примерно за секунду,
+            // дальше ждём подключения коннектора таба и появления котировок
+            for (int i = 0; i < 60; i++)
+            {
+                int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security != null && tab.Security.Name == securityNameCode);
+
+                if (tIndex != -1
+                    && _tabToTrade1.Tabs[tIndex].IsConnected
+                    && _tabToTrade1.Tabs[tIndex].IsReadyToTrade
+                    && IsTradingActive(_tabToTrade1.Tabs[tIndex]))
+                {
+                    return tIndex;
+                }
+
+                System.Threading.Thread.Sleep(500);
+            }
+
+            SendNewLogMessage("Таб для " + securityNameCode + " не успел подключиться за 30 секунд. Бумага будет обработана в следующем цикле", Logging.LogMessageType.System);
+            return -1;
         }
 
         private bool AllTabsReady()
@@ -674,7 +1191,7 @@ namespace OsEngine.Robots
 
                 if (tIndex == -1)
                 {
-                    SendNewLogMessage("Таб для " + sec.SecurityName + " ещё не создан, цикл пропущен", Logging.LogMessageType.System);
+                    SendThrottledSystemLog("Таб для " + sec.SecurityName + " ещё не создан, цикл пропущен");
                     return false;
                 }
 
@@ -682,7 +1199,7 @@ namespace OsEngine.Robots
 
                 if (tab.IsConnected == false || tab.IsReadyToTrade == false)
                 {
-                    SendNewLogMessage("Таб " + sec.SecurityName + " не готов к торговле, цикл пропущен", Logging.LogMessageType.System);
+                    SendThrottledSystemLog("Таб " + sec.SecurityName + " не готов к торговле, цикл пропущен");
                     return false;
                 }
             }
@@ -718,6 +1235,23 @@ namespace OsEngine.Robots
             }
 
             return result;
+        }
+
+        private void SendThrottledLog(string message, LogMessageType type)
+        {
+            // событие времени сервера приходит каждую секунду, сообщения об одном и том же не чаще раза в 5 минут
+            if ((DateTime.Now - _lastSystemLogTime).TotalMinutes < 5)
+            {
+                return;
+            }
+
+            _lastSystemLogTime = DateTime.Now;
+            SendNewLogMessage(message, type);
+        }
+
+        private void SendThrottledSystemLog(string message)
+        {
+            SendThrottledLog(message, Logging.LogMessageType.System);
         }
 
         #region Checks
