@@ -9,6 +9,7 @@ namespace OsEngine.OsTrader.Panels.Tab
     /// Плагин для программного добавления бумаг в скринер без участия UI.
     /// Дублирует логику окна «Настройка данных»: добавляет бумагу в SecuritiesNames,
     /// сохраняет настройки в Engine/<TabName>ScreenerSet.txt и ставит флаг перезагрузки табов.
+    /// Если бумага уже есть в списке, но выключена — включает её вместо повторного добавления.
     /// </summary>
     public static class ScreenerSecuritySync
     {
@@ -23,10 +24,28 @@ namespace OsEngine.OsTrader.Panels.Tab
                     return false;
                 }
 
-                // не добавляем бумагу повторно, если она уже в списке и ждёт перезагрузки табов
-                if (screener.SecuritiesNames.FindIndex(s => s.SecurityName == security.SecurityName) != -1)
+                int index = screener.SecuritiesNames.FindIndex(s => s.SecurityName == security.SecurityName);
+
+                if (index != -1)
                 {
-                    return false;
+                    // бумага уже в списке. Если выключена — включаем, таб создастся при перезагрузке
+                    if (screener.SecuritiesNames[index].IsOn == true)
+                    {
+                        // уже включена и ждёт перезагрузки табов
+                        return false;
+                    }
+
+                    screener.SecuritiesNames[index].IsOn = true;
+                    screener.SecuritiesNames[index].SecurityClass = security.SecurityClass;
+                    screener.SaveSettings();
+                    screener.NeedToReloadTabs = true;
+
+                    if (SecurityAddedEvent != null)
+                    {
+                        SecurityAddedEvent(screener, screener.SecuritiesNames[index]);
+                    }
+
+                    return true;
                 }
 
                 screener.SecuritiesNames.Add(security);
