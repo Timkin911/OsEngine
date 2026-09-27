@@ -1,5 +1,5 @@
 /* 
- Версия 1.11
+ Версия 1.12
  */
 
 
@@ -42,13 +42,9 @@ namespace OsEngine.Robots
         StrategyParameterString _icebergIsOn;
         StrategyParameterInt _icebergOrdersCount;
         StrategyParameterInt _icebergTimeoutSec;
-        StrategyParameterDecimal _maxDepthAgeSec;
-        StrategyParameterDecimal _resubscribeThrottleMin;
         DateTime _lastSystemLogTime = DateTime.MinValue;
         List<string> _deadSecurities = new List<string>();
         private object _deadSecuritiesLocker = new object();
-        private Dictionary<string, DateTime> _lastResubscribeBySec = new Dictionary<string, DateTime>();
-        private object _resubscribeLocker = new object();
 
         #region Классы MirrorPosition и MirrorPortfolio
         public class MirrorPosition
@@ -106,6 +102,8 @@ namespace OsEngine.Robots
             public decimal Price { get; set; }
             public int IcebergOrdersCount = 1;
             public int IcebergTimeoutSec = 0;
+            // логгер робота для сообщений о перезагрузке табов
+            public Action<string> LogReload;
 
             public MirrorPortfolio()
             {
@@ -421,6 +419,38 @@ namespace OsEngine.Robots
                 }
             }
 
+            // стакан живой: есть и bid, и ask с ненулевыми ценами
+            private bool TabDepthIsAlive(BotTabSimple tab)
+            {
+                if (tab == null || tab.MarketDepth == null)
+                {
+                    return false;
+                }
+
+                MarketDepth depth = tab.MarketDepth;
+
+                if (depth.Bids == null || depth.Bids.Count == 0
+                    || depth.Asks == null || depth.Asks.Count == 0
+                    || depth.Bids[0].Price == 0
+                    || depth.Asks[0].Price == 0)
+                {
+                    return false;
+                }
+
+                return true;
+            }
+
+            // полная перезагрузка таба: отписка и подписка бумаги на сервере заново
+            private void ReloadTab(BotTabSimple tab)
+            {
+                if (tab == null || tab.Connector == null)
+                {
+                    return;
+                }
+
+                tab.Connector.ReconnectHard();
+            }
+
             private void PercentCalculation()
             {
                 Price = Math.Abs(myTradeAsset.SecurityValue) * myTradeAsset.SecurityPrice + Math.Abs(myMoneyFund.SecurityValue) * myMoneyFund.SecurityPrice;
@@ -463,6 +493,18 @@ namespace OsEngine.Robots
                         Decimal tar = sortedList[i].PoseTargetValue;
 
                         if (tar != cur) { tChange = true; }
+
+                        // нет стакана в момент сделки — перезагружаем таб, торг по бумаге в этом цикле пропускаем
+                        if (tar != cur && TabDepthIsAlive(sortedList[i].Tab) == false)
+                        {
+                            if (LogReload != null)
+                            {
+                                LogReload("Нет стакана по " + sortedList[i].SecurityNameCode + " в момент сделки. Перезагрузка таба");
+                            }
+
+                            ReloadTab(sortedList[i].Tab);
+                            continue;
+                        }
 
                         if (sortedList[i].Pose == null)
                         {
@@ -542,31 +584,46 @@ namespace OsEngine.Robots
 
                 if (onlyInfo == false)
                 {
-
-                    if (myMoneyFund.PoseCurrentValue < myMoneyFund.PoseTargetValue && changeMoneyFund == true)
+                    // нет стакана в момент сделки по фонду — перезагружаем таб, торг фондом в этом цикле пропускаем
+                    if (changeMoneyFund == true
+                        && myMoneyFund.PoseCurrentValue != myMoneyFund.PoseTargetValue
+                        && TabDepthIsAlive(myMoneyFund.Tab) == false)
                     {
-                        if (myMoneyFund.Pose == null)
+                        if (LogReload != null)
                         {
-                            IcebergBuy(myMoneyFund.Tab, myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
+                            LogReload("Нет стакана по " + myMoneyFund.SecurityNameCode + " в момент сделки. Перезагрузка таба");
                         }
-                        else
-                        {
-                            IcebergBuyToPosition(myMoneyFund.Tab, myMoneyFund.Pose, myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
-                        }
-                        tChange = true;
+
+                        ReloadTab(myMoneyFund.Tab);
                     }
-
-                    if (myMoneyFund.PoseCurrentValue > myMoneyFund.PoseTargetValue && changeMoneyFund == true)
+                    else
                     {
-                        if (myMoneyFund.Pose == null)
+
+                        if (myMoneyFund.PoseCurrentValue < myMoneyFund.PoseTargetValue && changeMoneyFund == true)
                         {
-                            IcebergSell(myMoneyFund.Tab, myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
+                            if (myMoneyFund.Pose == null)
+                            {
+                                IcebergBuy(myMoneyFund.Tab, myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
+                            }
+                            else
+                            {
+                                IcebergBuyToPosition(myMoneyFund.Tab, myMoneyFund.Pose, myMoneyFund.PoseTargetValue - myMoneyFund.PoseCurrentValue);
+                            }
+                            tChange = true;
                         }
-                        else
+
+                        if (myMoneyFund.PoseCurrentValue > myMoneyFund.PoseTargetValue && changeMoneyFund == true)
                         {
-                            IcebergClose(myMoneyFund.Tab, myMoneyFund.Pose, myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
+                            if (myMoneyFund.Pose == null)
+                            {
+                                IcebergSell(myMoneyFund.Tab, myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
+                            }
+                            else
+                            {
+                                IcebergClose(myMoneyFund.Tab, myMoneyFund.Pose, myMoneyFund.PoseCurrentValue - myMoneyFund.PoseTargetValue);
+                            }
+                            tChange = true;
                         }
-                        tChange = true;
                     }
                 }
 
@@ -607,8 +664,6 @@ namespace OsEngine.Robots
             _icebergIsOn = CreateParameter("Iceberg orders", "Off", new[] { "Off", "On" }, "Iceberg");
             _icebergOrdersCount = CreateParameter("Iceberg orders count", 3, 1, 50, 1, "Iceberg");
             _icebergTimeoutSec = CreateParameter("Iceberg timeout (sec)", 5, 0, 300, 1, "Iceberg");
-            _maxDepthAgeSec = CreateParameter("Max market depth age (sec)", 60m, 5m, 3600m, 5m, "Market Depth Watchdog");
-            _resubscribeThrottleMin = CreateParameter("Resubscribe throttle (min)", 2m, 1m, 60m, 1m, "Market Depth Watchdog");
             _lastTimeCheckFinance = CreateParameter("Last time work ", "", "Main Regime");
 
             StrategyParameterButton button = CreateParameterButton("Copy manual", "Main Regime");
@@ -677,9 +732,6 @@ namespace OsEngine.Robots
                     SendNewLogMessage("Не выбраны инструменты", Logging.LogMessageType.Error);
                     return;
                 }
-
-                // сторож стакана: переподписываем табы, где котировки идут, а стакан протух
-                WatchdogMarketDepth();
 
                 if (_tabToTrade1.Tabs[0].IsReadyToTrade == false)
                 {
@@ -752,10 +804,7 @@ namespace OsEngine.Robots
                 int[] flag = new int[posesAll.Count];
 
                 MirrorPortfolio mirrorPortfolio = new MirrorPortfolio();
-
-                // корректировка фонда отключается на этот цикл, если по его табу нет стакана:
-                // заявка не пройдёт, а бумаги ребалансировать нужно
-                bool moneyFundChangeEnabled = _changeMoneyFund.ValueString == "On";
+                mirrorPortfolio.LogReload = SendThrottledSystemLog;
 
                 for (int i = 0; i < positionOnBoard.Count; i++)
                 {
@@ -776,14 +825,6 @@ namespace OsEngine.Robots
                         }
                         tTab = _tabToTrade1.Tabs[tIndex];
 
-                        // без стакана заявка по фонду не пройдёт (BestAsk == 0) — фонд в этом цикле не корректируем
-                        bool moneyFundDepthIsOn = IsTradingActive(tTab);
-
-                        if (moneyFundDepthIsOn == false)
-                        {
-                            LogDeadOnce(boardSecName, "нет котировок");
-                        }
-
                         decimal secPrice = GetLastPrice(tTab);
 
                         if (secPrice <= 0)
@@ -800,14 +841,6 @@ namespace OsEngine.Robots
                             tPoseCurrent = posesAll[tIndex].OpenVolume;
                             flag[tIndex] = 2;
                             tPos = posesAll[tIndex];
-                        }
-
-                        if (moneyFundDepthIsOn == false)
-                        {
-                            moneyFundChangeEnabled = false;
-                            // цель = текущей позиции, чтобы расчёт портфеля не искажался, а торгов не было
-                            mirrorPortfolio.myMoneyFundEdit(boardSecName, secPrice, positionOnBoard[i].ValueCurrent - positionOnBoard[i].ValueBlocked, tPoseCurrent, tPoseCurrent, tTab, tPos);
-                            continue;
                         }
 
                         if (_verifyPositions == "On" && IsPositionMatchAccount(tTab, boardSecName, tPoseCurrent) == false)
@@ -956,16 +989,16 @@ namespace OsEngine.Robots
 
                 if (_onlyInfo == "On")
                 {
-                    tInfo = mirrorPortfolio.CorrectPortfolio(true, moneyFundChangeEnabled, repMoneyFund);
+                    tInfo = mirrorPortfolio.CorrectPortfolio(true, true, repMoneyFund);
 
                 }
-                else if (_onlyInfo == "Off" && moneyFundChangeEnabled == true)
+                else if (_onlyInfo == "Off" && _changeMoneyFund == "On")
                 {
                     tInfo = mirrorPortfolio.CorrectPortfolio(false, true, repMoneyFund);
 
                 }
 
-                else if (_onlyInfo == "Off")
+                else if (_onlyInfo == "Off" && _changeMoneyFund == "Off")
                 {
                     tInfo = mirrorPortfolio.CorrectPortfolio(false, false, repMoneyFund);
 
@@ -1021,74 +1054,6 @@ namespace OsEngine.Robots
             }
 
             return (DateTime.Now - candle.TimeStart).TotalHours <= (double)_maxPriceAgeHours.ValueDecimal;
-        }
-
-        // сторож стакана: если по бумаге идут котировки, а стакан не приходит,
-        // принудительно переподписываем таб (ReconnectHard = Unsubscribe + Subscribe на сервере)
-        private void WatchdogMarketDepth()
-        {
-            try
-            {
-                for (int i = 0; i < _tabToTrade1.Tabs.Count; i++)
-                {
-                    BotTabSimple tab = _tabToTrade1.Tabs[i];
-
-                    if (tab == null || tab.Security == null || tab.IsConnected == false)
-                    {
-                        continue;
-                    }
-
-                    // стакан есть и свежий — с табом всё в порядке
-                    if (tab.MarketDepth != null
-                        && (DateTime.Now - tab.MarketDepth.Time).TotalSeconds < (double)_maxDepthAgeSec.ValueDecimal)
-                    {
-                        continue;
-                    }
-
-                    List<Candle> candles = tab.CandlesAll;
-
-                    if (candles == null || candles.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    // сделок нет — стакан тут ни при чём, это мёртвая бумага, переподписка бессмысленна
-                    // свежесть свечи меряем таймфреймом с запасом: последняя свеча началась недавно
-                    double maxCandleAgeMin = tab.TimeFrame.TotalMinutes * 3;
-
-                    if (maxCandleAgeMin < 3)
-                    {
-                        maxCandleAgeMin = 3;
-                    }
-
-                    if ((DateTime.Now - candles[candles.Count - 1].TimeStart).TotalMinutes > maxCandleAgeMin)
-                    {
-                        continue;
-                    }
-
-                    string secName = tab.Security.Name;
-
-                    lock (_resubscribeLocker)
-                    {
-                        DateTime lastResubscribe;
-
-                        if (_lastResubscribeBySec.TryGetValue(secName, out lastResubscribe)
-                            && (DateTime.Now - lastResubscribe).TotalMinutes < (double)_resubscribeThrottleMin.ValueDecimal)
-                        {
-                            continue;
-                        }
-
-                        _lastResubscribeBySec[secName] = DateTime.Now;
-                    }
-
-                    SendNewLogMessage("По " + secName + " нет стакана при живых котировках. Принудительная переподписка таба", Logging.LogMessageType.Error);
-                    tab.Connector.ReconnectHard();
-                }
-            }
-            catch (Exception error)
-            {
-                SendNewLogMessage("Ошибка в WatchdogMarketDepth: " + error.ToString(), LogMessageType.Error);
-            }
         }
 
         private bool IsSecurityInServer(string securityName)
