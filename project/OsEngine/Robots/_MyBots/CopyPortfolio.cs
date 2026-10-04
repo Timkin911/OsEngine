@@ -1,5 +1,5 @@
 /* 
- Версия 1.12
+ Версия 1.13
  */
 
 
@@ -42,9 +42,12 @@ namespace OsEngine.Robots
         StrategyParameterString _icebergIsOn;
         StrategyParameterInt _icebergOrdersCount;
         StrategyParameterInt _icebergTimeoutSec;
+        StrategyParameterDecimal _removeExpiredAfterHours;
         DateTime _lastSystemLogTime = DateTime.MinValue;
         List<string> _deadSecurities = new List<string>();
         private object _deadSecuritiesLocker = new object();
+        private Dictionary<string, DateTime> _missingSinceSec = new Dictionary<string, DateTime>();
+        private object _missingSecLocker = new object();
 
         #region Классы MirrorPosition и MirrorPortfolio
         public class MirrorPosition
@@ -664,6 +667,7 @@ namespace OsEngine.Robots
             _icebergIsOn = CreateParameter("Iceberg orders", "Off", new[] { "Off", "On" }, "Iceberg");
             _icebergOrdersCount = CreateParameter("Iceberg orders count", 3, 1, 50, 1, "Iceberg");
             _icebergTimeoutSec = CreateParameter("Iceberg timeout (sec)", 5, 0, 300, 1, "Iceberg");
+            _removeExpiredAfterHours = CreateParameter("Remove expired security after (hours)", 24m, 1m, 720m, 1m, "Main Regime");
             _lastTimeCheckFinance = CreateParameter("Last time work ", "", "Main Regime");
 
             StrategyParameterButton button = CreateParameterButton("Copy manual", "Main Regime");
@@ -752,6 +756,9 @@ namespace OsEngine.Robots
                     SendThrottledSystemLog("Идёт перезагрузка табов скринера, цикл пропущен");
                     return;
                 }
+
+                // удаляем экспирировавшие или пропавшие у брокера бумаги из скринера
+                CleanExpiredScreenerSecurities();
 
                 // проверяем, что все включённые бумаги скринера имеют созданные и подключённые табы
                 if (AllTabsReady() == false)
@@ -1150,10 +1157,18 @@ namespace OsEngine.Robots
 
         private void MarkSecurityAlive(string securityName)
         {
-            // бумага ожила — снимаем пометку, чтобы при новой проблеме снова залогировать
+            // бумага ожила — снимаем пометку и логируем возврат, чтобы при новой проблеме снова залогировать
+            bool wasDead = false;
+
             lock (_deadSecuritiesLocker)
             {
+                wasDead = _deadSecurities.Contains(securityName);
                 _deadSecurities.Remove(securityName);
+            }
+
+            if (wasDead)
+            {
+                SendNewLogMessage("Инструмент " + securityName + " снова участвует в ребалансировке", Logging.LogMessageType.System);
             }
         }
 
@@ -1249,6 +1264,13 @@ namespace OsEngine.Robots
                     continue;
                 }
 
+                // бумаги нет у брокера (экспирация) — не блокируем весь цикл,
+                // её удалением из скринера занимается CleanExpiredScreenerSecurities
+                if (IsSecurityInServer(sec.SecurityName) == false)
+                {
+                    continue;
+                }
+
                 int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security != null && tab.Security.Name == sec.SecurityName);
 
                 if (tIndex == -1)
@@ -1267,6 +1289,127 @@ namespace OsEngine.Robots
             }
 
             return true;
+        }
+
+        // удаление экспирировавших или пропавших у брокера бумаг из скринера.
+        // Два триггера: по Expiration (пока бумага ещё доступна) и по непрерывному
+        // отсутствию в списке сервера N часов (когда Expiration уже не прочитать)
+        private void CleanExpiredScreenerSecurities()
+        {
+            try
+            {
+                for (int i = 0; i < _tabToTrade1.SecuritiesNames.Count; i++)
+                {
+                    ActivatedSecurity sec = _tabToTrade1.SecuritiesNames[i];
+
+                    if (sec.IsOn == false)
+                    {
+                        continue;
+                    }
+
+                    Entity.Security security = GetSecurityFromTabsOrServer(sec.SecurityName);
+
+                    if (security != null
+                        && security.Expiration != DateTime.MinValue
+                        && security.Expiration.AddHours((double)_removeExpiredAfterHours.ValueDecimal) < DateTime.Now)
+                    {
+                        if (RemoveSecurityFromScreener(sec.SecurityName,
+                            "Контракт " + sec.SecurityName + " истёк (экспирация " + security.Expiration.ToString("dd.MM.yyyy") + "). Удалён из скринера"))
+                        {
+                            i--;
+                        }
+
+                        continue;
+                    }
+
+                    if (IsSecurityInServer(sec.SecurityName) == false)
+                    {
+                        // бумага пропала у брокера — копим время непрерывного отсутствия
+                        if (HandleMissingSecurity(sec.SecurityName))
+                        {
+                            // бумага удалена из скринера, пошла перезагрузка табов
+                            i--;
+                        }
+
+                        continue;
+                    }
+
+                    // бумага на месте — сбрасываем счётчик отсутствия
+                    lock (_missingSecLocker)
+                    {
+                        _missingSinceSec.Remove(sec.SecurityName);
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage("Ошибка в CleanExpiredScreenerSecurities: " + error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        // true — бумага удалена из скринера
+        private bool HandleMissingSecurity(string securityName)
+        {
+            LogDeadOnce(securityName, "исключён из коннектора");
+
+            lock (_missingSecLocker)
+            {
+                DateTime firstMissing;
+
+                if (_missingSinceSec.TryGetValue(securityName, out firstMissing) == false)
+                {
+                    _missingSinceSec[securityName] = DateTime.Now;
+                    return false;
+                }
+
+                if ((DateTime.Now - firstMissing).TotalHours < (double)_removeExpiredAfterHours.ValueDecimal)
+                {
+                    return false;
+                }
+
+                _missingSinceSec.Remove(securityName);
+            }
+
+            return RemoveSecurityFromScreener(securityName,
+                "Инструмент " + securityName + " отсутствует у брокера более " + _removeExpiredAfterHours.ValueDecimal + " ч (предположительно экспирация). Удалён из скринера");
+        }
+
+        private bool RemoveSecurityFromScreener(string securityName, string logMessage)
+        {
+            if (ScreenerSecuritySync.RemoveSecurity(_tabToTrade1, securityName))
+            {
+                SendNewLogMessage(logMessage, Logging.LogMessageType.Error);
+                return true;
+            }
+
+            return false;
+        }
+
+        // бумага из таба скринера, при его отсутствии — из списка сервера
+        private Entity.Security GetSecurityFromTabsOrServer(string securityName)
+        {
+            int tIndex = _tabToTrade1.Tabs.FindIndex(tab => tab.Security != null && tab.Security.Name == securityName);
+
+            if (tIndex != -1)
+            {
+                return _tabToTrade1.Tabs[tIndex].Security;
+            }
+
+            List<AServer> servers = ServerMaster.GetAServers();
+
+            if (servers == null || servers.Count == 0)
+            {
+                return null;
+            }
+
+            AServer server = servers.Find(s => s.ServerType == _tabToTrade1.ServerType);
+
+            if (server == null || server.Securities == null)
+            {
+                return null;
+            }
+
+            return server.Securities.Find(s => s.Name == securityName);
         }
 
         private decimal NormalizeVolume(BotTabSimple tab, decimal volume)
