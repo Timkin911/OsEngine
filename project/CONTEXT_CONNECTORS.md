@@ -42,8 +42,8 @@ public class BcsServer : AServer
 - **Создание.** `ServerMaster` создаёт обёртку `new XServer(uniqueNum)`. В конструкторе обязательно: `ServerNum = ...`, затем `ServerRealization = realization` (сеттер `AServer.cs:161` подписывается на все события реализации и создаёт стандартные параметры), затем кастомные параметры.
 - **Connect.** Движок вызывает `Connect(WebProxy proxy)` реализации. Реализация читает значения параметров из `ServerParameters`, устанавливает соединение (REST-клиент, токены, сокеты) и по готовности выставляет `ServerStatus = ServerConnectStatus.Connect` и вызывает `ConnectEvent()`. До этого момента `SecurityEvent`/`PortfolioEvent` не вызываются.
 - **Работа.** Движок дёргает `GetSecurities()`, `GetPortfolios()`, подписывается на бумаги, шлёт ордера.
-- **Disconnect.** При потере соединения реализация сама выставляет `ServerStatus = Disconnect` и вызывает `DisconnectEvent()`. Переподключение инициирует движок, повторно вызывая `Connect`.
-- **Dispose/Delete.** `Dispose()` реализации обязан остановить соединение, отписаться от событий сокетов, закрыть клиенты и выставить `Disconnect`. `AServer.Delete()` отписывается от событий реализации и вызывает `Dispose`.
+- **Disconnect.** При потере соединения реализация сама выставляет `ServerStatus = Disconnect` и вызывает `DisconnectEvent()`. Переподключение инициирует движок (`AServer.PrimeThreadArea`, `AServer.cs:1342`): он вызывает **сначала `Dispose()`, потом `Connect()`**.
+- **Dispose/Delete.** `Dispose()` реализации обязан **полностью обнулить состояние** (все словари/списки/флаги подписок, очереди, кэши, токены), отписаться от событий сокетов, закрыть клиенты и выставить `Disconnect`. Именно `Dispose()` — единственное правильное место очистки, потому что движок гарантированно зовёт его перед каждым `Connect()`. `AServer.Delete()` отписывается от событий реализации и вызывает `Dispose`.
 
 ### 1.3. Событийная модель
 
@@ -74,6 +74,22 @@ OsEngine/Market/Servers/<Имя>/
 ```
 
 Имена: папка и классы — по имени биржи/брокера (`BCS/BcsServer.cs`, `TInvest/TInvestServer.cs`). Namespace = путь (`OsEngine.Market.Servers.BCS`).
+
+### 1.4.1. Классы `Entity/` (DTO под JSON)
+
+`Entity/` — только «плоские» DTO под ответы API. Три правила:
+
+1. **Никаких сериализационных атрибутов** (`[JsonPropertyName]`, `[JsonProperty]`, `[JsonIgnore]`). Имя свойства пишется ровно как поле в JSON (БКС/Т-Инвестиции шлют camelCase — так и называем: `orderStatus`, `clientOrderId`, `executionValue`). Newtonsoft десериализует регистронезависимо, поэтому атрибуты — мёртвый шум, их быть не должно.
+2. **Все скалярные свойства — `string`, без nullable `?`.** Числа, булевы, таймстемпы — тоже `string`; конвертацию в нужный тип делает класс коннектора через `ToDecimal()`/`ToDouble()` и т.п. (см. 10.5). Исключение — вложенные коллекции/объекты (`List<OrderBookEntry>`, `Record[]`, `Data data`) — они сами DTO, а не «значения».
+3. **Никакой логики в Entity** — только `{ get; set; }`.
+
+```csharp
+public class Data
+{
+    public string orderStatus { get; set; }    // в JSON поле "orderStatus"
+    public string executionValue { get; set; } // в JSON поле "executionValue"
+}
+```
 
 ### 1.5. Регистрация нового сервера
 
@@ -201,7 +217,7 @@ private void DataMessageReader()
 }
 ```
 
-Ридеры запускаются в конструкторе реализации (с `IsBackground = true`). Очереди пересоздавай в `Connect` — после реконнекта в них не должно остаться старья.
+Ридеры запускаются в конструкторе реализации (с `IsBackground = true`). Очереди пересоздавай в `Dispose` — после реконнекта в них не должно остаться старья (движок зовёт `Dispose()` перед каждым `Connect()`).
 
 ### 3.4. `RateGate`: стандартные лимиты
 
@@ -229,7 +245,7 @@ private RateGate _rateGateOrdersOperations = new RateGate(1, TimeSpan.FromMillis
 
 - Токен/ключ — параметр `CreateParameterPassword` (индекс `[0]` по традиции).
 - Если у API два токена (refresh/access, как у БКС): refresh хранится в параметре, access перевыпускается в `Connect` и далее фоновым потоком за N минут до истечения (`CheckLifetimeToken`). О неизлечимой ошибке перевыпуска — `Disconnect` + сообщение в лог.
-- При `Connect` сбрасывай и access-токен, и время истечения — иначе повторный вход пойдёт с мёртвым токеном (ошибка BCS).
+- Сбрасывай access-токен и время истечения в `Dispose` — иначе повторный вход пойдёт с мёртвым токеном (ошибка BCS).
 - Предупреждение о скором истечении долгоживущего токена — в лог один раз, не спамом.
 
 ### 4.2. WebSocket-подключения
@@ -287,15 +303,17 @@ if (webSocketPublic.ReadyState == WebSocketState.Open
 
 `ConnectEvent` вызываем только когда реально всё живо: токен получен, все сокеты открыты. Штатный приём — флаги активации каждого сокета и общая проверка (`CheckActivationSockets` у BCS): каждый `OnOpen` ставит свой флаг и вызывает проверку; когда все флаги true (под lock) — статус Connect + `ConnectEvent()`. Не вызывай `ConnectEvent` из `Connect` до фактической готовности — движок сразу начнёт слать запросы.
 
-### 4.4. Реконнект: что чистить обязательно
+### 4.4. Реконнект: что чистить и где
 
-При повторном `Connect` (и в `Dispose`) обнуляй состояние полностью, иначе дубли:
+Движок при реконнекте вызывает `Dispose()` **перед** `Connect()` (`AServer.PrimeThreadArea`, `AServer.cs:1362 → 1383`). Поэтому всё состояние обнуляется **в `Dispose()`**, а `Connect()` остаётся чистым «подключением» без очистки. Очистка только в `Connect()` — избыточный defensive-код, нарушающий контракт.
+
+В `Dispose()` обнуляй состояние полностью, иначе дубли:
 
 - списки/словари бумаг и подписок (`_securities`, `_subscribedSecurities`);
 - **пул сокетов** — старые сокеты отписать от событий и закрыть (`DeleteWebSocketConnection`); забытый пул = дубли подписок и событий (ошибка BCS);
 - очереди сообщений (`ConcurrentQueue`) — пересоздать;
 - токены и их expire-время, кэши портфелей, маппинги номеров ордеров;
-- временные метки дедупликации (`_lastMdTime` и т.п.).
+- флаги/счётчики подписок и дедупликации (`_hasLimitReached`, `_depthSubscribeTimes`, `_loggedEmptyDepth`, `_lastMdTime` и т.п.).
 
 ### 4.5. Прокси
 
@@ -426,7 +444,7 @@ if (webSocketPublic.ReadyState == WebSocketState.Open
 
 - `GetActiveOrders(startIndex, count)` / `GetHistoricalOrders(startIndex, count)` — постраничная выгрузка из API (пагинация, сортировка по времени убыв.), маппинг в `Order` через общий конвертер.
 - `GetAllActivOrders` — для восстановления после реконнекта (permission `CanQueryOrdersAfterReconnect`).
-- `GetOrderStatus(Order)` — только запрос и возврат статуса; **не вызывай из него `MyOrderEvent`** — опрос статуса не должен порождать событие (дубли в роботах, ошибка BCS). События — только из сокета исполнения.
+- `GetOrderStatus(Order)` — запрос статуса одной заявки и возврат `OrderStateType`. Идеал (реализован в BCS): чистый запрос без `MyOrderEvent`, события — только из сокета исполнения. Но поллинг-механика хаба (`AServerOrdersHub.ActiveStateOrderCheckStatusEvent`) **игнорирует возвращаемое значение** и реагирует только на события, поэтому большинство коннекторов (OKX, BitGet, TInvest, Bybit) всё же эмитят `MyOrderEvent`/`MyTradeEvent` из `GetOrderStatus` — иначе заявка после 5 попыток объявляется потерянной. Эмиссия из `GetOrderStatus` не ошибка; главное — не плодить дубли по одной и той же заявке (дедупликация по `NumberUser`/`tradeId`).
 
 ---
 
@@ -435,6 +453,8 @@ if (webSocketPublic.ReadyState == WebSocketState.Open
 ### 9.1. DataFeedPermissions
 
 Что может качать OsData из этого коннектора: `DataFeedTf*CanLoad` по таймфреймам (секунды, тики, стакан) и минуты/часы/дни. Правило: включён только тот ТФ, который реально отдаёт реализация (`GetCandleTimeFrame`/тики/стакан). Пример рассинхрона: у BCS `TradeTimeFramePermission.Hour2 = true`, а `GetCandleTimeFrame` H2 не умеет — пользователь видит ТФ, но данных не получает.
+
+Секундные таймфреймы — отдельная ось: с биржи они **не качаются** (`DataFeedTf*Second* = false`), а строятся самим движком из тиков (ветка `TotalMinutes < 1` в `CandleManager.StandardStarter` → `GetAllTradesToSecurity` → `PreLoad`). Поэтому `TradeTimeFramePermission.TimeFrameSec*IsOn = true` легально для любого коннектора, отдающего тики (канал `trades`), и не означает, что секунды можно скачать в OsData. Не путай эти два уровня: `DataFeedTf*` — что скачивается, `TradeTimeFramePermission` — чем можно торговать.
 
 ### 9.2. TradePermissions и TimeFramePermission
 

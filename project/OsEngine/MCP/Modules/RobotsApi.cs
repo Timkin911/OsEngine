@@ -1759,14 +1759,16 @@ namespace OsEngine.MCP.Modules
                 && commissionTypeElement.ValueKind == JsonValueKind.String
                 && Enum.TryParse<CommissionType>(commissionTypeElement.GetString(), true, out CommissionType commissionType))
             {
-                connector.CommissionType = commissionType;
+                // через вкладку: она пишет и в журнал (позиции и файл DealController.txt), и в коннектор;
+                // запись только в коннектор не применялась к позициям и терялась после перезапуска
+                tab.CommissionType = commissionType;
             }
 
             if (parameters.TryGetProperty("commission_value", out JsonElement commissionValueElement)
                 && commissionValueElement.ValueKind == JsonValueKind.Number
                 && commissionValueElement.TryGetDecimal(out decimal commissionValue))
             {
-                connector.CommissionValue = commissionValue;
+                tab.CommissionValue = commissionValue;   // см. выше
             }
 
             if (parameters.TryGetProperty("events_is_on", out JsonElement eventsIsOnElement)
@@ -2105,11 +2107,22 @@ namespace OsEngine.MCP.Modules
                 needReload = true;
             }
 
+            // без портфеля скринер не создаёт внутренние вкладки (TabsReadyToLoad).
+            // в тестере портфель эмулируемый — GodMode
+            if (string.IsNullOrEmpty(screener.PortfolioName))
+            {
+                screener.PortfolioName = "GodMode";
+                needReload = true;
+            }
+
             screener.SaveSettings();
 
             if (needReload)
             {
+                // внутренние вкладки пересоздаём синхронно — иначе настройки
+                // (комиссия и т.п.) не попадут в уже созданные вкладки.
                 screener.NeedToReloadTabs = true;
+                screener.TryReLoadTabs();
             }
         }
 

@@ -1430,6 +1430,7 @@ namespace OsEngine.MCP
                     case "server_management_get_trade_connectors":
                     case "server_management_get_data_connectors":
                     case "server_management_get_connector_permissions":
+                    case "server_management_get_data_timeframes":
                         response = _serverManagementApi.Handle(request);
                         break;
 
@@ -1507,12 +1508,15 @@ namespace OsEngine.MCP
                     case "tester_execution_set_config":
                     case "tester_portfolio_get_config":
                     case "tester_portfolio_set_config":
+                    case "tester_charges_get_config":
+                    case "tester_charges_set_config":
                     case "tester_start":
                     case "tester_pause":
                     case "tester_fast_forward":
                     case "tester_step_forward":
                     case "tester_stop":
                     case "tester_get_status":
+                    case "tester_get_report":
                         response = _testerApi.Handle(request);
                         break;
 

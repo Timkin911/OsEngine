@@ -89,6 +89,7 @@
 | `server_management_get_trade_connectors` | Список типов коннекторов, доступных для торговли |
 | `server_management_get_data_connectors` | Полный список типов коннекторов для загрузки рыночных данных |
 | `server_management_get_connector_permissions` | Разрешения коннектора (`IServerPermission`): таймфреймы, торговые права, плечо, время жизни ордеров |
+| `server_management_get_data_timeframes` | Список таймфреймов, доступных для скачивания с коннектора (`type`). `"MarketDepthHistory"` — история стакана |
 | `server_instance_get_params` | Параметры экземпляра сервера (пароли маскируются) |
 | `server_instance_set_params` | Установить параметры экземпляра сервера |
 | `server_instance_create` | Создать новый экземпляр коннектора указанного типа |
@@ -113,17 +114,17 @@
 | `wiki_dividends_get_past` | Ближайшая прошлая запись дивидендов (`ticker`, `date`, `refresh`) |
 | `wiki_dividends_search_by_date` | Поиск дивидендов по дате закрытия реестра (`ticker`, `date`, `refresh`) |
 | `data_get_sets` | Список существующих сетов данных OsData |
-| `data_create_set` | Создать сет данных (`name`, `source`, `source_name`, `timeframes`, `date_from`, `date_to`) |
+| `data_create_set` | Создать сет данных (`name`, `source`, `source_name`, `timeframes`, `date_from`, `date_to`). В `timeframes` можно `"MarketDepthHistory"` — история стакана (только `QscalpMarketDepth`) |
 | `data_delete_set` | Удалить сет данных по имени |
 | `data_set_settings_get` | Настройки сета данных |
-| `data_set_settings_set` | Частично обновить настройки сета (`regime`, `timeframes`, `date_from`, `date_to`, `market_depth_depth`) |
+| `data_set_settings_set` | Частично обновить настройки сета (`regime`, `timeframes`, `date_from`, `date_to`, `market_depth_depth`). `timeframes` принимает `"MarketDepthHistory"` |
 | `data_set_securities_get` | Список бумаг в сете данных |
 | `data_set_securities_add` | Добавить бумаги в сет данных |
 | `data_set_securities_remove` | Удалить бумаги из сета данных |
 | `data_set_on` | Включить сет данных (запустить загрузку) |
 | `data_set_off` | Выключить сет данных |
 | `data_get_set_status` | Агрегированный статус загрузки сета (`regime`, `status`, `percent_load`) |
-| `data_get_security_status` | Статус загрузки бумаги/таймфрейма (`time_start`, `time_end`, `objects_count`, `percent_load`, `status`) |
+| `data_get_security_status` | Статус загрузки бумаги/таймфрейма (`time_start`, `time_end`, `objects_count`, `percent_load`, `status`). `timeframe` принимает `"MarketDepthHistory"` |
 | `bot_get_list` | Список загруженных роботов |
 | `bot_create` | Создать нового робота |
 | `bot_delete` | Удалить робота |
@@ -156,6 +157,14 @@
 | `bot_journal_get_volume` | Объёмы торговли по бумагам/плечу |
 | `bot_journal_get_open_positions` | Открытые позиции |
 | `bot_journal_get_closed_positions` | Закрытые позиции |
+| `tester_data_get_config` / `tester_data_set_config` | Конфигурация данных тестера (источник: сет/папка, тип данных, диапазон дат) |
+| `tester_data_get_available_sets` | Список доступных сетов OsData для тестера |
+| `tester_get_securities` | Бумаги, загруженные в тестер |
+| `tester_execution_get_config` / `tester_execution_set_config` | Настройки исполнения ордеров (проскальзывания, тип исполнения, неторговые периоды) |
+| `tester_portfolio_get_config` / `tester_portfolio_set_config` | Стартовый портфель и расчёт портфеля |
+| `tester_start` / `tester_pause` / `tester_fast_forward` / `tester_step_forward` / `tester_stop` | Управление прогоном тестера |
+| `tester_get_status` | Статус тестера: режим, текущее время, начало/конец, fast-forward, прогресс |
+| `tester_get_report` | Полный отчёт прогона: `date`, `robots` (имя + параметры + источники с бумагой/ТФ/портфелем/комиссией/сопровождением), `data_set`, `tester_settings`, `statistics_full`, `robot_results`, `positions`, `cash_flows` (налоги/маржа/дивиденды) |
 | `system_load_get_current` | Последние точки загруженности системы (RAM, CPU, очереди) |
 | `system_load_get_history` | История точек загруженности по типу (`Ram`, `Cpu`, `Ecq`, `Moq`) |
 | `system_load_get_settings` | Настройки сбора загруженности |
@@ -195,6 +204,8 @@
 | `encryption_disable` | Выключить шифрование и расшифровать ключи (деструктивно) |
 
 **Важно про имена бумаг в тестере и оптимизаторе.** Хранилище хранит бумаги как имена файлов **с расширением**: `SBER.txt`, а не `SBER`. Во вкладки робота через `optimizer_bot_tab_set_config` передавать имя с `.txt`.
+
+**Важно про историю стакана (`MarketDepthHistory`).** В движке «история стакана» — это не отдельный timeframe, а режим `MarketDepth`. Через MCP он задаётся значением `"MarketDepthHistory"` в списке `timeframes` (в `data_create_set` / `data_set_settings_set`, и принимается в `data_get_security_status`). Поддерживает только коннектор `QscalpMarketDepth` (у него `DataFeedTfMarketDepthHistoryCanLoad = true`, а живой `MarketDepth` — `false`). Значения `"MarketDepth"` (живой) и `"MarketDepthHistory"` взаимоисключающие: на сервере без поддержки нужного режима MCP вернёт ошибку.
 
 ---
 
@@ -348,16 +359,11 @@ data: {"jsonrpc":"2.0","method":"notifications/message","params":{"level":"notic
 
 ---
 
-## 11. Тестовый стенд
+## 11. Тестовые стенды
 
-`Tests/McpTestStand/OsEngine.McpApi.TestStand/`. Флаг транспорта: `--transport v1|v2` (по умолчанию `v1`).
-
-```bash
-./OsEngine.McpApi.TestStand.exe --transport v2              # все модули по V2
-./OsEngine.McpApi.TestStand.exe --transport v2 --module StreamableHttp
-```
-
-- V2: **196/196**; V1: **187/187**. Модуль `StreamableHttp` (10 проверок) — транспорт/сессии/события V2.
+- **MCP API** — [`CONTEXT_MCP_TESTSTAND.md`](Tests/CONTEXT_MCP_TESTSTAND.md) — эталонный стенд проверки MCP API (все группы инструментов).
+- **OsData** — [`CONTEXT_OSDATA_TESTSTAND.md`](Tests/CONTEXT_OSDATA_TESTSTAND.md) — проверка коннекторов данных.
+- **Тестер** — [`CONTEXT_OSTESTER_TESTSTAND.md`](Tests/CONTEXT_OSTESTER_TESTSTAND.md) — авто-тест тестера (TesterLight).
 
 ---
 
