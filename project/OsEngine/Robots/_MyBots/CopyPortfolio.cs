@@ -1,5 +1,5 @@
 /* 
- Версия 1.13
+ Версия 1.14
  */
 
 
@@ -43,6 +43,13 @@ namespace OsEngine.Robots
         StrategyParameterInt _icebergOrdersCount;
         StrategyParameterInt _icebergTimeoutSec;
         StrategyParameterDecimal _removeExpiredAfterHours;
+        StrategyParameterString _depthWatchdogIsOn;
+        StrategyParameterInt _depthStaleTimeoutSec;
+        StrategyParameterInt _depthReconnectCooldownMin;
+        StrategyParameterInt _depthMaxReconnectAttempts;
+        StrategyParameterString _depthServerRestartAllowed;
+        StrategyParameterInt _depthServerRestartCooldownMin;
+        MarketDepthWatchdog _depthWatchdog;
         DateTime _lastSystemLogTime = DateTime.MinValue;
         List<string> _deadSecurities = new List<string>();
         private object _deadSecuritiesLocker = new object();
@@ -107,6 +114,8 @@ namespace OsEngine.Robots
             public int IcebergTimeoutSec = 0;
             // логгер робота для сообщений о перезагрузке табов
             public Action<string> LogReload;
+            // сторож стаканов: детектирует мёртвые подписки, которые по кэшированному снимку выглядят живыми
+            public MarketDepthWatchdog DepthWatchdog;
 
             public MirrorPortfolio()
             {
@@ -443,11 +452,36 @@ namespace OsEngine.Robots
                 return true;
             }
 
+            // стакан пригоден для сделки: снимок живой и сторож не считает подписку мёртвой
+            private bool TabDepthOkForTrade(BotTabSimple tab)
+            {
+                if (TabDepthIsAlive(tab) == false)
+                {
+                    return false;
+                }
+
+                if (DepthWatchdog != null
+                    && DepthWatchdog.IsOn
+                    && DepthWatchdog.IsDepthDead(tab))
+                {
+                    return false;
+                }
+
+                return true;
+            }
+
             // полная перезагрузка таба: отписка и подписка бумаги на сервере заново
             private void ReloadTab(BotTabSimple tab)
             {
                 if (tab == null || tab.Connector == null)
                 {
+                    return;
+                }
+
+                // при включённом стороже перезагрузка идёт через него — с кулдауном и счётчиком попыток
+                if (DepthWatchdog != null && DepthWatchdog.IsOn)
+                {
+                    DepthWatchdog.RequestReconnect(tab, "нет стакана в момент сделки");
                     return;
                 }
 
@@ -498,7 +532,7 @@ namespace OsEngine.Robots
                         if (tar != cur) { tChange = true; }
 
                         // нет стакана в момент сделки — перезагружаем таб, торг по бумаге в этом цикле пропускаем
-                        if (tar != cur && TabDepthIsAlive(sortedList[i].Tab) == false)
+                        if (tar != cur && TabDepthOkForTrade(sortedList[i].Tab) == false)
                         {
                             if (LogReload != null)
                             {
@@ -590,7 +624,7 @@ namespace OsEngine.Robots
                     // нет стакана в момент сделки по фонду — перезагружаем таб, торг фондом в этом цикле пропускаем
                     if (changeMoneyFund == true
                         && myMoneyFund.PoseCurrentValue != myMoneyFund.PoseTargetValue
-                        && TabDepthIsAlive(myMoneyFund.Tab) == false)
+                        && TabDepthOkForTrade(myMoneyFund.Tab) == false)
                     {
                         if (LogReload != null)
                         {
@@ -670,6 +704,17 @@ namespace OsEngine.Robots
             _removeExpiredAfterHours = CreateParameter("Remove expired security after (hours)", 24m, 1m, 720m, 1m, "Main Regime");
             _lastTimeCheckFinance = CreateParameter("Last time work ", "", "Main Regime");
 
+            // сторож стаканов: детектирует мёртвые подписки и перезапускает их до попытки сделки
+            _depthWatchdogIsOn = CreateParameter("Depth watchdog", "On", new[] { "Off", "On" }, "Depth Watchdog");
+            _depthStaleTimeoutSec = CreateParameter("Depth stale timeout (sec)", 180, 30, 3600, 10, "Depth Watchdog");
+            _depthReconnectCooldownMin = CreateParameter("Depth reconnect cooldown (min)", 10, 1, 120, 1, "Depth Watchdog");
+            _depthMaxReconnectAttempts = CreateParameter("Depth max reconnect attempts", 3, 1, 10, 1, "Depth Watchdog");
+            _depthServerRestartAllowed = CreateParameter("Depth server restart", "Off", new[] { "Off", "On" }, "Depth Watchdog");
+            _depthServerRestartCooldownMin = CreateParameter("Depth server restart cooldown (min)", 60, 10, 720, 10, "Depth Watchdog");
+
+            _depthWatchdog = new MarketDepthWatchdog();
+            _depthWatchdog.LogMessageEvent += DepthWatchdog_LogMessageEvent;
+
             StrategyParameterButton button = CreateParameterButton("Copy manual", "Main Regime");
             button.UserClickOnButtonEvent += Button_UserClickOnButtonEvent;
 
@@ -695,6 +740,10 @@ namespace OsEngine.Robots
 
                 if (vDt.TimeOfDay >= _startToWork.TimeSpan && vDt.TimeOfDay <= _endToWork.TimeSpan)
                 {
+                    // сторож стаканов: перезапускает мёртвые подписки до того, как робот попытается торговать
+                    PushDepthWatchdogSettings();
+                    _depthWatchdog.CheckAll(_tabToTrade1.Tabs, _tabToTrade1.ServerType);
+
                     // интервал отсчитываем в минутах или секундах в зависимости от выбранной единицы
                     double elapsedInterval = Math.Abs((vDt - Convert.ToDateTime(_lastTimeCheckFinance.ValueString)).TotalMinutes);
 
@@ -724,6 +773,28 @@ namespace OsEngine.Robots
         private void Button_UserClickOnButtonEvent()
         {
             CopyPortfolioLogic();
+        }
+
+        private void DepthWatchdog_LogMessageEvent(string message, LogMessageType type)
+        {
+            try
+            {
+                SendNewLogMessage(message, type);
+            }
+            catch (Exception error)
+            {
+                SendNewLogMessage("Ошибка в DepthWatchdog_LogMessageEvent: " + error.ToString(), LogMessageType.Error);
+            }
+        }
+
+        private void PushDepthWatchdogSettings()
+        {
+            _depthWatchdog.IsOn = _depthWatchdogIsOn.ValueString == "On";
+            _depthWatchdog.StaleTimeoutSec = _depthStaleTimeoutSec.ValueInt;
+            _depthWatchdog.ReconnectCooldownMin = _depthReconnectCooldownMin.ValueInt;
+            _depthWatchdog.MaxReconnectAttempts = _depthMaxReconnectAttempts.ValueInt;
+            _depthWatchdog.ServerRestartAllowed = _depthServerRestartAllowed.ValueString == "On";
+            _depthWatchdog.ServerRestartCooldownMin = _depthServerRestartCooldownMin.ValueInt;
         }
 
 
@@ -812,6 +883,7 @@ namespace OsEngine.Robots
 
                 MirrorPortfolio mirrorPortfolio = new MirrorPortfolio();
                 mirrorPortfolio.LogReload = SendThrottledSystemLog;
+                mirrorPortfolio.DepthWatchdog = _depthWatchdog;
 
                 for (int i = 0; i < positionOnBoard.Count; i++)
                 {
